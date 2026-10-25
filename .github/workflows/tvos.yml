@@ -1,0 +1,40 @@
+# Builds the Apple TV app on a Mac in GitHub's cloud to make sure it compiles,
+# and keeps the ready-to-open Xcode project (tvos/FamilyTV.xcodeproj) in the repository.
+# Installing on the Apple TV is done from Xcode on John's Mac (signing needs his Apple account).
+name: Build Apple TV app
+on:
+  push:
+    paths: ["tvos/**", ".github/workflows/tvos.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Draw the icons and make the Xcode project
+        run: |
+          brew install xcodegen
+          python3 -m pip install --break-system-packages --quiet pillow || python3 -m pip install --quiet pillow
+          cd tvos
+          python3 make_assets.py
+          xcodegen generate
+      - name: Build for Apple TV (no signing)
+        run: |
+          cd tvos
+          xcodebuild -project FamilyTV.xcodeproj -scheme FamilyTV -configuration Release \
+            -destination 'generic/platform=tvOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build 2>&1 | tee build.log | grep -E "error:|warning:|BUILD" || true
+          grep -q "BUILD SUCCEEDED" build.log
+      - name: Keep the generated project in the repository
+        if: success()
+        run: |
+          cd tvos
+          rm -rf build build.log icon-preview.png
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add FamilyTV.xcodeproj FamilyTV/Assets.xcassets
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -m "Apple TV app: update generated Xcode project [skip ci]"
+          git pull --rebase && git push
