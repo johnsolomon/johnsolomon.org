@@ -1,0 +1,37 @@
+# Builds the Family TV app for TVs and projectors and publishes it at johnsolomon.org/tv.apk
+name: Build Family TV app
+on:
+  push:
+    paths: ["android/**", ".github/workflows/android-tv.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.9" }
+      - name: Make a signing key for this build (nothing secret is kept in the repo)
+        run: |
+          echo "KEYSTORE_PASS=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+      - name: Build
+        run: |
+          keytool -genkeypair -keystore "$KEYSTORE_FILE" -alias familytv -keyalg RSA -keysize 2048 -validity 36500 \
+            -storepass "$KEYSTORE_PASS" -keypass "$KEYSTORE_PASS" -dname "CN=Family TV"
+          gradle -p android assembleRelease --no-daemon
+        env: { VERSION_CODE: "${{ github.run_number }}" }
+      - uses: actions/upload-artifact@v4
+        with: { name: family-tv-apk, path: android/app/build/outputs/apk/release/app-release.apk }
+      - name: Publish to the site
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk tv.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add tv.apk
+          git commit -m "Family TV app build ${{ github.run_number }}" || exit 0
+          git pull --rebase && git push
