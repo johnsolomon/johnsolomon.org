@@ -175,7 +175,7 @@
 
 <script>
 /* The pCloud link is stored encrypted; only the family passcode unlocks it. */
-const LOCK = {"salt": "/wgSoyuNExFN4rvbGoFTMw==", "iv": "JDkUur4RgBq3bSVr", "iter": 310000, "ct": "t3FQBeNnJYzQNNBo/bp5rXZUKHnA0LV+xBZsuMErDfEDvi2Pj7nU092vlf7jDLgzqc+qQWgqVcTJYhXSflE8JoxAEb+ux6G6by0RcUDe0r0R40DVN3vroOTKaAE="};
+const LOCK = {"salt": "4wmvzyriKOEHUmoPGpHnSw==", "iv": "pq6LDjPdyMnNgeH4", "iter": 310000, "ct": "CRvobowUg4SEt6eWh53xd/BCrL+CaEXIC4+n3kTGFbCdZU84HjUnAf6IL3pVKO9fMcycOsphiWr0uHjvO0C71EuxitNJMO6oV9mXTQ/YKwxrT5k5Zbf6gsaVVpc="};
 
 const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm)$/i;          // formats browsers can play
@@ -243,22 +243,23 @@ async function videoURL(fileid) {
    The show name comes from the file name, or from its folder if the name is just "S01E02".
    Everything else is a movie. Top-level folders other than Movies/Shows get their own row.  */
 const JUNK = /\b(2160p|1080p|720p|480p|4k|uhd|hdr|x26[45]|h\.?26[45]|hevc|web[-. ]?(dl|rip)?|blu[-. ]?ray|brrip|bdrip|dvdrip|hdtv|aac|ac3|ddp?5\.1|5\.1|10bit|proper|repack|remux|yts|rarbg)\b.*$/i;
-const tidy = s => s.replace(/[._]+/g, ' ').replace(JUNK, '').replace(/[\[(]\s*[\])]/g, '').replace(/\s+[-–]\s*$/, '').replace(/\s{2,}/g, ' ').trim();
+const tidy = (s, scene) => s.replace(/[._]+/g, ' ').replace(scene ? JUNK : /$^/, '').replace(/[\[(]\s*[\])]/g, '').replace(/\s+[-–]\s*$/, '').replace(/\s{2,}/g, ' ').trim();
 const base = n => n.replace(/\.[^.]+$/, '');
 const isVideo = f => !f.isfolder && VIDEO_EXT.test(f.name);
 const isImage = f => !f.isfolder && /\.(jpe?g|png|webp)$/i.test(f.name);
 const created = f => Date.parse(f.created || f.modified) || 0;
 
+const isScene = name => /[._]/.test(base(name));      // e.g. Show.Name.S01E02.1080p.x264
 function parseEpisode(name) {
-  const b = base(name).replace(/[._]+/g, ' ');
+  const sc = isScene(name), b = base(name).replace(/[._]+/g, ' ');
   const m = b.match(/^(.*?)\s*[-–]?\s*\b(?:s(\d{1,2})\s*e(\d{1,3})|(\d{1,2})x(\d{2,3}))\b\s*[-–:]?\s*(.*)$/i);
   if (!m) return null;
-  return { show: tidy(m[1]).replace(/\s*\(?(19|20)\d{2}\)?$/, ''), season: +(m[2] || m[4]), ep: +(m[3] || m[5]), title: tidy(m[6]) };
+  return { show: tidy(m[1], sc).replace(/\s*\(?(19|20)\d{2}\)?$/, ''), season: +(m[2] || m[4]), ep: +(m[3] || m[5]), title: tidy(m[6], sc) };
 }
 function parseMovie(name) {
-  const b = base(name).replace(/[._]+/g, ' ');
+  const sc = isScene(name), b = base(name).replace(/[._]+/g, ' ');
   const y = b.match(/^(.*?)[\s(\[]*((?:19|20)\d{2})[\s)\]]*(.*)$/);
-  return y && y[1].trim() ? { title: tidy(y[1]), year: y[2] } : { title: tidy(b) };
+  return y && y[1].trim() ? { title: tidy(y[1], sc), year: y[2] } : { title: tidy(b, sc) };
 }
 
 function walk(folder, path, out) {
@@ -269,12 +270,11 @@ function walk(folder, path, out) {
   }
   return out;
 }
-function posterFor(f, siblings, folder) {
+const posterIn = folder => (folder && (folder.contents || []).find(s => isImage(s) && POSTER_NAME.test(s.name)) || {}).fileid || null;
+function posterFor(f, siblings, folder) {                 // "Moana.jpg" next to "Moana.mp4", else poster.jpg in its folder
   const b = base(f.name).toLowerCase();
   const same = siblings.find(s => isImage(s) && base(s.name).toLowerCase() === b);
-  if (same) return same.fileid;
-  const p = folder && (folder.contents || []).find(s => isImage(s) && POSTER_NAME.test(s.name));
-  return p ? p.fileid : null;
+  return same ? same.fileid : posterIn(folder);
 }
 
 function buildCatalog(root) {
@@ -293,22 +293,22 @@ function buildCatalog(root) {
       const showFolder = inShowDir ? v.path[1] : (parent && SEASON_DIR.test(parent.name) ? v.path[v.path.length - 2] : parent);
       const name = (ep && ep.show) || (showFolder && showFolder.name) || 'Videos';
       const key = 's:' + name.toLowerCase();
-      if (!shows.has(key)) shows.set(key, { kind: 'show', key, title: name, episodes: [], art: null, added: 0, folder: showFolder });
+      if (!shows.has(key)) shows.set(key, { kind: 'show', key, title: name, episodes: [], art: null, added: 0 });
       const s = shows.get(key);
       const seasonFromDir = parent && SEASON_DIR.test(parent.name) ? +(parent.name.match(/\d+/)[0]) : null;
       s.episodes.push({
         id: v.f.fileid, season: ep ? ep.season : seasonFromDir || 1, n: ep ? ep.ep : (+(base(v.f.name).match(/^(?:episode|ep|e)\s*(\d+)/i) || [])[1] || null),
-        title: ep ? (ep.title || `Episode ${ep.ep}`) : tidy(base(v.f.name)), sortName: v.f.name,
+        title: ep ? (ep.title || `Episode ${ep.ep}`) : tidy(base(v.f.name), isScene(v.f.name)), sortName: v.f.name,
       });
       s.added = Math.max(s.added, created(v.f));
-      if (!s.art && showFolder) s.art = posterFor({ name: '' }, [], showFolder);
+      if (!s.art) s.art = posterIn(showFolder);
     } else {
       const row = rowFor(v.path);
-      const m = row === 'Movies' ? parseMovie(v.f.name) : { title: tidy(base(v.f.name)) };   // keep dates in family videos
+      const m = row === 'Movies' ? parseMovie(v.f.name) : { title: tidy(base(v.f.name), false) };   // keep names (and dates) as-is in family videos
       const own = parent && v.path.length >= 2 && !MOVIE_DIR.test(parent.name) ? parent : null; // Movies/Moana/Moana.mp4
       if (!movieRows.has(row)) movieRows.set(row, []);
       movieRows.get(row).push({
-        kind: 'movie', key: 'f' + v.f.fileid, title: own && row === 'Movies' ? tidy(own.name) : m.title, year: m.year,
+        kind: 'movie', key: 'f' + v.f.fileid, title: own && row === 'Movies' ? tidy(own.name, false) : m.title, year: m.year,
         art: posterFor(v.f, v.siblings, own) || v.f.fileid, added: created(v.f),
         episodes: [{ id: v.f.fileid, title: m.title, n: null, idx: 0 }],
       });
@@ -567,7 +567,9 @@ function askPasscode() {
     $('#app').innerHTML = `<div class="msg"><div><b>Can't reach the video library</b>${why || 'Check the internet connection and try again.'}</div></div>`;
   }
   // pick up newly added videos when the app comes back to the foreground
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#player').classList.contains('open')) refresh().catch(() => {}); });
+  const idle = () => !document.hidden && !$('#player').classList.contains('open');
+  document.addEventListener('visibilitychange', () => { if (idle()) refresh().catch(() => {}); });
+  setInterval(() => { if (idle()) refresh().catch(() => {}); }, 5 * 60e3);
 })();
 </script>
 </body>
