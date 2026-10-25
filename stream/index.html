@@ -888,6 +888,22 @@ function saveProgress() {
   const ep = nowItem.episodes[nowIdx];
   progress[ep.id] = { t: video.currentTime, d: video.duration, ts: Date.now(), key: nowItem.key };
   ls.set('ftv.progress', progress);
+  dirty[ep.id] = progress[ep.id];
+  clearTimeout(syncTimer); syncTimer = setTimeout(syncProgress, video.paused ? 500 : 20e3);
+}
+// Progress is shared through the lock server, so iPad, phone, Mac and the Apple TV all resume in the same spot.
+let dirty = {}, syncTimer = null;
+async function syncProgress(all) {
+  const token = ls.get('ftv.token', null); if (!token) return;
+  const send = all ? progress : dirty; dirty = {};
+  try {
+    const r = await gate({ token, progress: send });
+    if (!r.progress) { Object.assign(dirty, all ? {} : send); return false; }
+    let changed = false;
+    for (const [id, p] of Object.entries(r.progress)) if (!progress[id] || progress[id].ts < p.ts) { progress[id] = p; changed = true; }
+    if (changed) { ls.set('ftv.progress', progress); if (!$('#player').classList.contains('open')) render(); }
+    return true;
+  } catch { Object.assign(dirty, all ? {} : send); return false; }
 }
 video.addEventListener('pause', () => nowItem && video.duration && saveProgress());
 video.addEventListener('ended', () => {
@@ -1051,6 +1067,7 @@ async function refresh() {
   LIB.all.forEach(it => { ids.add(it.art); if (it.kind === 'show') it.episodes.forEach(e => ids.add(e.art)); });
   ART = await thumbs([...ids], '640x360');
   render();
+  syncProgress(!ls.get('ftv.synced', false)).then(ok => ok && ls.set('ftv.synced', true));
   loadMeta().catch(() => {});
 }
 const PIN_LEN = 4;
