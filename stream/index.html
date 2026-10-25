@@ -217,6 +217,21 @@
     .pc-btn .lbl { display:none; }
   }
 
+  /* ---------- TV remote / keyboard: a clear highlight on whatever is selected ---------- */
+  .kbd :focus { outline:none; }
+  .kbd button:focus, .kbd input:focus, .kbd .scrub:focus { box-shadow:0 0 0 3px #fff; }
+  .kbd .tile:focus { transform:scale(1.06); z-index:2; box-shadow:0 0 0 3px #fff, 0 12px 30px #000a; }
+  .kbd .nav-i:focus { background:#ffffff26; box-shadow:none; color:#fff; }
+  .kbd .scrub:focus { box-shadow:none; } .kbd .scrub:focus .knob { transform:scale(1.35); box-shadow:0 0 0 6px #ffffff55; }
+  .kbd .ep:focus { background:#ffffff1a; box-shadow:0 0 0 3px #fff; }
+  .kbd .chip:focus, .kbd .pad button:focus { background:#ffffff4d; }
+  /* across-the-room sizes, with margins TVs won't cut off */
+  .tv { --fs-xs:14px; --fs-sm:15px; --fs-md:18px; --fs-lg:22px; --fs-xl:30px; --fs-hero:clamp(40px, 5vw, 64px); --gut:max(4vw, 32px); --tile:clamp(220px, 20vw, 320px); --side:260px; cursor:none; }
+  .tv .side { padding-top:36px; padding-left:24px; }
+  .tv .nav-i { height:44px; }
+  .tv .pc-top { padding-top:4vh; } .tv .pc-bot { padding-bottom:5vh; }
+  .tv #pPip, .tv #pFull { display:none !important; }
+
   /* ---------- messages ---------- */
   .msg { min-height:70vh; display:grid; place-items:center; text-align:center; padding:0 8vw; color:var(--muted); }
   .msg b { display:block; color:var(--fg); font-size:var(--fs-lg); margin-bottom:6px; }
@@ -554,6 +569,8 @@ function renderNav() {
 }
 
 function render(nav = true) {
+  const f = document.activeElement, sig = f && f !== document.body ? (f.dataset?.key || '') + '|' + (f.dataset?.go || '') + '|' + (f.dataset?.arg || '') + '|' + (f.dataset?.play || '') : '';
+  setTimeout(() => { if (sig && document.activeElement === document.body) [...document.querySelectorAll('[data-key],[data-go],[data-play]')].find(x => (x.dataset.key || '') + '|' + (x.dataset.go || '') + '|' + (x.dataset.arg || '') + '|' + (x.dataset.play || '') === sig)?.focus({ preventScroll: true }); }, 0);
   if (nav) renderNav();
   if (!LIB.all.length) { $('#app').innerHTML = `<div class="msg"><div><b>Nothing here yet</b>Drop videos into the Family TV Inbox on the Mac and they'll show up here.</div></div>`; return; }
   const page = (title, body) => `<div class="page"><h1>${esc(title)}</h1>${body}</div>`;
@@ -728,7 +745,7 @@ async function playItem(it, idx, keepTime) {
   } catch (err) { P.classList.remove('wait'); note(err && err.result === 7005 ? 'pCloud’s sharing limit for this month has been reached' : 'Couldn’t reach pCloud — check the internet connection'); }
 }
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
-const canFull = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const canFull = !/FamilyTV-TV|Android TV|GoogleTV|AFT[A-Z]/i.test(navigator.userAgent) && !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 // Full screen on the whole player (not just the video), so the next episode keeps playing full screen.
 function enterFull() {
   if (!canFull || fsEl()) return;
@@ -930,19 +947,85 @@ function setNowPlaying(it, ep) {
   } catch {}
 }
 
-/* Mac keyboard: space play/pause · ←/→ 10 s · F full screen · N next · Esc back */
+/* ---------- TV remote and keyboard ----------
+   Arrows move between buttons and tiles, OK/Enter opens, Back/Esc goes back.
+   In the player: ←/→ skip 10 s, ↑/↓ reach the buttons, OK plays/pauses; media keys work too.
+   Turns on by itself on TVs (and in the Family TV app), or as soon as arrow keys are used anywhere. */
+const TV = /FamilyTV-TV|Android TV|GoogleTV|BRAVIA|AFT[A-Z]|SMART-TV|SmartTV|Tizen|Web0S/i.test(navigator.userAgent) || /[?&]tv\b/.test(location.search);
+if (TV) document.documentElement.classList.add('tv', 'kbd');
+const layer = () => $('#lock.open') || (P.classList.contains('open') && ($('#sleepMenu.open') || P)) || ($('#sheetBg.open') && $('#sheet')) || document.body;
+function candidates() {
+  return [...layer().querySelectorAll('button, input, [tabindex="0"]')].filter(el => {
+    if (el.disabled || el.hidden || el.closest('[hidden], .player:not(.open), .sheet-bg:not(.open), .lock:not(.open), .menu:not(.open)')) return false;
+    if (layer() === document.body && el.closest('#player, #sheetBg, #lock')) return false;
+    const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+  });
+}
+function moveFocus(dir) {
+  const list = candidates(); if (!list.length) return false;
+  const cur = list.includes(document.activeElement) ? document.activeElement : null;
+  if (!cur) { const first = layer().querySelector('[data-play], [data-sheetplay], #scrub, #pad [data-d="1"], .nav-i.on, .tile') ; (list.includes(first) ? first : list[0]).focus(); return true; }
+  const a = cur.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+  let best = null, bestScore = Infinity;
+  for (const el of list) {
+    if (el === cur) continue;
+    const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, dx = x - ax, dy = y - ay;
+    const along = dir === 'right' ? dx : dir === 'left' ? -dx : dir === 'down' ? dy : -dy;
+    const across = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx);
+    if (along <= 4) continue;                                   // only things in that direction
+    if ((dir === 'left' || dir === 'right') && across > Math.max(a.height, r.height) * 0.9 && cur.closest('.rail, .pc-row, .pc-mid, .btns')) continue;
+    const score = along + across * 2.2;
+    if (score < bestScore) { bestScore = score; best = el; }
+  }
+  if (!best) return false;
+  best.focus({ preventScroll: true });
+  best.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: TV ? 'auto' : 'smooth' });
+  return true;
+}
+// Back: close whatever is on top; at Home there is nothing left to close (the app then exits)
+window.ftvBack = () => {
+  if ($('#lock.open')) return false;
+  if ($('#sleepMenu.open')) { $('#sleepMenu').classList.remove('open'); return true; }
+  if (P.classList.contains('open')) { $('#pBack').click(); return true; }
+  if ($('#sheetBg.open')) { closeSheet(); return true; }
+  if (view.k !== 'home') { go('home'); return true; }
+  return false;
+};
+const DIRS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+document.addEventListener('pointerdown', () => { if (!TV) document.documentElement.classList.remove('kbd'); }, true);
 document.addEventListener('keydown', e => {
-  if (!P.classList.contains('open') || e.metaKey || e.ctrlKey || e.altKey) return;
-  const k = e.key.toLowerCase();
-  if (k === ' ' || k === 'k') { e.preventDefault(); toggle(); }
-  else if (k === 'arrowleft' || k === 'j') { e.preventDefault(); seekBy(-10); flash('L'); }
-  else if (k === 'arrowright' || k === 'l') { e.preventDefault(); seekBy(10); flash('R'); }
-  else if (k === 'f') fsEl() ? exitFull() : enterFull();
-  else if (k === 'n') { const q = upNext(); if (q) { cancelNext(); q.go(); } }
-  else if (k === 'escape' && !fsEl()) $('#pBack').click();
-  else return;
-  showChrome();
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key, dir = DIRS[k], typing = e.target.matches('input');
+  if (dir) document.documentElement.classList.add('kbd');
+  if (P.classList.contains('open') && !$('#lock.open')) {
+    showChrome();
+    const inMenu = $('#sleepMenu.open'), onBtn = document.activeElement?.closest?.('#player button');
+    if (k === ' ' || k === 'k' || k === 'MediaPlayPause' || (k === 'Enter' && !onBtn)) { e.preventDefault(); return toggle(); }
+    if (k === 'MediaPlay') return video.play();
+    if (k === 'MediaPause' || k === 'MediaStop') return video.pause();
+    if (k === 'MediaFastForward' || k === 'l') { seekBy(10); return flash('R'); }
+    if (k === 'MediaRewind' || k === 'j') { seekBy(-10); return flash('L'); }
+    if (k === 'MediaTrackNext' || k === 'n') { const q = upNext(); if (q) { cancelNext(); q.go(); } return; }
+    if (k === 'f') return fsEl() ? exitFull() : enterFull();
+    if (k === 'Escape' || k === 'Backspace' || k === 'BrowserBack' || k === 'GoBack') { if (k === 'Escape' && fsEl()) return; e.preventDefault(); return ftvBack(); }
+    if (dir) {
+      e.preventDefault();
+      if (!inMenu && (dir === 'left' || dir === 'right') && !onBtn) { seekBy(dir === 'left' ? -10 : 10); return flash(dir === 'left' ? 'L' : 'R'); }
+      if (!moveFocus(dir) && (dir === 'up' || dir === 'down') && onBtn && !inMenu) $('#scrub').focus();
+    }
+    return;
+  }
+  if (dir) {
+    if (typing && (dir === 'left' || dir === 'right')) return;    // move the cursor inside a search box
+    e.preventDefault(); moveFocus(dir); return;
+  }
+  if ((k === 'Escape' || k === 'BrowserBack' || k === 'GoBack' || (k === 'Backspace' && !typing && !$('#lock.open')))) { if (ftvBack()) e.preventDefault(); }
 });
+// focus the obvious thing when a screen opens with a remote
+function autoFocus(sel) { if (document.documentElement.classList.contains('kbd')) setTimeout(() => { if (!layer().contains(document.activeElement) || document.activeElement === document.body) (layer().querySelector(sel) || candidates()[0])?.focus({ preventScroll: true }); }, 30); }
+scrub.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); toggle(); showChrome(); } });
+new MutationObserver(() => { if (P.classList.contains('open')) autoFocus('#scrub'); else if ($('#sheetBg.open')) autoFocus('[data-sheetplay]'); else autoFocus('[data-play], .nav-i.on, .tile'); })
+  .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] });
 
 $('#pBack').onclick = e => {
   e.stopPropagation();
@@ -1007,6 +1090,7 @@ function askPasscode() {
     const onKey = e => { if (pad.classList.contains('off')) return; if (/^[0-9]$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') back(); };
     // light the key the instant it's touched, like iOS
     pad.addEventListener('pointerdown', e => { const b = e.target.closest('button'); if (!b) return; b.classList.add('down'); press(b.dataset.d); });
+    pad.addEventListener('click', e => { const b = e.target.closest('button'); if (b && e.detail === 0) press(b.dataset.d); });   // OK on a remote
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => pad.addEventListener(t, () => pad.querySelectorAll('.down').forEach(b => b.classList.remove('down'))));
     del.onclick = back;
     document.addEventListener('keydown', onKey);
