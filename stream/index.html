@@ -380,8 +380,12 @@ $('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') cl
 const video = $('#video');
 let nowItem = null, nowIdx = 0, nuTimer = null, hideTimer = null, lastSave = 0;
 
-async function playItem(it, idx) {
+let retries = 0, resumeAt = 0, everPlayed = false;
+async function playItem(it, idx, keepTime) {
   if (!it) return;
+  // iPad/iPhone only start sound-on playback inside a tap; touching the player here,
+  // before any waiting, keeps the tap "valid" for when the real file arrives
+  if (!keepTime) { try { video.load(); video.play().catch(() => {}); } catch {} retries = 0; resumeAt = 0; everPlayed = false; }
   nowItem = it; nowIdx = Math.max(0, idx);
   const ep = it.episodes[nowIdx];
   cancelNext();
@@ -393,9 +397,23 @@ async function playItem(it, idx) {
   try {
     video.src = await videoURL(ep.id);
     video.play().catch(() => {});
-  } catch (err) { $('#pTitle').innerHTML += `<small>Couldn't load this video${err && err.result === 7005 ? ' — pCloud sharing limit reached for this month' : ''}</small>`; }
+  } catch (err) { note(err && err.result === 7005 ? 'pCloud sharing limit reached for this month' : "Couldn't reach pCloud — check the internet connection"); }
 }
+const note = msg => { const t = $('#pTitle'); t.querySelector('.warn')?.remove(); t.insertAdjacentHTML('beforeend', `<small class="warn">${esc(msg)}</small>`); };
+video.addEventListener('playing', () => { everPlayed = true; retries = 0; $('#pTitle .warn')?.remove(); });
+// pCloud video links are tied to the network you're on and expire after a while.
+// If playback breaks (Wi-Fi drop, switching networks, long pause), get a fresh link and pick up where it stopped.
+video.addEventListener('error', () => {
+  if (!video.getAttribute('src') || !nowItem) return;
+  if (retries < 3) {
+    retries++; resumeAt = Math.max(resumeAt, video.currentTime || 0);
+    note('Reconnecting…');
+    setTimeout(() => playItem(nowItem, nowIdx, true), 1500 * retries);
+  } else note(everPlayed ? 'Lost connection — tap back and try again' : "This file's format can't play in a browser — convert it to MP4 (H.264)");
+});
+window.addEventListener('online', () => { if ($('#player').classList.contains('open') && video.error) { retries = 0; playItem(nowItem, nowIdx, true); } });
 video.addEventListener('loadedmetadata', () => {
+  if (resumeAt > 1) { video.currentTime = resumeAt; resumeAt = 0; return; }   // after a reconnect
   const p = progress[nowItem?.episodes[nowIdx]?.id];
   if (p && p.t > 10 && p.t < video.duration - 30) video.currentTime = p.t;
 });
@@ -410,7 +428,6 @@ function saveProgress() {
   ls.set('ftv.progress', progress);
 }
 video.addEventListener('pause', () => nowItem && video.duration && saveProgress());
-video.addEventListener('error', () => { if (video.src) $('#pTitle').innerHTML += `<small>This file's format can't play in a browser — convert it to MP4 (H.264)</small>`; });
 video.addEventListener('ended', () => {
   saveProgress();
   const queue = upNext(); if (!queue) return;
