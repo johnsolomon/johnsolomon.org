@@ -9,177 +9,248 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Family TV">
-<meta name="theme-color" content="#0b0b0e">
+<meta name="theme-color" content="#0a0a0b">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="favicon.png">
 <link rel="manifest" href="manifest.json">
 <title>Family TV</title>
 <style>
+  /* ---------- one set of sizes, used everywhere ---------- */
   :root {
-    --bg:#0b0b0e; --panel:#16161b; --fg:#f4f4f5; --muted:#9b9ba3;
-    --accent:#e53e34; --radius:6px;
-    --tile-w: clamp(200px, 26vw, 300px);
+    --bg:#0a0a0b; --panel:#141417; --panel-2:#1e1e23; --line:#ffffff12; --fg:#f5f5f7; --muted:#9a9aa3; --accent:#e5383b;
+    --fs-xs:12px; --fs-sm:13px; --fs-md:15px; --fs-lg:18px; --fs-xl:24px; --fs-hero:clamp(30px, 4.4vw, 52px);
+    --r:10px; --side:232px; --gut:clamp(16px, 3vw, 40px); --tile:clamp(170px, 21vw, 290px);
+    --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --tabs:0px;
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html { touch-action:manipulation; background:#0b0b0e; }
-  html,body { margin:0; background:var(--bg); color:var(--fg); overscroll-behavior:none; }
-  body {
-    font:15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-    overflow-x:hidden; padding-bottom:env(safe-area-inset-bottom);
-    -webkit-user-select:none; user-select:none;
-  }
-  button { font:inherit; color:inherit; background:none; border:0; cursor:pointer; padding:0; }
+  [hidden] { display:none !important; }
+  html { background:var(--bg); -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  html, body { margin:0; color:var(--fg); overscroll-behavior-y:none; }
+  body { font:400 var(--fs-md)/1.45 var(--font); background:var(--bg); -webkit-font-smoothing:antialiased; -webkit-user-select:none; user-select:none; }
+  button, input { font:inherit; color:inherit; margin:0; -webkit-appearance:none; appearance:none; }
+  button { background:none; border:0; padding:0; cursor:pointer; touch-action:manipulation; }
+  svg { display:block; flex:none; }
+  /* round buttons stay round on every screen */
+  .ib { width:40px; height:40px; flex:0 0 40px; aspect-ratio:1; border-radius:50%; display:grid; place-items:center; color:#fff; }
+  .ib svg { width:22px; height:22px; }
+  .ib.glass { background:#ffffff1f; -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); }
+  @media (hover:hover) { .ib:hover { background:#ffffff2e; } }
 
-  /* top bar */
-  header {
-    position:fixed; inset:0 0 auto 0; z-index:20;
-    padding: calc(env(safe-area-inset-top) + 14px) 4vw 14px;
-    background:linear-gradient(#0b0b0ee6, #0b0b0e00);
-    display:flex; align-items:center; gap:10px;
-  }
-  .brand { font-weight:800; letter-spacing:.06em; font-size:20px; text-transform:uppercase; }
+  /* ---------- sidebar (iPad, Mac) ---------- */
+  .side { position:fixed; z-index:30; inset:0 auto 0 0; width:var(--side); background:var(--panel); border-right:1px solid var(--line);
+    padding:calc(env(safe-area-inset-top) + 22px) 12px 24px calc(env(safe-area-inset-left) + 12px); overflow-y:auto; display:none; scrollbar-width:none; }
+  .side::-webkit-scrollbar { display:none; }
+  .brand { font-weight:800; letter-spacing:.08em; font-size:var(--fs-lg); text-transform:uppercase; padding:0 10px; }
   .brand span { color:var(--accent); }
+  .search { display:flex; align-items:center; gap:8px; margin:18px 0 14px; padding:0 12px; height:36px; border-radius:9px; background:var(--panel-2); color:var(--muted); }
+  .search svg { width:16px; height:16px; }
+  .search input { flex:1; min-width:0; border:0; outline:0; background:none; font-size:var(--fs-md); color:var(--fg); -webkit-user-select:text; user-select:text; }
+  .search input::placeholder { color:var(--muted); }
+  .nav-h { font-size:var(--fs-xs); font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); padding:18px 10px 6px; }
+  .nav-i { display:flex; align-items:center; gap:12px; width:100%; height:38px; padding:0 10px; border-radius:8px; font-size:var(--fs-md); font-weight:500; color:#d8d8de; text-align:left; }
+  .nav-i svg { width:19px; height:19px; opacity:.85; }
+  .nav-i .n { margin-left:auto; font-size:var(--fs-xs); color:var(--muted); }
+  .nav-i.on { background:var(--panel-2); color:#fff; }
+  @media (hover:hover) { .nav-i:hover { background:#ffffff0d; } }
 
-  /* hero */
-  .hero { position:relative; height:min(72vh, 620px); min-height:360px; overflow:hidden; }
-  .hero-img { position:absolute; inset:0; background:#222 center/cover no-repeat; transform:scale(1.03); }
+  /* ---------- tab bar (iPhone) ---------- */
+  .tabs { position:fixed; z-index:30; inset:auto 0 0 0; display:flex; background:#0d0d0fee; -webkit-backdrop-filter:blur(20px) saturate(1.6); backdrop-filter:blur(20px) saturate(1.6);
+    border-top:1px solid var(--line); padding:6px env(safe-area-inset-right) calc(env(safe-area-inset-bottom) + 4px) env(safe-area-inset-left); }
+  .tabs button { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; font-weight:600; color:var(--muted); padding:4px 0; }
+  .tabs svg { width:24px; height:24px; }
+  .tabs button.on { color:#fff; }
+  .topbar { position:fixed; z-index:20; inset:0 0 auto 0; padding:calc(env(safe-area-inset-top) + 12px) var(--gut) 14px; background:linear-gradient(#0a0a0bdd, #0a0a0b00); pointer-events:none; }
+
+  @media (min-width:768px) and (min-height:501px), (min-width:768px) and (hover:hover) {
+    .side { display:block; }
+    .tabs, .topbar { display:none; }
+    #app { margin-left:var(--side); }
+  }
+  @media (max-width:767px), (max-height:500px) and (hover:none) {
+    :root { --tabs:calc(58px + env(safe-area-inset-bottom)); --tile:clamp(150px, 42vw, 220px); }
+    #app { padding-bottom:var(--tabs); }
+  }
+
+  /* ---------- home ---------- */
+  .hero { position:relative; height:min(66vh, 600px); min-height:340px; overflow:hidden; }
+  .hero-img { position:absolute; inset:0; background:#18181c center/cover no-repeat; }
   .hero::after { content:""; position:absolute; inset:0;
-    background:linear-gradient(90deg, #0b0b0ee0 0%, #0b0b0e60 45%, #0b0b0e00 70%),
-               linear-gradient(0deg, var(--bg) 0%, #0b0b0e00 35%); }
-  .hero-info { position:absolute; z-index:2; left:4vw; bottom:14%; max-width:min(560px, 80vw); }
-  .hero-kicker { color:var(--muted); font-size:13px; letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
-  .hero h1 { margin:0 0 18px; font-size:clamp(32px, 6vw, 60px); line-height:1.02; font-weight:800; letter-spacing:-.01em; text-shadow:0 2px 24px #0008; }
-  .btn { display:inline-flex; align-items:center; gap:10px; padding:11px 24px 11px 20px; border-radius:var(--radius);
-    font-weight:700; font-size:17px; background:#fff; color:#000; vertical-align:top; }
-  .btn svg { width:22px; height:22px; }
-  .btn.ghost { background:#6d6d7466; color:#fff; margin-left:8px; }
-  .hero-sum { margin:-6px 0 18px; color:#d6d6dc; font-size:15px; line-height:1.45; max-width:480px; text-shadow:0 1px 8px #000a;
+    background:linear-gradient(90deg, #0a0a0bf0 0%, #0a0a0b80 42%, #0a0a0b00 72%), linear-gradient(0deg, var(--bg) 0%, #0a0a0b00 40%); }
+  .hero-info { position:absolute; z-index:2; left:var(--gut); right:var(--gut); bottom:10%; max-width:560px; }
+  .kicker { font-size:var(--fs-xs); font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#c7c7cf; margin-bottom:10px; }
+  .hero h1 { margin:0 0 12px; font-size:var(--fs-hero); line-height:1.04; font-weight:800; letter-spacing:-.02em; }
+  .hero p { margin:0 0 20px; color:#d4d4da; font-size:var(--fs-md); max-width:470px;
     display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  @media (max-width:600px) { .hero-sum { -webkit-line-clamp:2; font-size:14px; } }
-  .moods { display:flex; gap:8px; overflow-x:auto; padding:0 4vw 18px; scrollbar-width:none; }
-  .moods::-webkit-scrollbar { display:none; }
-  .moods button { flex:none; padding:7px 14px; border-radius:999px; background:#ffffff14; font-size:14px; font-weight:600; color:#e4e4e8; }
-  .moods button.on { background:#fff; color:#000; }
-  .sheet-meta { color:var(--muted); font-size:14px; margin:-6px 0 10px; }
-  .sheet-sum { color:#d6d6dc; font-size:15px; line-height:1.5; margin:0 0 16px; max-width:640px; }
+  .btns { display:flex; gap:10px; flex-wrap:wrap; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:44px; padding:0 22px 0 18px; border-radius:8px;
+    font-size:var(--fs-md); font-weight:700; background:#fff; color:#000; white-space:nowrap; }
+  .btn svg { width:20px; height:20px; }
+  .btn.ghost { background:#ffffff26; color:#fff; padding:0 20px; -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); }
+  @media (max-width:767px), (max-height:500px) and (hover:none) {
+    .hero { height:min(62vh, 520px); }
+    .hero-info { bottom:7%; }
+    .hero p { -webkit-line-clamp:2; }
+  }
 
-  /* rows */
-  main { position:relative; z-index:3; margin-top:-8vh; }
-  .row { margin:0 0 30px; }
-  .row h2 { font-size:19px; font-weight:700; margin:0 4vw 10px; }
-  .rail { display:flex; gap:8px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-padding:0 4vw;
-    padding:6px 4vw 14px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  /* ---------- rows, grids, tiles ---------- */
+  .content { position:relative; z-index:3; padding-bottom:40px; }
+  .hero + .content { margin-top:-28px; }
+  .row { margin:0 0 26px; }
+  .row h2, .page h1 { margin:0 var(--gut) 10px; font-size:var(--fs-lg); font-weight:700; letter-spacing:-.01em; }
+  .page { padding:calc(env(safe-area-inset-top) + 28px) 0 0; }
+  .page h1 { font-size:var(--fs-xl); margin-bottom:18px; }
+  @media (max-width:767px), (max-height:500px) and (hover:none) { .page { padding-top:calc(env(safe-area-inset-top) + 58px); } }
+  .rail { display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-padding:0 var(--gut); padding:4px var(--gut) 8px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
   .rail::-webkit-scrollbar { display:none; }
-  .tile { flex:0 0 var(--tile-w); aspect-ratio:16/9; position:relative; border-radius:var(--radius); overflow:hidden;
-    background:var(--panel) center/cover no-repeat; scroll-snap-align:start; transition:transform .18s ease; }
-  .tile::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg,#000c 0%,#0000 55%); }
-  .tile .t { position:absolute; z-index:1; left:10px; right:10px; bottom:9px; font-weight:700; font-size:15px;
-    text-shadow:0 1px 6px #000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }
-  .tile .sub { display:block; font-weight:500; font-size:12px; color:#d0d0d6; }
-  .tile .bar { position:absolute; z-index:1; left:0; right:0; bottom:0; height:4px; background:#ffffff33; }
-  .tile .bar i { display:block; height:100%; background:var(--accent); }
-  @media (hover:hover) { .tile:hover { transform:scale(1.05); z-index:2; } }
+  .rail .tile { flex:0 0 var(--tile); scroll-snap-align:start; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(var(--tile), 240px), 1fr)); gap:14px 10px; padding:0 var(--gut); }
+  .tile { position:relative; aspect-ratio:16/9; border-radius:var(--r); overflow:hidden; background:var(--panel-2) center/cover no-repeat; transition:transform .2s ease; }
+  .tile::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg, #000d 0%, #0000 58%); }
+  .tile .t { position:absolute; z-index:1; left:10px; right:10px; bottom:8px; font-size:var(--fs-sm); font-weight:700; text-align:left; line-height:1.3;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 4px #0008; }
+  .tile .sub { display:block; font-size:var(--fs-xs); font-weight:500; color:#cfcfd6; overflow:hidden; text-overflow:ellipsis; }
+  .tile .bar { position:absolute; z-index:1; left:0; right:0; bottom:0; height:3px; background:#ffffff30; }
+  .tile .bar i, .ep .bar i { display:block; height:100%; background:var(--accent); }
+  @media (hover:hover) { .tile:hover { transform:scale(1.04); z-index:2; } }
   .tile:active { transform:scale(.97); }
+  .chips { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; padding:0 var(--gut); margin-bottom:26px; }
+  .chip { height:64px; border-radius:var(--r); background:var(--panel-2); font-size:var(--fs-md); font-weight:700; text-align:left; padding:0 16px; }
+  .page .search { margin:0 var(--gut) 22px; height:40px; }
+  .empty { color:var(--muted); padding:0 var(--gut); font-size:var(--fs-md); }
 
-  /* show sheet */
-  .sheet-bg { position:fixed; inset:0; z-index:40; background:#000a; display:none; overflow-y:auto; }
+  /* ---------- details sheet ---------- */
+  .sheet-bg { position:fixed; inset:0; z-index:40; background:#000b; display:none; overflow-y:auto; -webkit-overflow-scrolling:touch; }
   .sheet-bg.open { display:block; }
-  .sheet { max-width:860px; margin:6vh auto; background:var(--panel); border-radius:10px; overflow:hidden; position:relative; }
-  .sheet-art { aspect-ratio:16/8; background:#222 center/cover no-repeat; position:relative; }
-  .sheet-art::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg, var(--panel) 0%, #0000 60%); }
-  .sheet-head { position:relative; z-index:1; margin-top:-90px; padding:0 28px 8px; }
-  .sheet-head h2 { margin:0 0 14px; font-size:clamp(26px,4vw,40px); font-weight:800; }
-  .close { position:absolute; z-index:5; top:12px; right:12px; width:38px; height:38px; border-radius:50%;
-    background:#000a; display:grid; place-items:center; font-size:22px; line-height:1; }
-  .seasons { display:flex; gap:6px; flex-wrap:wrap; padding:10px 28px 0; }
-  .seasons button { padding:6px 12px; border-radius:999px; background:#ffffff14; font-size:14px; font-weight:600; }
+  .sheet { position:relative; max-width:860px; margin:5vh auto; background:var(--panel); border-radius:14px; overflow:hidden; }
+  .sheet-art { aspect-ratio:16/8; background:#1a1a1e center/cover no-repeat; position:relative; }
+  .sheet-art::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg, var(--panel) 0%, #0000 62%); }
+  .sheet-head { position:relative; z-index:1; margin-top:-72px; padding:0 24px 6px; }
+  .sheet-head h2 { margin:0 0 6px; font-size:var(--fs-xl); font-weight:800; letter-spacing:-.01em; }
+  .meta { color:var(--muted); font-size:var(--fs-sm); margin-bottom:10px; }
+  .sum { color:#d4d4da; font-size:var(--fs-md); margin:0 0 16px; max-width:640px; }
+  .sheet .close { position:absolute; z-index:5; top:12px; right:12px; background:#000a; }
+  .seasons { display:flex; gap:8px; flex-wrap:wrap; padding:8px 24px 0; }
+  .seasons button { height:32px; padding:0 14px; border-radius:999px; background:#ffffff14; font-size:var(--fs-sm); font-weight:600; }
   .seasons button.on { background:#fff; color:#000; }
-  .eps { padding:10px 18px 26px; }
-  .ep { display:flex; gap:14px; align-items:center; width:100%; padding:10px; border-radius:8px; text-align:left; }
-  .ep:active, .ep:hover { background:#ffffff0d; }
-  .ep-n { width:26px; flex:none; color:var(--muted); font-size:20px; text-align:center; }
-  .ep-img { flex:none; width:150px; aspect-ratio:16/9; border-radius:5px; background:#222 center/cover no-repeat; position:relative; overflow:hidden; }
-  .ep-img .bar { position:absolute; left:0; right:0; bottom:0; height:3px; background:#ffffff33; }
-  .ep-img .bar i { display:block; height:100%; background:var(--accent); }
-  .ep-t { font-weight:600; }
+  .eps { padding:8px 12px 20px; }
+  .ep { display:flex; gap:14px; align-items:center; width:100%; padding:10px 12px; border-radius:10px; text-align:left; }
+  @media (hover:hover) { .ep:hover { background:#ffffff0a; } }
+  .ep:active { background:#ffffff0f; }
+  .ep-n { width:22px; flex:none; color:var(--muted); font-size:var(--fs-md); text-align:center; }
+  .ep-img { position:relative; flex:none; width:148px; aspect-ratio:16/9; border-radius:8px; overflow:hidden; background:#222 center/cover no-repeat; }
+  .ep .bar { position:absolute; left:0; right:0; bottom:0; height:3px; background:#ffffff33; }
+  .ep-t { font-size:var(--fs-md); font-weight:600; min-width:0; }
+  @media (max-width:767px), (max-height:500px) and (hover:none) {
+    .sheet { margin:0; min-height:100%; border-radius:0; padding-bottom:env(safe-area-inset-bottom); }
+    .sheet .close { top:calc(env(safe-area-inset-top) + 10px); }
+    .sheet-head { padding:0 16px 6px; } .seasons { padding:8px 16px 0; } .eps { padding:6px 4px 20px; }
+    .ep-img { width:124px; }
+  }
 
-  /* player */
-  .player { position:fixed; inset:0; z-index:60; background:#000; display:none; height:100vh; height:100dvh; }
+  /* ---------- player ---------- */
+  .player { position:fixed; inset:0; z-index:60; background:#000; display:none; height:100vh; height:100dvh; overflow:hidden; }
   .player.open { display:block; }
-  .player:fullscreen, .player:-webkit-full-screen { width:100vw; height:100vh; background:#000; }
-  .player video { width:100%; height:100%; object-fit:contain; background:#000; }
-  .p-top { position:absolute; inset:0 0 auto 0; padding:calc(env(safe-area-inset-top) + 12px) 16px 30px;
-    display:flex; align-items:center; gap:14px; background:linear-gradient(#000b,#0000); transition:opacity .3s; }
-  .p-top.hide { opacity:0; pointer-events:none; }
-  .p-back { width:42px; height:42px; border-radius:50%; background:#ffffff1f; display:grid; place-items:center; }
-  .p-back svg { width:22px; height:22px; }
-  .p-title { font-weight:700; font-size:17px; text-shadow:0 1px 6px #000; }
-  .p-title small { display:block; color:#ccc; font-weight:500; font-size:13px; }
-  .nextup { position:absolute; right:24px; bottom:90px; background:#111e; border-radius:10px; padding:14px 16px;
-    display:none; align-items:center; gap:14px; max-width:min(420px, 86vw); }
-  .nextup.show { display:flex; }
-  .nextup .btn { padding:9px 16px; font-size:15px; white-space:nowrap; }
-  .nextup .x { color:var(--muted); font-size:14px; padding:6px; }
-  .p-tools { margin-left:auto; display:flex; gap:8px; position:relative; }
-  .p-tool { height:42px; padding:0 14px; border-radius:21px; background:#ffffff1f; font-weight:600; font-size:14px;
-    display:flex; align-items:center; gap:7px; white-space:nowrap; }
-  .p-tool svg { width:19px; height:19px; }
-  .p-tool.on { background:#fff; color:#000; }
-  .sleep-menu { position:absolute; top:50px; right:0; background:#1c1c22f2; border-radius:12px; padding:6px; display:none; min-width:200px; }
-  .sleep-menu.open { display:block; }
-  .sleep-menu button { display:block; width:100%; text-align:left; padding:11px 14px; border-radius:8px; font-size:15px; }
-  .sleep-menu button:active, .sleep-menu button:hover { background:#ffffff14; }
-  .sleep-menu small { display:block; color:var(--muted); font-size:12px; padding:6px 14px 4px; }
-  /* toddler lock: blocks every tap until a grown-up holds the lock button */
-  .kidlock { position:absolute; inset:0; z-index:5; display:none; }
-  .player.locked .kidlock { display:block; }
-  .player.locked .p-top, .player.locked .nextup { display:none; }
-  .unlock { position:absolute; top:calc(env(safe-area-inset-top) + 14px); right:16px; width:58px; height:58px; border-radius:50%;
-    background:conic-gradient(#fff var(--p, 0%), #0008 0); display:grid; place-items:center; opacity:.25; transition:opacity .3s; }
-  .unlock::before { content:""; position:absolute; inset:4px; border-radius:50%; background:#000b; }
-  .unlock svg { width:24px; height:24px; position:relative; }
-  .kidlock.peek .unlock { opacity:1; }
-  .unlock-hint { position:absolute; top:calc(env(safe-area-inset-top) + 30px); right:86px; color:#fff; font-size:14px; font-weight:600;
-    text-shadow:0 1px 6px #000; opacity:0; transition:opacity .3s; }
-  .kidlock.peek .unlock-hint { opacity:1; }
-
-  /* states */
-  .msg { min-height:70vh; display:grid; place-items:center; text-align:center; padding:0 8vw; color:var(--muted); }
-  .msg b { display:block; color:var(--fg); font-size:20px; margin-bottom:6px; }
-  .spinner { width:38px; height:38px; border:3px solid #ffffff22; border-top-color:var(--accent); border-radius:50%; animation:spin 0.9s linear infinite; margin:0 auto 14px; }
+  .player video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; }
+  .pc { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:space-between; transition:opacity .25s;
+    background:linear-gradient(#000a 0%, #0000 22%, #0000 62%, #000c 100%); }
+  .player.hide .pc { opacity:0; pointer-events:none; }
+  .player.hide { cursor:none; }
+  .pc-top { display:flex; align-items:center; gap:12px;
+    padding:calc(env(safe-area-inset-top) + 14px) max(var(--gut), env(safe-area-inset-right)) 0 max(var(--gut), env(safe-area-inset-left)); }
+  .pc-title { flex:1; min-width:0; font-size:var(--fs-md); font-weight:700; line-height:1.3; }
+  .pc-title small { display:block; font-size:var(--fs-sm); font-weight:500; color:#c9c9d0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pc-title .warn { color:#ffb4a8; white-space:normal; }
+  .pc-mid { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); display:flex; align-items:center; gap:clamp(28px, 8vw, 72px); }
+  .pc-mid .ib { width:56px; height:56px; flex-basis:56px; }
+  .pc-mid .ib svg { width:34px; height:34px; }
+  .pc-mid .ib.big { width:76px; height:76px; flex-basis:76px; background:#ffffff1f; -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); }
+  .pc-mid .ib.big svg { width:40px; height:40px; }
+  .pc-bot { padding:0 max(var(--gut), env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 18px) max(var(--gut), env(safe-area-inset-left)); }
+  .scrub-row { display:flex; align-items:center; gap:14px; }
+  .scrub { position:relative; flex:1; height:36px; display:flex; align-items:center; cursor:pointer; touch-action:none; }
+  .track { position:relative; width:100%; height:4px; border-radius:2px; background:#ffffff38; transition:height .15s; }
+  .scrub:hover .track, .scrub.drag .track { height:6px; }
+  .track i { position:absolute; left:0; top:0; bottom:0; border-radius:inherit; }
+  .track .buf { background:#ffffff55; width:0; }
+  .track .fill { background:var(--accent); width:0; }
+  .knob { position:absolute; top:50%; left:0; width:16px; height:16px; aspect-ratio:1; margin:-8px 0 0 -8px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 0 0 #e5383b55; transition:transform .15s, box-shadow .15s; }
+  .scrub.drag .knob { transform:scale(1.35); box-shadow:0 0 0 8px #e5383b33; }
+  .bubble { position:absolute; bottom:32px; left:0; transform:translateX(-50%); padding:4px 8px; border-radius:6px; background:#000c;
+    font-size:var(--fs-sm); font-weight:600; font-variant-numeric:tabular-nums; opacity:0; transition:opacity .15s; pointer-events:none; }
+  .scrub.drag .bubble, .scrub.peek .bubble { opacity:1; }
+  .time { font-size:var(--fs-sm); font-variant-numeric:tabular-nums; color:#e6e6ea; min-width:44px; text-align:right; }
+  .pc-row { display:flex; align-items:center; gap:6px; margin-top:4px; }
+  .pc-row .grow { flex:1; }
+  .pc-btn { display:inline-flex; align-items:center; gap:8px; height:40px; padding:0 12px; border-radius:8px; font-size:var(--fs-sm); font-weight:600; color:#fff; }
+  .pc-btn svg { width:20px; height:20px; }
+  .pc-btn.on { background:#fff; color:#000; }
+  @media (hover:hover) { .pc-btn:hover { background:#ffffff1f; } }
+  .flash { position:absolute; top:50%; transform:translateY(-50%); width:96px; height:96px; aspect-ratio:1; border-radius:50%; background:#ffffff26;
+    display:grid; place-items:center; font-size:var(--fs-md); font-weight:700; opacity:0; transition:opacity .3s; pointer-events:none; }
+  .flash.l { left:12%; } .flash.r { right:12%; }
+  .flash.show { opacity:1; transition:none; }
+  .spin { position:absolute; left:50%; top:50%; width:44px; height:44px; margin:-22px 0 0 -22px; border-radius:50%; border:3px solid #ffffff2a;
+    border-top-color:#fff; animation:spin .9s linear infinite; display:none; pointer-events:none; }
+  .player.wait .spin { display:block; }
+  .player.wait .pc-mid .big { opacity:0; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  .menu { position:absolute; z-index:5; top:calc(env(safe-area-inset-top) + 62px); right:max(var(--gut), env(safe-area-inset-right)); min-width:210px;
+    background:#1c1c21f2; -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); border-radius:12px; padding:6px; display:none; }
+  .menu.open { display:block; }
+  .menu small { display:block; color:var(--muted); font-size:var(--fs-xs); padding:6px 12px 4px; }
+  .menu button { display:block; width:100%; text-align:left; height:40px; padding:0 12px; border-radius:8px; font-size:var(--fs-md); }
+  .menu button.on { color:var(--accent); font-weight:700; }
+  @media (hover:hover) { .menu button:hover { background:#ffffff12; } }
+  .nextup { position:absolute; right:max(var(--gut), env(safe-area-inset-right)); bottom:calc(env(safe-area-inset-bottom) + 118px); display:none; align-items:center; gap:12px;
+    background:#16161af2; -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); border-radius:12px; padding:12px 12px 12px 16px; max-width:min(420px, calc(100vw - 32px)); }
+  .nextup.show { display:flex; }
+  .nextup .lbl { flex:1; min-width:0; }
+  .nextup .lbl small { display:block; color:var(--muted); font-size:var(--fs-xs); }
+  .nextup .lbl b { display:block; font-size:var(--fs-md); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nextup .btn { height:38px; padding:0 14px; font-size:var(--fs-sm); }
+  .nextup .x { font-size:var(--fs-sm); color:var(--muted); padding:8px; }
+  @media (max-width:767px), (max-height:500px) and (hover:none) {
+    .pc-mid .ib { width:48px; height:48px; flex-basis:48px; } .pc-mid .ib svg { width:30px; height:30px; }
+    .pc-mid .ib.big { width:68px; height:68px; flex-basis:68px; }
+    .pc-btn .lbl { display:none; }
+  }
 
-  /* passcode — modeled on the iPhone lock screen */
+  /* ---------- messages ---------- */
+  .msg { min-height:70vh; display:grid; place-items:center; text-align:center; padding:0 8vw; color:var(--muted); }
+  .msg b { display:block; color:var(--fg); font-size:var(--fs-lg); margin-bottom:6px; }
+  .msg .spin { position:static; display:block; margin:0 auto 14px; }
+
+  /* ---------- passcode, modeled on the iPhone lock screen ---------- */
   .lock { position:fixed; inset:0; z-index:80; display:none; place-items:center;
-    padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
-    background:radial-gradient(120% 80% at 50% 0%, #2a2a36 0%, #0b0b0e 70%); }
+    padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); background:radial-gradient(120% 80% at 50% 0%, #2a2a34 0%, #0a0a0b 70%); }
   .lock.open { display:grid; }
   .lock-box { display:flex; flex-direction:column; align-items:center; }
-  .lock-title { font:400 20px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; margin:0 0 8px; }
-  .lock-sub { font:400 14px/1.3 -apple-system, BlinkMacSystemFont, sans-serif; color:#c9c9d1; margin:0 0 18px; min-height:18px; text-align:center; }
-  .pad.off { opacity:.3; pointer-events:none; }
-  .dots { display:flex; gap:24px; margin-bottom:52px; }
-  .dots i { width:13px; height:13px; border-radius:50%; border:1.5px solid #fff; transition:background .08s; }
+  .lock-title { font-size:20px; font-weight:400; margin:0 0 8px; }
+  .lock-sub { font-size:var(--fs-sm); color:#c9c9d1; margin:0 0 18px; min-height:18px; text-align:center; }
+  .dots { display:flex; gap:24px; margin-bottom:48px; }
+  .dots i { width:13px; height:13px; flex:none; aspect-ratio:1; border-radius:50%; border:1.5px solid #fff; transition:background .08s; }
   .dots i.on { background:#fff; }
   .dots.bad { animation:shake .5s cubic-bezier(.36,.07,.19,.97); }
-  @keyframes shake { 10%,90% { transform:translateX(-3px) } 20%,80% { transform:translateX(6px) }
-    30%,50%,70% { transform:translateX(-12px) } 40%,60% { transform:translateX(12px) } }
-  .pad { display:grid; grid-template-columns:repeat(3, 78px); column-gap:26px; row-gap:16px; }
-  .pad button { width:78px; height:78px; border-radius:50%; background:#ffffff26;
-    -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px);
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    transition:background .35s ease-out; touch-action:manipulation; }
+  @keyframes shake { 10%,90% { transform:translateX(-3px) } 20%,80% { transform:translateX(6px) } 30%,50%,70% { transform:translateX(-12px) } 40%,60% { transform:translateX(12px) } }
+  .pad { display:grid; grid-template-columns:repeat(3, 76px); gap:16px 24px; }
+  .pad.off { opacity:.3; pointer-events:none; }
+  .pad button { width:76px; height:76px; aspect-ratio:1; border-radius:50%; background:#ffffff26; -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; transition:background .35s ease-out; }
   .pad button.down { background:#ffffff73; transition:none; }
-  .pad b { font:300 36px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; }
-  .pad small { font:600 10px/1 -apple-system, BlinkMacSystemFont, sans-serif; letter-spacing:.18em; margin-top:2px; height:10px; }
+  .pad b { font-size:34px; font-weight:300; line-height:1; }
+  .pad small { font-size:10px; font-weight:600; letter-spacing:.18em; margin-top:2px; height:10px; line-height:10px; }
   .pad small:empty { display:none; }
-  .lock-del { margin-top:30px; align-self:flex-end; margin-right:8px; font:400 17px -apple-system, sans-serif; visibility:hidden; }
+  .lock-del { margin-top:28px; align-self:flex-end; margin-right:10px; font-size:17px; visibility:hidden; }
   .lock-del.show { visibility:visible; }
 </style>
 </head>
 <body>
-<header><div class="brand">Family<span>TV</span></div></header>
-<div id="app"><div class="msg"><div><div class="spinner"></div>Loading…</div></div></div>
+<aside class="side" id="side"></aside>
+<div class="topbar"><div class="brand">Family<span>TV</span></div></div>
+<div id="app"><div class="msg"><div><div class="spin"></div>Loading…</div></div></div>
+<nav class="tabs" id="tabs"></nav>
 
 <div class="lock" id="lock"><div class="lock-box">
   <p class="lock-title" id="lockTitle">Enter Passcode</p>
@@ -192,32 +263,47 @@
 <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
 
 <div class="player" id="player">
-  <video id="video" playsinline controls preload="auto"></video>
-  <div class="p-top" id="pTop">
-    <button class="p-back" id="pBack" aria-label="Back">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
-    </button>
-    <div class="p-title" id="pTitle"></div>
-    <div class="p-tools">
-      <button class="p-tool" id="pSleep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span id="sleepLbl">Sleep</span></button>
-      <button class="p-tool" id="pLock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Lock</button>
-      <div class="sleep-menu" id="sleepMenu">
-        <small>Stop playing…</small>
-        <button data-sleep="ep">After this episode</button>
-        <button data-sleep="15">In 15 minutes</button>
-        <button data-sleep="30">In 30 minutes</button>
-        <button data-sleep="60">In 1 hour</button>
-        <button data-sleep="0">Off</button>
+  <video id="video" playsinline webkit-playsinline preload="auto" x-webkit-airplay="allow"></video>
+  <div class="spin"></div>
+  <div class="flash l" id="flashL">−10s</div><div class="flash r" id="flashR">+10s</div>
+  <div class="pc" id="pc">
+    <div class="pc-top">
+      <button class="ib glass" id="pBack" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="pc-title" id="pTitle"></div>
+      <button class="ib" id="pCast" aria-label="AirPlay" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/><path d="M12 15l5 6H7z"/></svg></button>
+      <button class="ib" id="pSleep" aria-label="Sleep timer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
+    </div>
+    <div class="pc-mid">
+      <button class="ib" id="pRew" aria-label="Back 10 seconds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><text x="12" y="15.5" fill="currentColor" stroke="none" font-size="7.5" font-weight="700" text-anchor="middle" font-family="-apple-system,sans-serif">10</text></svg></button>
+      <button class="ib big" id="pPlay" aria-label="Play"></button>
+      <button class="ib" id="pFwd" aria-label="Forward 10 seconds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/><text x="12" y="15.5" fill="currentColor" stroke="none" font-size="7.5" font-weight="700" text-anchor="middle" font-family="-apple-system,sans-serif">10</text></svg></button>
+    </div>
+    <div class="pc-bot">
+      <div class="scrub-row">
+        <div class="scrub" id="scrub" role="slider" aria-label="Seek" tabindex="0">
+          <div class="track"><i class="buf" id="buf"></i><i class="fill" id="fill"></i><b class="knob" id="knob"></b></div>
+          <span class="bubble" id="bubble">0:00</span>
+        </div>
+        <span class="time" id="tLeft">0:00</span>
+      </div>
+      <div class="pc-row">
+        <span class="grow"></span>
+        <button class="pc-btn" id="pNext" hidden><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5v14l10-7zM17 5h2.5v14H17z"/></svg><span class="lbl">Next episode</span></button>
+        <button class="ib" id="pPip" aria-label="Picture in picture" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="11" width="8" height="6" rx="1" fill="currentColor"/></svg></button>
+        <button class="ib" id="pFull" aria-label="Full screen" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       </div>
     </div>
   </div>
-  <div class="kidlock" id="kidLock">
-    <div class="unlock-hint">Hold to unlock</div>
-    <button class="unlock" id="unlockBtn" aria-label="Hold to unlock"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
+  <div class="menu" id="sleepMenu">
+    <small>Stop playing</small>
+    <button data-sleep="ep">After this episode</button>
+    <button data-sleep="15">In 15 minutes</button>
+    <button data-sleep="30">In 30 minutes</button>
+    <button data-sleep="60">In 1 hour</button>
+    <button data-sleep="0">Off</button>
   </div>
   <div class="nextup" id="nextUp">
-    <div style="flex:1;min-width:0"><div style="color:#aaa;font-size:12px">Up next in <span id="nuSec">4</span></div>
-      <div id="nuTitle" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div>
+    <div class="lbl"><small>Up next in <span id="nuSec">5</span></small><b id="nuTitle"></b></div>
     <button class="btn" id="nuPlay">Play now</button>
     <button class="x" id="nuCancel">Cancel</button>
   </div>
@@ -226,9 +312,20 @@
 <script>
 /* The passcode is checked on the server, which limits wrong guesses. Nothing secret is in this page. */
 const GATE = "https://noytzrdrvaztjeytdwma.supabase.co/functions/v1/family-tv";
-
-const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
-const SHUFFLE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>';
+const I = {   // icons
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.5 4h4v16h-4zM13.5 4h4v16h-4z"/></svg>',
+  shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+  tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M8 2l4 4 4-4"/></svg>',
+  film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4M3 12h18"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor"/></svg>',
+  spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+};
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm)$/i;          // formats browsers can play
 const POSTER_NAME = /^(poster|cover|folder)\.(jpe?g|png|webp)$/i;
 const SHOW_DIR = /^(shows?|tv|tv shows|series)$/i;
@@ -385,10 +482,13 @@ function buildCatalog(root) {
   return { rows, all, newest: all.slice().sort((a, b) => b.added - a.added)[0] };
 }
 
-/* ---------- render ---------- */
+
+/* ---------- screens: home, a category, a genre, a mood, search ---------- */
 let LIB = { rows: [], all: [] }, ART = {}, HERO_ART = {};
+let view = { k: 'home' };
 const bg = id => ART[id] ? `background-image:url('${ART[id]}')` : '';
 const itemByKey = k => LIB.all.find(i => i.key === k);
+const mobile = () => matchMedia('(max-width:767px), (max-height:500px) and (hover:none)').matches;
 
 function continueRow() {
   const seen = new Set(), items = [];
@@ -403,14 +503,165 @@ function continueRow() {
   return items.slice(0, 12);
 }
 function tileHTML(it, ep) {
-  const sub = ep && it.kind === 'show' ? `<span class="sub">${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</span>`
-    : it.kind === 'show' ? `<span class="sub">${it.episodes.length} episodes</span>` : '';
+  const sub = ep && it.kind === 'show' ? `${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}`
+    : it.kind === 'show' ? `${it.episodes.length} episodes` : (metaOf(it).genres || [])[0] || '';
   const p = ep ? pct(ep.id) : 0;
   return `<button class="tile" data-key="${esc(it.key)}" ${ep ? `data-ep="${esc(ep.id)}"` : ''} style="${bg(ep && it.kind === 'show' ? ep.art : it.art)}">
-    <span class="t">${esc(it.title)}${sub}</span>${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</button>`;
+    <span class="t">${esc(it.title)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</span>${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</button>`;
 }
+const rowHTML = (name, items, ep) => items.length ? `<section class="row"><h2>${esc(name)}</h2><div class="rail">${items.map(x => ep ? tileHTML(x.it, x.ep) : tileHTML(x)).join('')}</div></section>` : '';
+const gridHTML = items => items.length ? `<div class="grid">${items.map(it => tileHTML(it)).join('')}</div>` : `<p class="empty">Nothing here yet.</p>`;
+
+// genres and moods found in this library, for the sidebar and the Browse tab
+function genreList() {
+  const c = {};
+  LIB.all.forEach(it => (metaOf(it).genres || []).forEach(g => (c[g] = (c[g] || 0) + 1)));
+  return Object.entries(c).sort((a, b) => b[1] - a[1] || natural(a[0], b[0]));
+}
+const moodItems = k => LIB.all.filter(it => ((metaOf(it).moods || {})[k] || 0) > 0.5).sort((a, b) => metaOf(b).moods[k] - metaOf(a).moods[k]);
+const moodList = () => Object.keys(MOOD_NAMES).map(k => [k, moodItems(k).length]).filter(([, n]) => n);
+const folderRows = () => LIB.rows.filter(r => !r.virtual);
+function matches(q) {
+  q = q.trim().toLowerCase(); if (!q) return [];
+  return LIB.all.filter(it => it.title.toLowerCase().includes(q) || (metaOf(it).genres || []).some(g => g.toLowerCase().includes(q))
+    || it.episodes.some(e => e.title.toLowerCase().includes(q)));
+}
+
+function go(k, arg) {
+  view = { k, arg };
+  if (k !== 'search') { const s = $('#side .search input'); if (s) s.value = ''; }
+  render(); window.scrollTo(0, 0);
+}
+const same = (k, arg) => view.k === k && (arg === undefined || view.arg === arg);
+function renderNav() {
+  const item = (k, arg, icon, label, n) => `<button class="nav-i ${same(k, arg) ? 'on' : ''}" data-go="${k}" ${arg != null ? `data-arg="${esc(arg)}"` : ''}>${icon}<span>${esc(label)}</span>${n ? `<span class="n">${n}</span>` : ''}</button>`;
+  const genres = genreList(), moods = moodList();
+  const side = $('#side');
+  const q = side.querySelector('.search input')?.value || '';
+  side.innerHTML = `<div class="brand">Family<span>TV</span></div>
+    <label class="search">${I.search}<input type="search" placeholder="Search" value="${esc(q)}" enterkeyhint="search" autocomplete="off"></label>
+    ${item('home', null, I.home, 'Home')}
+    ${folderRows().map(r => item('row', r.name, r.name === 'Shows' ? I.tv : r.name === 'Movies' ? I.film : I.folder, r.name, r.items.length)).join('')}
+    ${genres.length ? `<div class="nav-h">Genres</div>${genres.map(([g, n]) => item('genre', g, I.tag, g, n)).join('')}` : ''}
+    ${moods.length ? `<div class="nav-h">Moods</div>${moods.map(([m, n]) => item('mood', m, I.spark, MOOD_NAMES[m], n)).join('')}` : ''}`;
+  side.querySelector('.search input').oninput = e => { view = { k: 'search', arg: e.target.value }; render(false); };
+  const tab = (k, icon, label, on) => `<button data-go="${k}" class="${on ? 'on' : ''}">${icon}<span>${label}</span></button>`;
+  const rows = folderRows(), shows = rows.find(r => r.name === 'Shows'), movies = rows.find(r => r.name === 'Movies');
+  $('#tabs').innerHTML = tab('home', I.home, 'Home', view.k === 'home')
+    + (shows ? `<button data-go="row" data-arg="Shows" class="${same('row', 'Shows') ? 'on' : ''}">${I.tv}<span>Shows</span></button>` : '')
+    + (movies ? `<button data-go="row" data-arg="Movies" class="${same('row', 'Movies') ? 'on' : ''}">${I.film}<span>Movies</span></button>` : '')
+    + tab('browse', I.grid, 'Browse', ['browse', 'genre', 'mood', 'search'].includes(view.k) || (view.k === 'row' && !['Shows', 'Movies'].includes(view.arg)));
+}
+
+function render(nav = true) {
+  if (nav) renderNav();
+  if (!LIB.all.length) { $('#app').innerHTML = `<div class="msg"><div><b>Nothing here yet</b>Drop videos into the Family TV Inbox on the Mac and they'll show up here.</div></div>`; return; }
+  const page = (title, body) => `<div class="page"><h1>${esc(title)}</h1>${body}</div>`;
+  if (view.k === 'row') {
+    const r = LIB.rows.find(x => x.name === view.arg) || { items: [] };
+    $('#app').innerHTML = page(view.arg, gridHTML(r.items));
+  } else if (view.k === 'genre') {
+    $('#app').innerHTML = page(view.arg, gridHTML(LIB.all.filter(it => (metaOf(it).genres || []).includes(view.arg))));
+  } else if (view.k === 'mood') {
+    $('#app').innerHTML = page(MOOD_NAMES[view.arg], gridHTML(moodItems(view.arg)));
+  } else if (view.k === 'search' && !mobile()) {
+    $('#app').innerHTML = page(view.arg.trim() ? `Results for “${view.arg.trim()}”` : 'Search', gridHTML(matches(view.arg)));
+  } else if (view.k === 'browse' || view.k === 'search') {
+    // phone: search plus genres, moods and any extra folders as big buttons
+    const q = view.k === 'search' ? view.arg : '';
+    const chips = (h, list) => list.length ? `<section class="row"><h2>${h}</h2></section><div class="chips">${list.join('')}</div>` : '';
+    $('#app').innerHTML = `<div class="page"><h1>Browse</h1>
+      <label class="search">${I.search}<input type="search" id="q" placeholder="Shows, movies, episodes" value="${esc(q)}" enterkeyhint="search" autocomplete="off"></label>
+      <div id="results"></div></div>`;
+    const draw = () => {
+      const v = $('#q').value;
+      $('#results').innerHTML = v.trim() ? gridHTML(matches(v))
+        : chips('Genres', genreList().map(([g]) => `<button class="chip" data-go="genre" data-arg="${esc(g)}">${esc(g)}</button>`))
+        + chips('Moods', moodList().map(([m]) => `<button class="chip" data-go="mood" data-arg="${m}">${MOOD_NAMES[m]}</button>`))
+        + chips('Folders', folderRows().filter(r => !['Shows', 'Movies'].includes(r.name)).map(r => `<button class="chip" data-go="row" data-arg="${esc(r.name)}">${esc(r.name)}</button>`));
+    };
+    $('#q').oninput = () => { view = { k: 'search', arg: $('#q').value }; draw(); };
+    draw();
+  } else renderHome();
+}
+
+function renderHome() {
+  const N = LIB.all.length;
+  const cont = continueRow();
+  const picks = forYou(new Set(cont.map(c => c.it.key)));
+  const hero = (Object.keys(progress).length && picks[0]) || LIB.newest;
+  const hm = metaOf(hero), heroImg = HERO_ART[hero.art] || ART[hero.art];
+  const kicker = [hero.kind === 'show' ? 'Series' : 'Movie', hm.year || hero.year, (hm.genres || [])[0]].filter(Boolean).join(' · ');
+  $('#app').innerHTML = `
+    <section class="hero"><div class="hero-img" style="background-image:${heroImg ? `url('${heroImg}')` : 'none'}"></div>
+      <div class="hero-info"><div class="kicker">${esc(kicker)}</div><h1>${esc(hero.title)}</h1>
+        ${hm.summary ? `<p>${esc(hm.summary)}</p>` : ''}
+        <div class="btns"><button class="btn" data-play="${esc(hero.key)}">${I.play}${hero.episodes.some(e => progress[e.id]) ? 'Resume' : 'Play'}</button>${hero.kind === 'show' ? `<button class="btn ghost" data-key="${esc(hero.key)}">Episodes</button>` : ''}</div></div></section>
+    <div class="content">
+      ${rowHTML('Continue Watching', cont, true)}
+      ${N >= 4 ? rowHTML(evening() ? 'Tonight’s picks' : 'Picked for you', picks.slice(0, 12)) : ''}
+      ${LIB.rows.map(r => rowHTML(r.name, r.items)).join('')}
+    </div>`;
+  if (!HERO_ART[hero.art]) thumbs([hero.art], '1280x720').then(o => {      // sharper picture for the big banner
+    Object.assign(HERO_ART, o); const el = $('.hero-img'); if (el && o[hero.art]) el.style.backgroundImage = `url('${o[hero.art]}')`;
+  });
+}
+
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-go]');
+  if (g) return go(g.dataset.go, g.dataset.arg);
+  if (e.target.closest('#player, .sheet')) return;
+  shuffle = false;                                // shuffle only sticks when started from a show's Shuffle button
+  const play = e.target.closest('[data-play]');
+  if (play) { const it = itemByKey(play.dataset.play); return playItem(it, nextUnwatched(it)); }
+  const t = e.target.closest('[data-key]');
+  if (t) {
+    const it = itemByKey(t.dataset.key); if (!it) return;
+    if (t.dataset.ep) return playItem(it, it.episodes.findIndex(x => String(x.id) === t.dataset.ep));
+    if (it.kind === 'movie') return playItem(it, 0);
+    openSheet(it);
+  }
+});
+function nextUnwatched(it) {
+  let best = -1, ts = 0;
+  it.episodes.forEach((e, i) => { const p = progress[e.id]; if (p && p.ts > ts && pct(e.id) < 0.95) { ts = p.ts; best = i; } });
+  if (best >= 0) return best;
+  const i = it.episodes.findIndex(e => pct(e.id) < 0.95);
+  return i < 0 ? 0 : i;
+}
+
+/* ---------- show details ---------- */
+function openSheet(it, season) {
+  const seasons = [...new Set(it.episodes.map(e => e.seasonLabel))];
+  const next = nextUnwatched(it);
+  const cur = season ?? it.episodes[next].seasonLabel;
+  const eps = it.episodes.filter(e => e.seasonLabel === cur);
+  const m = metaOf(it), line = [m.year, (m.genres || []).join(' · '), m.rating, `${it.episodes.length} episodes`].filter(Boolean).join(' · ');
+  $('#sheet').innerHTML = `
+    <button class="ib close" id="sheetClose" aria-label="Close">${I.close}</button>
+    <div class="sheet-art" style="${bg(it.art)}"></div>
+    <div class="sheet-head"><h2>${esc(it.title)}</h2><div class="meta">${esc(line)}</div>${m.summary ? `<p class="sum">${esc(m.summary)}</p>` : ''}
+      <div class="btns"><button class="btn" data-sheetplay="${next}">${I.play}${progress[it.episodes[next].id] ? 'Resume' : 'Play'}</button>${it.episodes.length > 2 ? `<button class="btn ghost" data-shuffle>${I.shuffle}Shuffle</button>` : ''}</div></div>
+    ${seasons.length > 1 ? `<div class="seasons">${seasons.map(s => `<button data-season="${esc(s)}" class="${s === cur ? 'on' : ''}">${esc(s)}</button>`).join('')}</div>` : ''}
+    <div class="eps">${eps.map(e => { const p = pct(e.id); return `
+      <button class="ep" data-sheetplay="${e.idx}"><span class="ep-n">${e.n ?? e.idx + 1}</span>
+        <span class="ep-img" style="${bg(e.art)}">${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</span>
+        <span class="ep-t">${esc(e.title)}</span></button>`; }).join('')}</div>`;
+  if (!season) $('#sheetBg').scrollTop = 0;
+  $('#sheetBg').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  $('#sheet').onclick = ev => {
+    const s = ev.target.closest('[data-season]'); if (s) return openSheet(it, s.dataset.season);
+    if (ev.target.closest('[data-shuffle]')) { closeSheet(); shuffle = true; return playItem(it, Math.floor(Math.random() * it.episodes.length)); }
+    const p = ev.target.closest('[data-sheetplay]'); if (p) { closeSheet(); shuffle = false; playItem(it, +p.dataset.sheetplay); }
+    if (ev.target.closest('#sheetClose')) closeSheet();
+  };
+}
+function closeSheet() { $('#sheetBg').classList.remove('open'); document.body.style.overflow = ''; }
+$('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') closeSheet(); });
+
 /* ---------- genres, moods and picks (worked out by the server's AI; see loadMeta) ---------- */
-let META = ls.get('ftv.meta', {}), moodPick = null;
+let META = ls.get('ftv.meta', {});
 const metaOf = it => META[it.key.toLowerCase()] || {};
 const MOOD_NAMES = { calm: 'Calm', funny: 'Funny', exciting: 'Exciting', musical: 'Musical', heartwarming: 'Heartwarming', learning: 'Learning' };
 const finished = it => it.episodes.every(e => pct(e.id) >= 0.95);
@@ -444,100 +695,14 @@ function forYou(skip = new Set()) {
     return [it, s];
   }).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 }
-const rowHTML = (name, items, ep) => items.length ? `<section class="row"><h2>${esc(name)}</h2><div class="rail">${items.map(x => ep ? tileHTML(x.it, x.ep) : tileHTML(x)).join('')}</div></section>` : '';
-function render() {
-  if (!LIB.all.length) { $('#app').innerHTML = `<div class="msg"><div><b>Nothing here yet</b>Add videos to the shared pCloud folder and they'll show up.</div></div>`; return; }
-  const N = LIB.all.length, big = N >= 12;
-  const cont = continueRow();
-  const picks = forYou(new Set(cont.map(c => c.it.key)));
-  const hero = (Object.keys(progress).length && picks[0]) || LIB.newest;
-  const hm = metaOf(hero), heroImg = HERO_ART[hero.art] || ART[hero.art];
-  const kicker = [hero.kind === 'show' ? 'Series' : 'Movie', hm.year || hero.year, (hm.genres || [])[0]].filter(Boolean).join(' · ');
-
-  // genre rows and mood chips only appear once the library is big enough to need them
-  let genreRows = '', moodBar = '';
-  if (big) {
-    const count = {};
-    LIB.all.forEach(it => (metaOf(it).genres || []).forEach(g => (count[g] = (count[g] || 0) + 1)));
-    genreRows = Object.entries(count).filter(([, c]) => c >= 4 && c <= N * 0.75).sort((a, b) => b[1] - a[1]).slice(0, 4)
-      .map(([g]) => rowHTML(g, LIB.all.filter(it => (metaOf(it).genres || []).includes(g)))).join('');
-    const moods = Object.keys(MOOD_NAMES).filter(k => LIB.all.filter(it => (metaOf(it).moods || {})[k] > 0.5).length >= 2);
-    if (moods.length >= 2) moodBar = `<div class="moods">${moods.map(k => `<button data-mood="${k}" class="${moodPick === k ? 'on' : ''}">${MOOD_NAMES[k]}</button>`).join('')}</div>`;
-  }
-  const body = moodPick
-    ? rowHTML(MOOD_NAMES[moodPick], LIB.all.filter(it => (metaOf(it).moods || {})[moodPick] > 0.5).sort((a, b) => metaOf(b).moods[moodPick] - metaOf(a).moods[moodPick]))
-    : `${rowHTML('Continue Watching', cont, true)}
-       ${N >= 4 ? rowHTML(evening() ? 'Tonight’s picks' : 'Picked for you', picks.slice(0, 12)) : ''}
-       ${LIB.rows.map(r => rowHTML(r.name, r.items)).join('')}
-       ${genreRows}`;
-  $('#app').innerHTML = `
-    <section class="hero"><div class="hero-img" style="background-image:${heroImg ? `url('${heroImg}')` : 'none'}"></div>
-      <div class="hero-info"><div class="hero-kicker">${esc(kicker)}</div><h1>${esc(hero.title)}</h1>
-        ${hm.summary ? `<p class="hero-sum">${esc(hm.summary)}</p>` : ''}
-        <button class="btn" data-play="${esc(hero.key)}">${PLAY_ICON}${hero.episodes.some(e => progress[e.id]) ? 'Resume' : 'Play'}</button>${hero.kind === 'show' ? `<button class="btn ghost" data-key="${esc(hero.key)}">Episodes</button>` : ''}</div></section>
-    <main>${moodBar}${body}</main>`;
-  if (!HERO_ART[hero.art]) thumbs([hero.art], '1280x720').then(o => {      // sharper picture for the big banner
-    Object.assign(HERO_ART, o); const el = $('.hero-img'); if (el && o[hero.art]) el.style.backgroundImage = `url('${o[hero.art]}')`;
-  });
-}
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('.player, .sheet')) shuffle = false;   // shuffle only sticks when started from a show's Shuffle button
-  const mood = e.target.closest('[data-mood]');
-  if (mood) { moodPick = moodPick === mood.dataset.mood ? null : mood.dataset.mood; return render(); }
-  const play = e.target.closest('[data-play]');
-  if (play) { const it = itemByKey(play.dataset.play); return playItem(it, nextUnwatched(it)); }
-  const t = e.target.closest('[data-key]');
-  if (t && !t.closest('.sheet')) {
-    const it = itemByKey(t.dataset.key); if (!it) return;
-    if (t.dataset.ep) return playItem(it, it.episodes.findIndex(x => String(x.id) === t.dataset.ep));
-    if (it.kind === 'movie') return playItem(it, 0);
-    openSheet(it);
-  }
-});
-function nextUnwatched(it) {
-  let best = -1, ts = 0;
-  it.episodes.forEach((e, i) => { const p = progress[e.id]; if (p && p.ts > ts && pct(e.id) < 0.95) { ts = p.ts; best = i; } });
-  if (best >= 0) return best;
-  const i = it.episodes.findIndex(e => pct(e.id) < 0.95);
-  return i < 0 ? 0 : i;
-}
-
-/* ---------- show sheet ---------- */
-function openSheet(it, season) {
-  const seasons = [...new Set(it.episodes.map(e => e.seasonLabel))];
-  const cur = season ?? (it.episodes[nextUnwatched(it)].seasonLabel);
-  const eps = it.episodes.filter(e => e.seasonLabel === cur);
-  const next = nextUnwatched(it);
-  $('#sheet').innerHTML = `
-    <button class="close" id="sheetClose" aria-label="Close">×</button>
-    <div class="sheet-art" style="${bg(it.art)}"></div>
-    <div class="sheet-head"><h2>${esc(it.title)}</h2>
-      ${(() => { const m = metaOf(it), line = [m.year, (m.genres || []).join(' · '), m.rating, `${it.episodes.length} episodes`].filter(Boolean).join(' · ');
-        return `<div class="sheet-meta">${esc(line)}</div>${m.summary ? `<p class="sheet-sum">${esc(m.summary)}</p>` : ''}`; })()}
-      <button class="btn" data-sheetplay="${next}">${PLAY_ICON}${progress[it.episodes[next].id] ? 'Resume' : 'Play'}</button>${it.episodes.length > 2 ? `<button class="btn ghost" data-shuffle>${SHUFFLE_ICON}Shuffle</button>` : ''}</div>
-    ${seasons.length > 1 ? `<div class="seasons">${seasons.map(s => `<button data-season="${esc(s)}" class="${s === cur ? 'on' : ''}">${esc(s)}</button>`).join('')}</div>` : ''}
-    <div class="eps">${eps.map(e => { const p = pct(e.id); return `
-      <button class="ep" data-sheetplay="${e.idx}"><span class="ep-n">${e.n ?? e.idx + 1}</span>
-        <span class="ep-img" style="${bg(e.art)}">${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</span>
-        <span class="ep-t">${esc(e.title)}</span></button>`; }).join('')}</div>`;
-  $('#sheetBg').classList.add('open');
-  document.body.style.overflow = 'hidden';
-  $('#sheet').onclick = ev => {
-    const s = ev.target.closest('[data-season]'); if (s) return openSheet(it, s.dataset.season);
-    if (ev.target.closest('[data-shuffle]')) { closeSheet(); shuffle = true; return playItem(it, Math.floor(Math.random() * it.episodes.length)); }
-    const p = ev.target.closest('[data-sheetplay]'); if (p) { closeSheet(); shuffle = false; playItem(it, +p.dataset.sheetplay); }
-    if (ev.target.closest('#sheetClose')) closeSheet();
-  };
-}
-function closeSheet() { $('#sheetBg').classList.remove('open'); document.body.style.overflow = ''; }
-$('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') closeSheet(); });
 
 /* ---------- player ---------- */
-const video = $('#video');
+const video = $('#video'), P = $('#player');
 let nowItem = null, nowIdx = 0, nextIdx = 1, shuffle = false, nuTimer = null, hideTimer = null, lastSave = 0;
-
 let retries = 0, resumeAt = 0, everPlayed = false;
+const fmt = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
+
 async function playItem(it, idx, keepTime) {
   if (!it) return;
   // iPad/iPhone only start sound-on playback inside a tap; touching the player here,
@@ -552,26 +717,127 @@ async function playItem(it, idx, keepTime) {
   cancelNext();
   $('#pTitle').innerHTML = it.kind === 'show'
     ? `${esc(it.title)}<small>${ep.seasonLabel ? esc(ep.seasonLabel) + ' · ' : ''}${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</small>` : esc(it.title);
-  $('#player').classList.add('open');
+  $('#pNext').hidden = !upNext();
+  P.classList.add('open', 'wait');
   document.body.style.overflow = 'hidden';
-  showChrome();
+  paintTime(); showChrome();
   setNowPlaying(it, ep);
   try {
     video.src = await videoURL(ep.id);
     video.play().catch(() => {});
-  } catch (err) { note(err && err.result === 7005 ? 'pCloud sharing limit reached for this month' : "Couldn't reach pCloud — check the internet connection"); }
+  } catch (err) { P.classList.remove('wait'); note(err && err.result === 7005 ? 'pCloud’s sharing limit for this month has been reached' : 'Couldn’t reach pCloud — check the internet connection'); }
 }
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+const canFull = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 // Full screen on the whole player (not just the video), so the next episode keeps playing full screen.
-// Works on iPad; on iPhone the home-screen app is already edge to edge.
 function enterFull() {
-  const p = $('#player');
-  if (document.fullscreenElement || document.webkitFullscreenElement) return;
-  try { (p.requestFullscreen || p.webkitRequestFullscreen).call(p)?.catch?.(() => {}); } catch {}
+  if (!canFull || fsEl()) return;
+  try { (P.requestFullscreen || P.webkitRequestFullscreen).call(P)?.catch?.(() => {}); } catch {}
 }
-function exitFull() {
-  try { if (document.fullscreenElement) document.exitFullscreen(); else if (document.webkitFullscreenElement) document.webkitExitFullscreen(); } catch {}
+function exitFull() { try { if (document.fullscreenElement) document.exitFullscreen(); else if (document.webkitFullscreenElement) document.webkitExitFullscreen(); } catch {} }
+const note = msg => { const t = $('#pTitle'); t.querySelector('.warn')?.remove(); t.insertAdjacentHTML('beforeend', `<small class="warn">${esc(msg)}</small>`); showChrome(); };
+
+/* controls: play, ±10 s, scrub bar, next, picture in picture, full screen, AirPlay */
+function paintPlay() { $('#pPlay').innerHTML = video.paused ? I.play : I.pause; $('#pPlay').setAttribute('aria-label', video.paused ? 'Play' : 'Pause'); }
+let dragging = false, dragAt = 0;
+function paintTime() {
+  const d = video.duration || 0, t = dragging ? dragAt : video.currentTime || 0, f = d ? t / d : 0;
+  $('#fill').style.width = f * 100 + '%'; $('#knob').style.left = f * 100 + '%';
+  let b = 0; try { for (let i = 0; i < video.buffered.length; i++) if (video.buffered.start(i) <= video.currentTime + 1) b = Math.max(b, video.buffered.end(i)); } catch {}
+  $('#buf').style.width = (d ? Math.min(1, b / d) : 0) * 100 + '%';
+  $('#tLeft').textContent = d ? '−' + fmt(d - t) : '';
+  $('#scrub').setAttribute('aria-valuetext', fmt(t));
 }
-const note = msg => { const t = $('#pTitle'); t.querySelector('.warn')?.remove(); t.insertAdjacentHTML('beforeend', `<small class="warn">${esc(msg)}</small>`); };
+const toggle = () => { if (video.paused) video.play().catch(() => {}); else video.pause(); };
+const seekBy = s => { if (!video.duration) return; video.currentTime = Math.min(video.duration - 0.5, Math.max(0, video.currentTime + s)); paintTime(); };
+$('#pPlay').onclick = e => { e.stopPropagation(); toggle(); showChrome(); };
+$('#pRew').onclick = e => { e.stopPropagation(); seekBy(-10); flash('L'); showChrome(); };
+$('#pFwd').onclick = e => { e.stopPropagation(); seekBy(10); flash('R'); showChrome(); };
+$('#pNext').onclick = e => { e.stopPropagation(); const q = upNext(); if (q) { cancelNext(); q.go(); } };
+['play', 'pause', 'playing'].forEach(ev => video.addEventListener(ev, () => { paintPlay(); showChrome(); }));
+['timeupdate', 'progress', 'durationchange', 'seeked'].forEach(ev => video.addEventListener(ev, paintTime));
+video.addEventListener('waiting', () => P.classList.add('wait'));
+['playing', 'canplay', 'seeked'].forEach(ev => video.addEventListener(ev, () => P.classList.remove('wait')));
+
+// Scrub bar: press anywhere on it and drag; the time shows above your finger and the video jumps when you let go.
+const scrub = $('#scrub');
+function scrubTo(x) {
+  const r = scrub.getBoundingClientRect(), f = Math.min(1, Math.max(0, (x - r.left) / r.width));
+  dragAt = f * (video.duration || 0);
+  $('#bubble').textContent = fmt(dragAt); $('#bubble').style.left = f * 100 + '%';
+  paintTime();
+}
+scrub.addEventListener('pointerdown', e => {
+  if (!video.duration) return;
+  e.preventDefault(); e.stopPropagation();
+  dragging = true; scrub.classList.add("drag"); try { scrub.setPointerCapture(e.pointerId); } catch {}
+  scrubTo(e.clientX); clearTimeout(hideTimer);
+});
+scrub.addEventListener('pointermove', e => {
+  if (dragging) return scrubTo(e.clientX);
+  if (e.pointerType === 'mouse' && video.duration) {             // hovering with a mouse previews the time
+    const r = scrub.getBoundingClientRect(), f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    $('#bubble').textContent = fmt(f * video.duration); $('#bubble').style.left = f * 100 + '%'; scrub.classList.add('peek');
+  }
+});
+scrub.addEventListener('pointerleave', () => scrub.classList.remove('peek'));
+const endDrag = () => {
+  if (!dragging) return;
+  dragging = false; scrub.classList.remove('drag');
+  video.currentTime = Math.min(dragAt, (video.duration || 1) - 0.5);
+  paintTime(); showChrome();
+};
+scrub.addEventListener('pointerup', endDrag);
+scrub.addEventListener('pointercancel', endDrag);
+scrub.addEventListener('click', e => e.stopPropagation());
+scrub.addEventListener('keydown', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); seekBy(e.key === 'ArrowLeft' ? -10 : 10); showChrome(); } });
+
+// Tapping the picture: show/hide the controls (touch) or play/pause (mouse). Double-tap a side to skip 10 s.
+let lastTap = 0, lastSide = '', tapTimer = null;
+function flash(side) { const el = $('#flash' + side); el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 350); }
+$('#pc').addEventListener('click', e => {
+  if (e.target.closest('button, .scrub, .menu')) return;
+  $('#sleepMenu').classList.remove('open');
+  const r = P.getBoundingClientRect(), side = e.clientX < r.width / 3 ? 'L' : e.clientX > r.width * 2 / 3 ? 'R' : 'C';
+  const now = Date.now();
+  if (now - lastTap < 300 && side === lastSide && side !== 'C') {        // double tap on a side
+    clearTimeout(tapTimer); seekBy(side === 'L' ? -10 : 10); flash(side); lastTap = now; return;
+  }
+  lastTap = now; lastSide = side;
+  clearTimeout(tapTimer);
+  const touch = matchMedia('(hover:none)').matches;
+  tapTimer = setTimeout(() => {
+    if (touch) { if (P.classList.contains('hide')) showChrome(); else hideChrome(); }
+    else { toggle(); showChrome(); }
+  }, touch ? 220 : 0);
+});
+$('#pc').addEventListener('dblclick', e => { if (!matchMedia('(hover:none)').matches && !e.target.closest('button, .scrub')) fsEl() ? exitFull() : enterFull(); });
+P.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') showChrome(); });
+
+// full screen, picture in picture, AirPlay — only shown where the device supports them
+const iosNative = !canFull && typeof video.webkitEnterFullscreen === 'function' && !navigator.standalone;   // iPhone in Safari
+$('#pFull').hidden = !(canFull || iosNative);
+$('#pFull').onclick = e => { e.stopPropagation(); if (canFull) fsEl() ? exitFull() : enterFull(); else try { video.webkitEnterFullscreen(); } catch {} };
+const canPip = document.pictureInPictureEnabled || typeof video.webkitSetPresentationMode === 'function';
+$('#pPip').hidden = !canPip;
+$('#pPip').onclick = e => {
+  e.stopPropagation();
+  try {
+    if (document.pictureInPictureEnabled) document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture();
+    else video.webkitSetPresentationMode(video.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture');
+  } catch {}
+};
+if (window.WebKitPlaybackTargetAvailabilityEvent) {
+  video.addEventListener('webkitplaybacktargetavailabilitychanged', e => { $('#pCast').hidden = e.availability !== 'available'; });
+  $('#pCast').onclick = e => { e.stopPropagation(); try { video.webkitShowPlaybackTargetPicker(); } catch {} };
+}
+
+function showChrome() {
+  P.classList.remove('hide'); clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => { if (!video.paused && !dragging && !$('#sleepMenu').classList.contains('open')) P.classList.add('hide'); }, 3200);
+}
+function hideChrome() { if (!video.paused && !dragging) { clearTimeout(hideTimer); P.classList.add('hide'); } }
+
 video.addEventListener('playing', () => { everPlayed = true; retries = 0; $('#pTitle .warn')?.remove(); });
 // pCloud video links are tied to the network you're on and expire after a while.
 // If playback breaks (Wi-Fi drop, switching networks, long pause), get a fresh link and pick up where it stopped.
@@ -581,20 +847,20 @@ video.addEventListener('error', () => {
     retries++; resumeAt = Math.max(resumeAt, video.currentTime || 0);
     note('Reconnecting…');
     setTimeout(() => playItem(nowItem, nowIdx, true), 1500 * retries);
-  } else note(everPlayed ? 'Lost connection — tap back and try again' : "This file's format can't play in a browser — convert it to MP4 (H.264)");
+  } else { P.classList.remove('wait'); note(everPlayed ? 'Lost connection — go back and try again' : 'This file can’t play in a browser — drop it into the Inbox to convert it'); }
 });
-window.addEventListener('online', () => { if ($('#player').classList.contains('open') && video.error) { retries = 0; playItem(nowItem, nowIdx, true); } });
+window.addEventListener('online', () => { if (P.classList.contains('open') && video.error) { retries = 0; playItem(nowItem, nowIdx, true); } });
 video.addEventListener('loadedmetadata', () => {
   if (resumeAt > 1) { video.currentTime = resumeAt; resumeAt = 0; return; }   // after a reconnect
   const p = progress[nowItem?.episodes[nowIdx]?.id];
   if (p && p.t > 10 && p.t < video.duration - 30) video.currentTime = p.t;
+  paintTime();
 });
 video.addEventListener('timeupdate', () => {
   if (!nowItem || !video.duration) return;
   const now = Date.now(); if (now - lastSave < 4000) return; lastSave = now;
   saveProgress();
   if (sleep.until && now >= sleep.until) { video.pause(); return goodnight(); }
-  paintSleep();
   const nx = nextEpisode();
   if (nx && video.duration - video.currentTime < 45 && (!ahead || ahead.id !== nx.id)) {
     ahead = { id: nx.id }; videoURL(nx.id).then(url => ahead = { id: nx.id, url, at: Date.now() }).catch(() => ahead = null);
@@ -612,11 +878,12 @@ video.addEventListener('ended', () => {
   if (sleep.ep) return goodnight();
   const queue = upNext(); if (!queue) return;
   $('#nuTitle').textContent = queue.label;
-  let s = 4; $('#nuSec').textContent = s; $('#nextUp').classList.add('show'); showChrome();
+  let s = 5; $('#nuSec').textContent = s; $('#nextUp').classList.add('show'); showChrome();
   nuTimer = setInterval(() => { s--; $('#nuSec').textContent = s; if (s <= 0) { cancelNext(); queue.go(); } }, 1000);
   $('#nuPlay').onclick = () => { cancelNext(); queue.go(); };
 });
 function upNext() {
+  if (!nowItem) return null;
   if (nextIdx < nowItem.episodes.length) {
     const it = nowItem, i = nextIdx;
     return { label: it.episodes[i].title, go: () => playItem(it, i) };
@@ -627,55 +894,23 @@ function upNext() {
 }
 function cancelNext() { clearInterval(nuTimer); $('#nextUp').classList.remove('show'); }
 $('#nuCancel').onclick = cancelNext;
-function showChrome() {
-  $('#pTop').classList.remove('hide'); clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => { if (!video.paused) $('#pTop').classList.add('hide'); }, 3000);
-}
-['pointermove', 'touchstart', 'click'].forEach(ev => $('#player').addEventListener(ev, showChrome, { passive: true }));
 
 /* sleep timer: stop after this episode, or after a set time */
 let sleep = {};
 function paintSleep() {
-  const lbl = sleep.ep ? 'After this one' : sleep.until ? `${Math.max(1, Math.ceil((sleep.until - Date.now()) / 60e3))} min` : 'Sleep';
-  $('#sleepLbl').textContent = lbl;
-  $('#pSleep').classList.toggle('on', !!(sleep.ep || sleep.until));
+  $('#pSleep').classList.toggle('glass', !!(sleep.ep || sleep.until));
+  $('#sleepMenu').querySelectorAll('[data-sleep]').forEach(b => b.classList.toggle('on',
+    b.dataset.sleep === 'ep' ? !!sleep.ep : b.dataset.sleep === '0' ? !(sleep.ep || sleep.until) : sleep.mins === +b.dataset.sleep));
 }
-function goodnight() {
-  sleep = {}; paintSleep(); cancelNext(); showChrome();
-  note('Sleep timer finished — press play to keep watching');
-}
-$('#pSleep').onclick = e => { e.stopPropagation(); $('#sleepMenu').classList.toggle('open'); };
+function goodnight() { sleep = {}; paintSleep(); cancelNext(); note('Sleep timer finished — press play to keep watching'); }
+$('#pSleep').onclick = e => { e.stopPropagation(); paintSleep(); $('#sleepMenu').classList.toggle('open'); showChrome(); };
 $('#sleepMenu').onclick = e => {
+  e.stopPropagation();
   const b = e.target.closest('[data-sleep]'); if (!b) return;
   const v = b.dataset.sleep;
-  sleep = v === 'ep' ? { ep: true } : +v ? { until: Date.now() + v * 60e3 } : {};
-  $('#sleepMenu').classList.remove('open'); paintSleep();
+  sleep = v === 'ep' ? { ep: true } : +v ? { until: Date.now() + v * 60e3, mins: +v } : {};
+  $('#sleepMenu').classList.remove('open'); paintSleep(); showChrome();
 };
-$('#player').addEventListener('click', e => { if (!e.target.closest('.p-tools')) $('#sleepMenu').classList.remove('open'); });
-
-/* toddler lock: covers the screen so little hands can't pause, skip or leave; hold the lock for 1.5s to undo */
-const kid = $('#kidLock'), unlockBtn = $('#unlockBtn');
-let peekTimer = null, holdTimer = null, holdStart = 0;
-function setLocked(on) {
-  $('#player').classList.toggle('locked', on);
-  video.controls = !on;
-  if (on) { $('#sleepMenu').classList.remove('open'); enterFull(); peek(); } else showChrome();
-}
-function peek() { kid.classList.add('peek'); clearTimeout(peekTimer); peekTimer = setTimeout(() => kid.classList.remove('peek'), 2500); }
-function endHold() { cancelAnimationFrame(holdTimer); unlockBtn.style.setProperty('--p', '0%'); }
-$('#pLock').onclick = () => setLocked(true);
-kid.addEventListener('pointerdown', e => { e.preventDefault(); peek(); });
-unlockBtn.addEventListener('pointerdown', e => {
-  e.preventDefault(); holdStart = performance.now();
-  const tick = () => {
-    const p = Math.min(1, (performance.now() - holdStart) / 1500);
-    unlockBtn.style.setProperty('--p', p * 100 + '%');
-    if (p >= 1) { endHold(); setLocked(false); } else holdTimer = requestAnimationFrame(tick);
-  };
-  tick();
-});
-['pointerup', 'pointerleave', 'pointercancel'].forEach(t => unlockBtn.addEventListener(t, endHold));
-kid.addEventListener('contextmenu', e => e.preventDefault());
 
 /* lock screen / Control Center / AirPods controls, and the title on the lock screen */
 function setNowPlaying(it, ep) {
@@ -688,8 +923,8 @@ function setNowPlaying(it, ep) {
     });
     const on = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch {} };
     on('play', () => video.play()); on('pause', () => video.pause());
-    on('seekbackward', d => { video.currentTime = Math.max(0, video.currentTime - (d.seekOffset || 10)); });
-    on('seekforward', d => { video.currentTime = Math.min(video.duration || 0, video.currentTime + (d.seekOffset || 10)); });
+    on('seekbackward', d => seekBy(-(d.seekOffset || 10)));
+    on('seekforward', d => seekBy(d.seekOffset || 10));
     on('seekto', d => { if (d.seekTime != null) video.currentTime = d.seekTime; });
     on('nexttrack', () => { const q = upNext(); if (q) { cancelNext(); q.go(); } });
   } catch {}
@@ -697,26 +932,27 @@ function setNowPlaying(it, ep) {
 
 /* Mac keyboard: space play/pause · ←/→ 10 s · F full screen · N next · Esc back */
 document.addEventListener('keydown', e => {
-  if (!$('#player').classList.contains('open') || $('#player').classList.contains('locked') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!P.classList.contains('open') || e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
-  if (e.target === video && (k === ' ' || k.startsWith('arrow'))) return;   // the video's own controls already handle these
-  if (k === ' ' || k === 'k') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
-  else if (k === 'arrowleft') { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
-  else if (k === 'arrowright') { e.preventDefault(); video.currentTime += 10; }
-  else if (k === 'f') (document.fullscreenElement || document.webkitFullscreenElement) ? exitFull() : enterFull();
+  if (k === ' ' || k === 'k') { e.preventDefault(); toggle(); }
+  else if (k === 'arrowleft' || k === 'j') { e.preventDefault(); seekBy(-10); flash('L'); }
+  else if (k === 'arrowright' || k === 'l') { e.preventDefault(); seekBy(10); flash('R'); }
+  else if (k === 'f') fsEl() ? exitFull() : enterFull();
   else if (k === 'n') { const q = upNext(); if (q) { cancelNext(); q.go(); } }
-  else if (k === 'escape' && !document.fullscreenElement && !document.webkitFullscreenElement) $('#pBack').click();
+  else if (k === 'escape' && !fsEl()) $('#pBack').click();
   else return;
   showChrome();
 });
 
-$('#pBack').onclick = () => {
-  setLocked(false); sleep = {}; paintSleep(); shuffle = false;
+$('#pBack').onclick = e => {
+  e.stopPropagation();
+  sleep = {}; paintSleep(); shuffle = false; $('#sleepMenu').classList.remove('open');
   if (nowItem && video.duration) saveProgress();
   video.pause(); video.removeAttribute('src'); video.load(); cancelNext(); exitFull();
-  $('#player').classList.remove('open'); document.body.style.overflow = '';
+  P.classList.remove('open', 'hide', 'wait'); document.body.style.overflow = '';
   render();
 };
+paintPlay();
 
 /* ---------- start: show the saved copy instantly, then refresh from pCloud ---------- */
 async function refresh() {
