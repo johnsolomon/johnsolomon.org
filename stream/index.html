@@ -4,23 +4,439 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Family TV">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-title" content="Family TV">
+<meta name="theme-color" content="#0b0b0e">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="favicon.png">
+<link rel="manifest" href="manifest.json">
 <title>Family TV</title>
 <style>
-  html,body { margin:0; height:100%; background:#000; color:#fff; font:17px/1.4 -apple-system, system-ui, sans-serif; }
-  .wrap { height:100%; display:flex; flex-direction:column; }
-  header { padding:calc(env(safe-area-inset-top) + 14px) 20px 12px; font-weight:700; font-size:22px; letter-spacing:.02em; color:#e50914; }
-  iframe { flex:1; width:100%; border:0; background:#000; }
-  .empty { flex:1; display:grid; place-items:center; color:#888; padding:24px; text-align:center; }
+  :root {
+    --bg:#0b0b0e; --panel:#16161b; --fg:#f4f4f5; --muted:#9b9ba3;
+    --accent:#e53e34; --radius:6px;
+    --tile-w: clamp(200px, 26vw, 300px);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--fg); }
+  body {
+    font:15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    overflow-x:hidden; padding-bottom:env(safe-area-inset-bottom);
+    -webkit-user-select:none; user-select:none;
+  }
+  button { font:inherit; color:inherit; background:none; border:0; cursor:pointer; padding:0; }
+
+  /* top bar */
+  header {
+    position:fixed; inset:0 0 auto 0; z-index:20;
+    padding: calc(env(safe-area-inset-top) + 14px) 4vw 14px;
+    background:linear-gradient(#0b0b0ee6, #0b0b0e00);
+    display:flex; align-items:center; gap:10px;
+  }
+  .brand { font-weight:800; letter-spacing:.06em; font-size:20px; text-transform:uppercase; }
+  .brand span { color:var(--accent); }
+
+  /* hero */
+  .hero { position:relative; height:min(72vh, 620px); min-height:360px; overflow:hidden; }
+  .hero-img { position:absolute; inset:0; background:#222 center/cover no-repeat; transform:scale(1.03); }
+  .hero::after { content:""; position:absolute; inset:0;
+    background:linear-gradient(90deg, #0b0b0ee0 0%, #0b0b0e60 45%, #0b0b0e00 70%),
+               linear-gradient(0deg, var(--bg) 0%, #0b0b0e00 35%); }
+  .hero-info { position:absolute; z-index:2; left:4vw; bottom:14%; max-width:min(560px, 80vw); }
+  .hero-kicker { color:var(--muted); font-size:13px; letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
+  .hero h1 { margin:0 0 18px; font-size:clamp(32px, 6vw, 60px); line-height:1.02; font-weight:800; letter-spacing:-.01em; text-shadow:0 2px 24px #0008; }
+  .btn { display:inline-flex; align-items:center; gap:10px; padding:11px 24px 11px 20px; border-radius:var(--radius);
+    font-weight:700; font-size:17px; background:#fff; color:#000; vertical-align:top; }
+  .btn svg { width:22px; height:22px; }
+  .btn.ghost { background:#6d6d7466; color:#fff; margin-left:8px; }
+
+  /* rows */
+  main { position:relative; z-index:3; margin-top:-8vh; }
+  .row { margin:0 0 30px; }
+  .row h2 { font-size:19px; font-weight:700; margin:0 4vw 10px; }
+  .rail { display:flex; gap:8px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-padding:0 4vw;
+    padding:6px 4vw 14px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  .rail::-webkit-scrollbar { display:none; }
+  .tile { flex:0 0 var(--tile-w); aspect-ratio:16/9; position:relative; border-radius:var(--radius); overflow:hidden;
+    background:var(--panel) center/cover no-repeat; scroll-snap-align:start; transition:transform .18s ease; }
+  .tile::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg,#000c 0%,#0000 55%); }
+  .tile .t { position:absolute; z-index:1; left:10px; right:10px; bottom:9px; font-weight:700; font-size:15px;
+    text-shadow:0 1px 6px #000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }
+  .tile .sub { display:block; font-weight:500; font-size:12px; color:#d0d0d6; }
+  .tile .bar { position:absolute; z-index:1; left:0; right:0; bottom:0; height:4px; background:#ffffff33; }
+  .tile .bar i { display:block; height:100%; background:var(--accent); }
+  @media (hover:hover) { .tile:hover { transform:scale(1.05); z-index:2; } }
+  .tile:active { transform:scale(.97); }
+
+  /* show sheet */
+  .sheet-bg { position:fixed; inset:0; z-index:40; background:#000a; display:none; overflow-y:auto; }
+  .sheet-bg.open { display:block; }
+  .sheet { max-width:860px; margin:6vh auto; background:var(--panel); border-radius:10px; overflow:hidden; position:relative; }
+  .sheet-art { aspect-ratio:16/8; background:#222 center/cover no-repeat; position:relative; }
+  .sheet-art::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg, var(--panel) 0%, #0000 60%); }
+  .sheet-head { position:relative; z-index:1; margin-top:-90px; padding:0 28px 8px; }
+  .sheet-head h2 { margin:0 0 14px; font-size:clamp(26px,4vw,40px); font-weight:800; }
+  .close { position:absolute; z-index:5; top:12px; right:12px; width:38px; height:38px; border-radius:50%;
+    background:#000a; display:grid; place-items:center; font-size:22px; line-height:1; }
+  .seasons { display:flex; gap:6px; flex-wrap:wrap; padding:10px 28px 0; }
+  .seasons button { padding:6px 12px; border-radius:999px; background:#ffffff14; font-size:14px; font-weight:600; }
+  .seasons button.on { background:#fff; color:#000; }
+  .eps { padding:10px 18px 26px; }
+  .ep { display:flex; gap:14px; align-items:center; width:100%; padding:10px; border-radius:8px; text-align:left; }
+  .ep:active, .ep:hover { background:#ffffff0d; }
+  .ep-n { width:26px; flex:none; color:var(--muted); font-size:20px; text-align:center; }
+  .ep-img { flex:none; width:150px; aspect-ratio:16/9; border-radius:5px; background:#222 center/cover no-repeat; position:relative; overflow:hidden; }
+  .ep-img .bar { position:absolute; left:0; right:0; bottom:0; height:3px; background:#ffffff33; }
+  .ep-img .bar i { display:block; height:100%; background:var(--accent); }
+  .ep-t { font-weight:600; }
+
+  /* player */
+  .player { position:fixed; inset:0; z-index:60; background:#000; display:none; }
+  .player.open { display:block; }
+  .player video { width:100%; height:100%; object-fit:contain; background:#000; }
+  .p-top { position:absolute; inset:0 0 auto 0; padding:calc(env(safe-area-inset-top) + 12px) 16px 30px;
+    display:flex; align-items:center; gap:14px; background:linear-gradient(#000b,#0000); transition:opacity .3s; }
+  .p-top.hide { opacity:0; pointer-events:none; }
+  .p-back { width:42px; height:42px; border-radius:50%; background:#ffffff1f; display:grid; place-items:center; }
+  .p-back svg { width:22px; height:22px; }
+  .p-title { font-weight:700; font-size:17px; text-shadow:0 1px 6px #000; }
+  .p-title small { display:block; color:#ccc; font-weight:500; font-size:13px; }
+  .nextup { position:absolute; right:24px; bottom:90px; background:#111e; border-radius:10px; padding:14px 16px;
+    display:none; align-items:center; gap:14px; max-width:min(420px, 86vw); }
+  .nextup.show { display:flex; }
+  .nextup .btn { padding:9px 16px; font-size:15px; }
+  .nextup .x { color:var(--muted); font-size:14px; padding:6px; }
+
+  /* states */
+  .msg { min-height:70vh; display:grid; place-items:center; text-align:center; padding:0 8vw; color:var(--muted); }
+  .msg b { display:block; color:var(--fg); font-size:20px; margin-bottom:6px; }
+  .spinner { width:38px; height:38px; border:3px solid #ffffff22; border-top-color:var(--accent); border-radius:50%; animation:spin 0.9s linear infinite; margin:0 auto 14px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .demo-note { margin:0 4vw 24px; padding:10px 14px; border-radius:8px; background:#ffffff0f; color:var(--muted); font-size:13px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>FAMILY TV</header>
-  <div class="empty">Coming soon.</div>
+<header><div class="brand">Family<span>TV</span></div></header>
+<div id="app"><div class="msg"><div><div class="spinner"></div>Loading…</div></div></div>
+
+<div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
+
+<div class="player" id="player">
+  <video id="video" playsinline controls preload="auto"></video>
+  <div class="p-top" id="pTop">
+    <button class="p-back" id="pBack" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="p-title" id="pTitle"></div>
+  </div>
+  <div class="nextup" id="nextUp">
+    <div style="flex:1;min-width:0"><div style="color:#aaa;font-size:12px">Next in <span id="nuSec">8</span></div>
+      <div id="nuTitle" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div>
+    <button class="btn" id="nuPlay">Play</button>
+    <button class="x" id="nuCancel">Cancel</button>
+  </div>
 </div>
+
+<script>
+/* ======================= SETUP =======================
+   Paste your pCloud shared-folder link between the quotes.
+   Leave it empty to see the demo layout.               */
+const PCLOUD_LINK = "https://u.pcloud.link/publink/show?code=kZHvGbJZ70PTYyCR9UXpMTFCz7YI8VCoNX0k";
+/* ===================================================== */
+
+const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
+const VIDEO_EXT = /\.(mp4|m4v|mov|webm)$/i;
+const POSTER_NAME = /^(poster|cover|folder|backdrop)\.(jpe?g|png|webp)$/i;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric:true, sensitivity:'base' });
+
+/* ---------- saved progress (per device) ---------- */
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem('ftv.progress') || '{}'); } catch { return {}; } },
+  set(v) { try { localStorage.setItem('ftv.progress', JSON.stringify(v)); } catch {} },
+};
+let progress = store.get();
+const pct = id => { const p = progress[id]; return p && p.d ? Math.min(1, p.t / p.d) : 0; };
+
+/* ---------- pCloud ---------- */
+const linkCode = (() => { const m = PCLOUD_LINK.match(/[?&]code=([^&#]+)/); return m ? m[1] : PCLOUD_LINK.trim(); })();
+let API = /\/\/e[\w.-]*pcloud\.(link|com)/i.test(PCLOUD_LINK) ? 'https://eapi.pcloud.com' : 'https://api.pcloud.com';
+
+async function call(method, params) {
+  const q = new URLSearchParams({ code: linkCode, ...params });
+  const r = await fetch(`${API}/${method}?${q}`, { referrerPolicy: "no-referrer" });
+  return r.json();
+}
+async function loadTree() {
+  let j = await call('showpublink', {});
+  if (j.result !== 0) { // maybe the other region
+    API = API.includes('eapi') ? 'https://api.pcloud.com' : 'https://eapi.pcloud.com';
+    const j2 = await call('showpublink', {});
+    if (j2.result === 0) j = j2;
+  }
+  if (j.result !== 0) throw j;
+  return j.metadata;
+}
+async function thumbs(ids, size) {
+  const out = {};
+  for (let i = 0; i < ids.length; i += 80) {
+    const chunk = ids.slice(i, i + 80);
+    try {
+      const j = await call('getpubthumbslinks', { fileids: chunk.join(','), size, crop: 1 });
+      (j.thumbs || []).forEach(t => { if (t.result === 0) out[t.fileid] = `https://${t.hosts[0]}${t.path}`; });
+    } catch {}
+  }
+  return out;
+}
+async function videoURL(fileid) {
+  const j = await call('getpublinkdownload', { fileid });
+  if (j.result !== 0) throw j;
+  return `https://${j.hosts[0]}${j.path}`;
+}
+
+/* ---------- turn folders into rows ----------
+   Top-level folder  → a row (e.g. Movies, Shows)
+   Video in a row    → a movie tile
+   Folder in a row   → a show tile (its videos are episodes; subfolders are seasons)
+   poster.jpg inside a folder becomes its artwork                              */
+const isVideo = f => !f.isfolder && (f.category === 2 || VIDEO_EXT.test(f.name));
+const clean = n => n.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim();
+function epLabel(name) {
+  const base = clean(name);
+  const m = base.match(/s(\d{1,2})\s*e(\d{1,3})\s*[-–:]?\s*(.*)/i);
+  return m ? { n: +m[2], title: m[3] || `Episode ${+m[2]}` } : { n: null, title: base };
+}
+function posterIn(folder) { const p = (folder.contents || []).find(f => !f.isfolder && POSTER_NAME.test(f.name)); return p && p.fileid; }
+function videosDeep(folder, season = null, acc = []) {
+  const kids = (folder.contents || []).slice().sort(byName);
+  kids.filter(isVideo).forEach(f => acc.push({ file: f, season }));
+  kids.filter(f => f.isfolder).forEach(f => videosDeep(f, season ? `${season} · ${f.name}` : f.name, acc));
+  return acc;
+}
+function buildCatalog(root) {
+  const rows = [];
+  const top = (root.contents || []).slice().sort(byName);
+  const loose = top.filter(isVideo);
+  if (loose.length) rows.push({ name: 'Videos', items: loose.map(f => movieItem(f, top)) });
+  top.filter(f => f.isfolder).forEach(folder => {
+    const kids = (folder.contents || []).slice().sort(byName);
+    const items = [];
+    kids.filter(isVideo).forEach(f => items.push(movieItem(f, kids)));
+    kids.filter(f => f.isfolder).forEach(sub => {
+      const vids = videosDeep(sub);
+      if (!vids.length) return;
+      const poster = posterIn(sub);
+      if (vids.length === 1) items.push({ ...movieItem(vids[0].file), title: sub.name, art: poster || vids[0].file.fileid });
+      else items.push({
+        kind: 'show', key: 'd' + sub.folderid, title: sub.name, art: poster || vids[0].file.fileid,
+        episodes: vids.map((v, i) => ({ id: v.file.fileid, season: v.season, ...epLabel(v.file.name), idx: i })),
+      });
+    });
+    if (items.length) rows.push({ name: folder.name, items });
+  });
+  return rows;
+}
+function movieItem(f, siblings = []) {
+  const base = f.name.replace(/\.[^.]+$/, '').toLowerCase();
+  const img = siblings.find(s => !s.isfolder && s.category === 1 && s.name.replace(/\.[^.]+$/, '').toLowerCase() === base);
+  return { kind: 'movie', key: 'f' + f.fileid, title: clean(f.name), art: img ? img.fileid : f.fileid, episodes: [{ id: f.fileid, title: clean(f.name), n: null, idx: 0 }] };
+}
+
+/* ---------- demo catalog (shown until a link is pasted) ---------- */
+function demoCatalog() {
+  const show = (t, h, n, s = 1) => ({ kind:'show', key:'demo'+t, title:t, art:'hsl:'+h,
+    episodes: Array.from({ length:n }, (_, i) => ({ id:`demo-${t}-${i}`, n:(i % 10) + 1, title:`Episode ${(i % 10) + 1}`, season: s > 1 ? `Season ${Math.floor(i / 10) + 1}` : null, idx:i })) });
+  const movie = (t, h) => ({ kind:'movie', key:'demo'+t, title:t, art:'hsl:'+h, episodes:[{ id:'demo-'+t, title:t, idx:0 }] });
+  return [
+    { name:'Shows', items:[show('Garden Friends', 140, 12), show('Ocean Hour', 200, 20, 2), show('Little Builders', 30, 8), show('Night Sky Songs', 260, 10), show('Farm Morning', 90, 6)] },
+    { name:'Movies', items:[movie('The Big Snow', 210), movie('Paper Boats', 15), movie('Moon Picnic', 280), movie('Train to the Hills', 120), movie('Lantern Festival', 40)] },
+    { name:'Family Videos', items:[movie('Birthday 2026', 330), movie('Beach Day', 185), movie('First Steps', 55)] },
+  ];
+}
+const demoArt = h => `linear-gradient(135deg, hsl(${h} 55% 42%), hsl(${(+h + 40) % 360} 60% 18%))`;
+
+/* ---------- render ---------- */
+let CATALOG = [], ART = {}, HERO_ART = {};
+const DEMO = !linkCode;
+const bg = id => {
+  if (typeof id === 'string' && id.startsWith('hsl:')) return `background-image:${demoArt(id.slice(4))}`;
+  return ART[id] ? `background-image:url('${ART[id]}')` : '';
+};
+const itemByKey = k => CATALOG.flatMap(r => r.items).find(i => i.key === k);
+
+function continueRow() {
+  const entries = Object.entries(progress)
+    .filter(([, p]) => p.d && p.t / p.d > 0.03 && p.t / p.d < 0.95)
+    .sort((a, b) => b[1].ts - a[1].ts).slice(0, 12);
+  const items = [];
+  for (const [id, p] of entries) {
+    const it = itemByKey(p.key); if (!it) continue;
+    const ep = it.episodes.find(e => String(e.id) === String(id)); if (!ep) continue;
+    if (items.some(x => x.it.key === it.key)) continue;
+    items.push({ it, ep });
+  }
+  return items;
+}
+
+function tileHTML(it, ep) {
+  const sub = ep && it.kind === 'show' ? `<span class="sub">${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</span>` : '';
+  const p = ep ? pct(ep.id) : 0;
+  return `<button class="tile" data-key="${esc(it.key)}" ${ep ? `data-ep="${esc(ep.id)}"` : ''} style="${bg(ep && it.kind === 'show' ? ep.id : it.art)}">
+    <span class="t">${esc(it.title)}${sub}</span>${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</button>`;
+}
+
+function render() {
+  if (!CATALOG.length) { $('#app').innerHTML = `<div class="msg"><div><b>Nothing here yet</b>Add videos to the shared pCloud folder and they'll show up.</div></div>`; return; }
+  const hero = CATALOG[0].items[0];
+  const heroBg = hero.art && String(hero.art).startsWith('hsl:') ? demoArt(hero.art.slice(4)) : (HERO_ART[hero.art] || ART[hero.art]) ? `url('${HERO_ART[hero.art] || ART[hero.art]}')` : 'none';
+  const cont = continueRow();
+  $('#app').innerHTML = `
+    <section class="hero"><div class="hero-img" style="background-image:${heroBg}"></div>
+      <div class="hero-info"><div class="hero-kicker">${hero.kind === 'show' ? 'Series' : 'Featured'}</div><h1>${esc(hero.title)}</h1>
+        <button class="btn" data-play="${esc(hero.key)}">${PLAY_ICON}Play</button>${hero.kind === 'show' ? `<button class="btn ghost" data-key="${esc(hero.key)}">Episodes</button>` : ''}</div></section>
+    <main>
+      ${DEMO ? `<div class="demo-note">Demo layout — paste your pCloud link into PCLOUD_LINK to load your videos.</div>` : ''}
+      ${cont.length ? `<section class="row"><h2>Continue Watching</h2><div class="rail">${cont.map(c => tileHTML(c.it, c.ep)).join('')}</div></section>` : ''}
+      ${CATALOG.map(r => `<section class="row"><h2>${esc(r.name)}</h2><div class="rail">${r.items.map(it => tileHTML(it)).join('')}</div></section>`).join('')}
+    </main>`;
+}
+
+document.addEventListener('click', e => {
+  const play = e.target.closest('[data-play]');
+  if (play) { const it = itemByKey(play.dataset.play); playItem(it, nextUnwatched(it)); return; }
+  const t = e.target.closest('[data-key]');
+  if (t && !t.closest('.sheet')) {
+    const it = itemByKey(t.dataset.key);
+    if (t.dataset.ep) return playItem(it, it.episodes.findIndex(x => String(x.id) === t.dataset.ep));
+    if (it.kind === 'movie') return playItem(it, 0);
+    openSheet(it);
+  }
+});
+
+function nextUnwatched(it) {
+  // last one started but not finished, else first not finished
+  let best = -1, ts = 0;
+  it.episodes.forEach((e, i) => { const p = progress[e.id]; if (p && p.ts > ts && pct(e.id) < 0.95) { ts = p.ts; best = i; } });
+  if (best >= 0) return best;
+  const i = it.episodes.findIndex(e => pct(e.id) < 0.95);
+  return i < 0 ? 0 : i;
+}
+
+/* ---------- show sheet ---------- */
+function openSheet(it, season) {
+  const seasons = [...new Set(it.episodes.map(e => e.season || ''))];
+  const cur = season ?? seasons[0];
+  const eps = it.episodes.filter(e => (e.season || '') === cur);
+  $('#sheet').innerHTML = `
+    <button class="close" id="sheetClose" aria-label="Close">×</button>
+    <div class="sheet-art" style="${bg(it.art)}"></div>
+    <div class="sheet-head"><h2>${esc(it.title)}</h2>
+      <button class="btn" data-sheetplay="${nextUnwatched(it)}">${PLAY_ICON}${progress[it.episodes[nextUnwatched(it)].id] ? 'Resume' : 'Play'}</button></div>
+    ${seasons.length > 1 ? `<div class="seasons">${seasons.map(s => `<button data-season="${esc(s)}" class="${s === cur ? 'on' : ''}">${esc(s || 'Episodes')}</button>`).join('')}</div>` : ''}
+    <div class="eps">${eps.map(e => { const p = pct(e.id); return `
+      <button class="ep" data-sheetplay="${e.idx}"><span class="ep-n">${e.n ?? e.idx + 1}</span>
+        <span class="ep-img" style="${bg(DEMO ? it.art : e.id)}">${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</span>
+        <span class="ep-t">${esc(e.title)}</span></button>`; }).join('')}</div>`;
+  $('#sheetBg').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  $('#sheet').onclick = ev => {
+    const s = ev.target.closest('[data-season]'); if (s) return openSheet(it, s.dataset.season);
+    const p = ev.target.closest('[data-sheetplay]'); if (p) { closeSheet(); playItem(it, +p.dataset.sheetplay); }
+    if (ev.target.closest('#sheetClose')) closeSheet();
+  };
+}
+function closeSheet() { $('#sheetBg').classList.remove('open'); document.body.style.overflow = ''; }
+$('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') closeSheet(); });
+
+/* ---------- player ---------- */
+const video = $('#video');
+let nowItem = null, nowIdx = 0, nuTimer = null, hideTimer = null, lastSave = 0;
+
+async function playItem(it, idx) {
+  if (!it) return;
+  nowItem = it; nowIdx = Math.max(0, idx);
+  const ep = it.episodes[nowIdx];
+  cancelNext();
+  $('#pTitle').innerHTML = it.kind === 'show'
+    ? `${esc(it.title)}<small>${ep.season ? esc(ep.season) + ' · ' : ''}${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</small>` : esc(it.title);
+  $('#player').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  showChrome();
+  if (DEMO) { video.removeAttribute('src'); video.load(); $('#pTitle').innerHTML += '<small>Demo — no video loaded</small>'; return; }
+  try {
+    video.src = await videoURL(ep.id);
+    video.play().catch(() => {});
+  } catch (err) { $('#pTitle').innerHTML += `<small>Couldn't load this video${err && err.result === 7005 ? ' — pCloud sharing limit reached for this month' : ''}</small>`; }
+}
+video.addEventListener('loadedmetadata', () => {
+  const p = progress[nowItem?.episodes[nowIdx]?.id];
+  if (p && p.t > 10 && p.t < video.duration - 30) video.currentTime = p.t;
+});
+video.addEventListener('timeupdate', () => {
+  if (!nowItem || !video.duration) return;
+  const now = Date.now(); if (now - lastSave < 4000) return; lastSave = now;
+  saveProgress();
+});
+function saveProgress() {
+  const ep = nowItem.episodes[nowIdx];
+  progress[ep.id] = { t: video.currentTime, d: video.duration, ts: Date.now(), key: nowItem.key };
+  store.set(progress);
+}
+video.addEventListener('pause', () => nowItem && video.duration && saveProgress());
+video.addEventListener('ended', () => {
+  saveProgress();
+  const queue = upNext(); if (!queue) return;
+  $('#nuTitle').textContent = queue.label;
+  let s = 8; $('#nuSec').textContent = s; $('#nextUp').classList.add('show'); showChrome();
+  nuTimer = setInterval(() => { s--; $('#nuSec').textContent = s; if (s <= 0) { cancelNext(); queue.go(); } }, 1000);
+  $('#nuPlay').onclick = () => { cancelNext(); queue.go(); };
+});
+function upNext() {
+  if (nowIdx + 1 < nowItem.episodes.length) {
+    const e = nowItem.episodes[nowIdx + 1], it = nowItem;
+    return { label: e.title, go: () => playItem(it, nowIdx + 1) };
+  }
+  // movies: continue with the next tile in the same row
+  const row = CATALOG.find(r => r.items.includes(nowItem));
+  const i = row ? row.items.indexOf(nowItem) : -1;
+  const nx = row && row.items[i + 1];
+  return nx ? { label: nx.title, go: () => playItem(nx, 0) } : null;
+}
+function cancelNext() { clearInterval(nuTimer); $('#nextUp').classList.remove('show'); }
+$('#nuCancel').onclick = cancelNext;
+function showChrome() {
+  $('#pTop').classList.remove('hide'); clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => { if (!video.paused) $('#pTop').classList.add('hide'); }, 3000);
+}
+['pointermove', 'touchstart', 'click'].forEach(ev => $('#player').addEventListener(ev, showChrome, { passive: true }));
+$('#pBack').onclick = () => {
+  if (nowItem && video.duration) saveProgress();
+  video.pause(); video.removeAttribute('src'); video.load(); cancelNext();
+  $('#player').classList.remove('open'); document.body.style.overflow = '';
+  render();
+};
+
+/* ---------- start ---------- */
+(async function init() {
+  if (DEMO) { CATALOG = demoCatalog(); return render(); }
+  try {
+    CATALOG = buildCatalog(await loadTree());
+    render(); // show rows right away, artwork fills in
+    const ids = new Set();
+    CATALOG.forEach(r => r.items.forEach(it => { ids.add(it.art); if (it.kind === 'show') it.episodes.forEach(e => ids.add(e.id)); }));
+    ART = await thumbs([...ids], '640x360');
+    const hero = CATALOG[0] && CATALOG[0].items[0];
+    if (hero) HERO_ART = await thumbs([hero.art], '1280x720');
+    render();
+  } catch (err) {
+    const why = { 7001: 'The link in PCLOUD_LINK isn’t valid.', 7002: 'This pCloud link was deleted.', 7004: 'This pCloud link has expired.', 7005: 'pCloud’s monthly sharing limit for this link has been reached.' }[err && err.result];
+    $('#app').innerHTML = `<div class="msg"><div><b>Can't reach the video library</b>${why || 'Check the internet connection and try again.'}</div></div>`;
+  }
+})();
+</script>
 </body>
 </html>
