@@ -115,7 +115,6 @@
   .msg b { display:block; color:var(--fg); font-size:20px; margin-bottom:6px; }
   .spinner { width:38px; height:38px; border:3px solid #ffffff22; border-top-color:var(--accent); border-radius:50%; animation:spin 0.9s linear infinite; margin:0 auto 14px; }
   @keyframes spin { to { transform:rotate(360deg); } }
-  .demo-note { margin:0 4vw 24px; padding:10px 14px; border-radius:8px; background:#ffffff0f; color:var(--muted); font-size:13px; }
 </style>
 </head>
 <body>
@@ -141,42 +140,41 @@
 </div>
 
 <script>
-/* ======================= SETUP =======================
-   Paste your pCloud shared-folder link between the quotes.
-   Leave it empty to see the demo layout.               */
+/* ======================= SETUP ======================= */
 const PCLOUD_LINK = "https://u.pcloud.link/publink/show?code=kZHvGbJZ70PTYyCR9UXpMTFCz7YI8VCoNX0k";
 /* ===================================================== */
 
 const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
-const VIDEO_EXT = /\.(mp4|m4v|mov|webm)$/i;
-const POSTER_NAME = /^(poster|cover|folder|backdrop)\.(jpe?g|png|webp)$/i;
+const VIDEO_EXT = /\.(mp4|m4v|mov|webm)$/i;          // formats browsers can play
+const POSTER_NAME = /^(poster|cover|folder)\.(jpe?g|png|webp)$/i;
+const SHOW_DIR = /^(shows?|tv|tv shows|series)$/i;
+const MOVIE_DIR = /^(movies?|films?)$/i;
+const SEASON_DIR = /^(season|series|s)\s*\d+$/i;
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric:true, sensitivity:'base' });
+const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric:true, sensitivity:'base' });
 
-/* ---------- saved progress (per device) ---------- */
-const store = {
-  get() { try { return JSON.parse(localStorage.getItem('ftv.progress') || '{}'); } catch { return {}; } },
-  set(v) { try { localStorage.setItem('ftv.progress', JSON.stringify(v)); } catch {} },
+/* ---------- small per-device storage ---------- */
+const ls = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
-let progress = store.get();
+let progress = ls.get('ftv.progress', {});
 const pct = id => { const p = progress[id]; return p && p.d ? Math.min(1, p.t / p.d) : 0; };
 
 /* ---------- pCloud ---------- */
-const linkCode = (() => { const m = PCLOUD_LINK.match(/[?&]code=([^&#]+)/); return m ? m[1] : PCLOUD_LINK.trim(); })();
+const linkCode = (PCLOUD_LINK.match(/[?&]code=([^&#]+)/) || [, PCLOUD_LINK.trim()])[1];
 let API = /\/\/e[\w.-]*pcloud\.(link|com)/i.test(PCLOUD_LINK) ? 'https://eapi.pcloud.com' : 'https://api.pcloud.com';
-
-async function call(method, params) {
+async function call(method, params = {}) {
   const q = new URLSearchParams({ code: linkCode, ...params });
-  const r = await fetch(`${API}/${method}?${q}`, { referrerPolicy: "no-referrer" });
+  const r = await fetch(`${API}/${method}?${q}`, { referrerPolicy: 'no-referrer', cache: 'no-store' });
   return r.json();
 }
 async function loadTree() {
-  let j = await call('showpublink', {});
-  if (j.result !== 0) { // maybe the other region
+  let j = await call('showpublink');
+  if (j.result !== 0) {                      // link may live in the other pCloud region
     API = API.includes('eapi') ? 'https://api.pcloud.com' : 'https://eapi.pcloud.com';
-    const j2 = await call('showpublink', {});
-    if (j2.result === 0) j = j2;
+    const j2 = await call('showpublink'); if (j2.result === 0) j = j2;
   }
   if (j.result !== 0) throw j;
   return j.metadata;
@@ -184,9 +182,8 @@ async function loadTree() {
 async function thumbs(ids, size) {
   const out = {};
   for (let i = 0; i < ids.length; i += 80) {
-    const chunk = ids.slice(i, i + 80);
     try {
-      const j = await call('getpubthumbslinks', { fileids: chunk.join(','), size, crop: 1 });
+      const j = await call('getpubthumbslinks', { fileids: ids.slice(i, i + 80).join(','), size, crop: 1 });
       (j.thumbs || []).forEach(t => { if (t.result === 0) out[t.fileid] = `https://${t.hosts[0]}${t.path}`; });
     } catch {}
   }
@@ -198,127 +195,153 @@ async function videoURL(fileid) {
   return `https://${j.hosts[0]}${j.path}`;
 }
 
-/* ---------- turn folders into rows ----------
-   Top-level folder  → a row (e.g. Movies, Shows)
-   Video in a row    → a movie tile
-   Folder in a row   → a show tile (its videos are episodes; subfolders are seasons)
-   poster.jpg inside a folder becomes its artwork                              */
-const isVideo = f => !f.isfolder && (f.category === 2 || VIDEO_EXT.test(f.name));
-const clean = n => n.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim();
-function epLabel(name) {
-  const base = clean(name);
-  const m = base.match(/s(\d{1,2})\s*e(\d{1,3})\s*[-–:]?\s*(.*)/i);
-  return m ? { n: +m[2], title: m[3] || `Episode ${+m[2]}` } : { n: null, title: base };
+/* ---------- auto-organize ----------
+   Episodes are recognized by S01E02 (or 1x02) in the file name, wherever they sit.
+   The show name comes from the file name, or from its folder if the name is just "S01E02".
+   Everything else is a movie. Top-level folders other than Movies/Shows get their own row.  */
+const JUNK = /\b(2160p|1080p|720p|480p|4k|uhd|hdr|x26[45]|h\.?26[45]|hevc|web[-. ]?(dl|rip)?|blu[-. ]?ray|brrip|bdrip|dvdrip|hdtv|aac|ac3|ddp?5\.1|5\.1|10bit|proper|repack|remux|yts|rarbg)\b.*$/i;
+const tidy = s => s.replace(/[._]+/g, ' ').replace(JUNK, '').replace(/[\[(]\s*[\])]/g, '').replace(/\s+[-–]\s*$/, '').replace(/\s{2,}/g, ' ').trim();
+const base = n => n.replace(/\.[^.]+$/, '');
+const isVideo = f => !f.isfolder && VIDEO_EXT.test(f.name);
+const isImage = f => !f.isfolder && /\.(jpe?g|png|webp)$/i.test(f.name);
+const created = f => Date.parse(f.created || f.modified) || 0;
+
+function parseEpisode(name) {
+  const b = base(name).replace(/[._]+/g, ' ');
+  const m = b.match(/^(.*?)\s*[-–]?\s*\b(?:s(\d{1,2})\s*e(\d{1,3})|(\d{1,2})x(\d{2,3}))\b\s*[-–:]?\s*(.*)$/i);
+  if (!m) return null;
+  return { show: tidy(m[1]).replace(/\s*\(?(19|20)\d{2}\)?$/, ''), season: +(m[2] || m[4]), ep: +(m[3] || m[5]), title: tidy(m[6]) };
 }
-function posterIn(folder) { const p = (folder.contents || []).find(f => !f.isfolder && POSTER_NAME.test(f.name)); return p && p.fileid; }
-function videosDeep(folder, season = null, acc = []) {
-  const kids = (folder.contents || []).slice().sort(byName);
-  kids.filter(isVideo).forEach(f => acc.push({ file: f, season }));
-  kids.filter(f => f.isfolder).forEach(f => videosDeep(f, season ? `${season} · ${f.name}` : f.name, acc));
-  return acc;
-}
-function buildCatalog(root) {
-  const rows = [];
-  const top = (root.contents || []).slice().sort(byName);
-  const loose = top.filter(isVideo);
-  if (loose.length) rows.push({ name: 'Videos', items: loose.map(f => movieItem(f, top)) });
-  top.filter(f => f.isfolder).forEach(folder => {
-    const kids = (folder.contents || []).slice().sort(byName);
-    const items = [];
-    kids.filter(isVideo).forEach(f => items.push(movieItem(f, kids)));
-    kids.filter(f => f.isfolder).forEach(sub => {
-      const vids = videosDeep(sub);
-      if (!vids.length) return;
-      const poster = posterIn(sub);
-      if (vids.length === 1) items.push({ ...movieItem(vids[0].file), title: sub.name, art: poster || vids[0].file.fileid });
-      else items.push({
-        kind: 'show', key: 'd' + sub.folderid, title: sub.name, art: poster || vids[0].file.fileid,
-        episodes: vids.map((v, i) => ({ id: v.file.fileid, season: v.season, ...epLabel(v.file.name), idx: i })),
-      });
-    });
-    if (items.length) rows.push({ name: folder.name, items });
-  });
-  return rows;
-}
-function movieItem(f, siblings = []) {
-  const base = f.name.replace(/\.[^.]+$/, '').toLowerCase();
-  const img = siblings.find(s => !s.isfolder && s.category === 1 && s.name.replace(/\.[^.]+$/, '').toLowerCase() === base);
-  return { kind: 'movie', key: 'f' + f.fileid, title: clean(f.name), art: img ? img.fileid : f.fileid, episodes: [{ id: f.fileid, title: clean(f.name), n: null, idx: 0 }] };
+function parseMovie(name) {
+  const b = base(name).replace(/[._]+/g, ' ');
+  const y = b.match(/^(.*?)[\s(\[]*((?:19|20)\d{2})[\s)\]]*(.*)$/);
+  return y && y[1].trim() ? { title: tidy(y[1]), year: y[2] } : { title: tidy(b) };
 }
 
-/* ---------- demo catalog (shown until a link is pasted) ---------- */
-function demoCatalog() {
-  const show = (t, h, n, s = 1) => ({ kind:'show', key:'demo'+t, title:t, art:'hsl:'+h,
-    episodes: Array.from({ length:n }, (_, i) => ({ id:`demo-${t}-${i}`, n:(i % 10) + 1, title:`Episode ${(i % 10) + 1}`, season: s > 1 ? `Season ${Math.floor(i / 10) + 1}` : null, idx:i })) });
-  const movie = (t, h) => ({ kind:'movie', key:'demo'+t, title:t, art:'hsl:'+h, episodes:[{ id:'demo-'+t, title:t, idx:0 }] });
-  return [
-    { name:'Shows', items:[show('Garden Friends', 140, 12), show('Ocean Hour', 200, 20, 2), show('Little Builders', 30, 8), show('Night Sky Songs', 260, 10), show('Farm Morning', 90, 6)] },
-    { name:'Movies', items:[movie('The Big Snow', 210), movie('Paper Boats', 15), movie('Moon Picnic', 280), movie('Train to the Hills', 120), movie('Lantern Festival', 40)] },
-    { name:'Family Videos', items:[movie('Birthday 2026', 330), movie('Beach Day', 185), movie('First Steps', 55)] },
-  ];
+function walk(folder, path, out) {
+  const kids = folder.contents || [];
+  for (const f of kids) {
+    if (f.isfolder) walk(f, [...path, f], out);
+    else if (isVideo(f)) out.push({ f, path, siblings: kids });
+  }
+  return out;
 }
-const demoArt = h => `linear-gradient(135deg, hsl(${h} 55% 42%), hsl(${(+h + 40) % 360} 60% 18%))`;
+function posterFor(f, siblings, folder) {
+  const b = base(f.name).toLowerCase();
+  const same = siblings.find(s => isImage(s) && base(s.name).toLowerCase() === b);
+  if (same) return same.fileid;
+  const p = folder && (folder.contents || []).find(s => isImage(s) && POSTER_NAME.test(s.name));
+  return p ? p.fileid : null;
+}
+
+function buildCatalog(root) {
+  const vids = walk(root, [], []);
+  const shows = new Map(), movieRows = new Map();
+  const rowFor = path => {
+    const top = path[0];
+    return !top || MOVIE_DIR.test(top.name) || SHOW_DIR.test(top.name) ? 'Movies' : top.name;
+  };
+  for (const v of vids) {
+    const ep = parseEpisode(v.f.name);
+    const parent = v.path[v.path.length - 1];
+    // a folder of episodes inside Shows/ counts as a show even without S01E02 names
+    const inShowDir = v.path[0] && SHOW_DIR.test(v.path[0].name) && v.path.length >= 2;
+    if (ep || inShowDir) {
+      const showFolder = inShowDir ? v.path[1] : (parent && SEASON_DIR.test(parent.name) ? v.path[v.path.length - 2] : parent);
+      const name = (ep && ep.show) || (showFolder && showFolder.name) || 'Videos';
+      const key = 's:' + name.toLowerCase();
+      if (!shows.has(key)) shows.set(key, { kind: 'show', key, title: name, episodes: [], art: null, added: 0, folder: showFolder });
+      const s = shows.get(key);
+      const seasonFromDir = parent && SEASON_DIR.test(parent.name) ? +(parent.name.match(/\d+/)[0]) : null;
+      s.episodes.push({
+        id: v.f.fileid, season: ep ? ep.season : seasonFromDir || 1, n: ep ? ep.ep : (+(base(v.f.name).match(/^(?:episode|ep|e)\s*(\d+)/i) || [])[1] || null),
+        title: ep ? (ep.title || `Episode ${ep.ep}`) : tidy(base(v.f.name)), sortName: v.f.name,
+      });
+      s.added = Math.max(s.added, created(v.f));
+      if (!s.art && showFolder) s.art = posterFor({ name: '' }, [], showFolder);
+    } else {
+      const row = rowFor(v.path);
+      const m = row === 'Movies' ? parseMovie(v.f.name) : { title: tidy(base(v.f.name)) };   // keep dates in family videos
+      const own = parent && v.path.length >= 2 && !MOVIE_DIR.test(parent.name) ? parent : null; // Movies/Moana/Moana.mp4
+      if (!movieRows.has(row)) movieRows.set(row, []);
+      movieRows.get(row).push({
+        kind: 'movie', key: 'f' + v.f.fileid, title: own && row === 'Movies' ? tidy(own.name) : m.title, year: m.year,
+        art: posterFor(v.f, v.siblings, own) || v.f.fileid, added: created(v.f),
+        episodes: [{ id: v.f.fileid, title: m.title, n: null, idx: 0 }],
+      });
+    }
+  }
+  const showList = [...shows.values()].map(s => {
+    s.episodes.sort((a, b) => a.season - b.season || (a.n ?? 1e9) - (b.n ?? 1e9) || natural(a.sortName, b.sortName));
+    s.episodes.forEach((e, i) => e.idx = i);
+    const multi = new Set(s.episodes.map(e => e.season)).size > 1;
+    s.episodes.forEach(e => e.seasonLabel = multi ? `Season ${e.season}` : '');
+    s.art = s.art || s.episodes[0].id;
+    return s;
+  }).sort((a, b) => natural(a.title, b.title));
+
+  const rows = [];
+  const all = [...showList, ...[...movieRows.values()].flat()];
+  if (all.length > 3) rows.push({ name: 'Recently Added', items: all.slice().sort((a, b) => b.added - a.added).slice(0, 12), virtual: true });
+  if (showList.length) rows.push({ name: 'Shows', items: showList });
+  if (movieRows.has('Movies')) rows.push({ name: 'Movies', items: movieRows.get('Movies').sort((a, b) => natural(a.title, b.title)) });
+  [...movieRows.keys()].filter(k => k !== 'Movies').sort(natural)
+    .forEach(k => rows.push({ name: k, items: movieRows.get(k).sort((a, b) => natural(a.title, b.title)) }));
+  return { rows, all, newest: all.slice().sort((a, b) => b.added - a.added)[0] };
+}
 
 /* ---------- render ---------- */
-let CATALOG = [], ART = {}, HERO_ART = {};
-const DEMO = !linkCode;
-const bg = id => {
-  if (typeof id === 'string' && id.startsWith('hsl:')) return `background-image:${demoArt(id.slice(4))}`;
-  return ART[id] ? `background-image:url('${ART[id]}')` : '';
-};
-const itemByKey = k => CATALOG.flatMap(r => r.items).find(i => i.key === k);
+let LIB = { rows: [], all: [] }, ART = {}, HERO_ART = {};
+const bg = id => ART[id] ? `background-image:url('${ART[id]}')` : '';
+const itemByKey = k => LIB.all.find(i => i.key === k);
+const homeRow = it => LIB.rows.find(r => !r.virtual && r.items.includes(it));
 
 function continueRow() {
-  const entries = Object.entries(progress)
+  const seen = new Set(), items = [];
+  Object.entries(progress)
     .filter(([, p]) => p.d && p.t / p.d > 0.03 && p.t / p.d < 0.95)
-    .sort((a, b) => b[1].ts - a[1].ts).slice(0, 12);
-  const items = [];
-  for (const [id, p] of entries) {
-    const it = itemByKey(p.key); if (!it) continue;
-    const ep = it.episodes.find(e => String(e.id) === String(id)); if (!ep) continue;
-    if (items.some(x => x.it.key === it.key)) continue;
-    items.push({ it, ep });
-  }
-  return items;
+    .sort((a, b) => b[1].ts - a[1].ts)
+    .forEach(([id, p]) => {
+      const it = itemByKey(p.key); if (!it || seen.has(it.key)) return;
+      const ep = it.episodes.find(e => String(e.id) === String(id)); if (!ep) return;
+      seen.add(it.key); items.push({ it, ep });
+    });
+  return items.slice(0, 12);
 }
-
 function tileHTML(it, ep) {
-  const sub = ep && it.kind === 'show' ? `<span class="sub">${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</span>` : '';
+  const sub = ep && it.kind === 'show' ? `<span class="sub">${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</span>`
+    : it.kind === 'show' ? `<span class="sub">${it.episodes.length} episodes</span>` : '';
   const p = ep ? pct(ep.id) : 0;
   return `<button class="tile" data-key="${esc(it.key)}" ${ep ? `data-ep="${esc(ep.id)}"` : ''} style="${bg(ep && it.kind === 'show' ? ep.id : it.art)}">
     <span class="t">${esc(it.title)}${sub}</span>${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</button>`;
 }
-
 function render() {
-  if (!CATALOG.length) { $('#app').innerHTML = `<div class="msg"><div><b>Nothing here yet</b>Add videos to the shared pCloud folder and they'll show up.</div></div>`; return; }
-  const hero = CATALOG[0].items[0];
-  const heroBg = hero.art && String(hero.art).startsWith('hsl:') ? demoArt(hero.art.slice(4)) : (HERO_ART[hero.art] || ART[hero.art]) ? `url('${HERO_ART[hero.art] || ART[hero.art]}')` : 'none';
+  if (!LIB.all.length) { $('#app').innerHTML = `<div class="msg"><div><b>Nothing here yet</b>Add videos to the shared pCloud folder and they'll show up.</div></div>`; return; }
+  const hero = LIB.newest;
+  const heroImg = HERO_ART[hero.art] || ART[hero.art];
   const cont = continueRow();
   $('#app').innerHTML = `
-    <section class="hero"><div class="hero-img" style="background-image:${heroBg}"></div>
-      <div class="hero-info"><div class="hero-kicker">${hero.kind === 'show' ? 'Series' : 'Featured'}</div><h1>${esc(hero.title)}</h1>
-        <button class="btn" data-play="${esc(hero.key)}">${PLAY_ICON}Play</button>${hero.kind === 'show' ? `<button class="btn ghost" data-key="${esc(hero.key)}">Episodes</button>` : ''}</div></section>
+    <section class="hero"><div class="hero-img" style="background-image:${heroImg ? `url('${heroImg}')` : 'none'}"></div>
+      <div class="hero-info"><div class="hero-kicker">${hero.kind === 'show' ? 'Series' : 'New'}${hero.year ? ' · ' + hero.year : ''}</div><h1>${esc(hero.title)}</h1>
+        <button class="btn" data-play="${esc(hero.key)}">${PLAY_ICON}${hero.episodes.some(e => progress[e.id]) ? 'Resume' : 'Play'}</button>${hero.kind === 'show' ? `<button class="btn ghost" data-key="${esc(hero.key)}">Episodes</button>` : ''}</div></section>
     <main>
-      ${DEMO ? `<div class="demo-note">Demo layout — paste your pCloud link into PCLOUD_LINK to load your videos.</div>` : ''}
       ${cont.length ? `<section class="row"><h2>Continue Watching</h2><div class="rail">${cont.map(c => tileHTML(c.it, c.ep)).join('')}</div></section>` : ''}
-      ${CATALOG.map(r => `<section class="row"><h2>${esc(r.name)}</h2><div class="rail">${r.items.map(it => tileHTML(it)).join('')}</div></section>`).join('')}
+      ${LIB.rows.map(r => `<section class="row"><h2>${esc(r.name)}</h2><div class="rail">${r.items.map(it => tileHTML(it)).join('')}</div></section>`).join('')}
     </main>`;
 }
 
 document.addEventListener('click', e => {
   const play = e.target.closest('[data-play]');
-  if (play) { const it = itemByKey(play.dataset.play); playItem(it, nextUnwatched(it)); return; }
+  if (play) { const it = itemByKey(play.dataset.play); return playItem(it, nextUnwatched(it)); }
   const t = e.target.closest('[data-key]');
   if (t && !t.closest('.sheet')) {
-    const it = itemByKey(t.dataset.key);
+    const it = itemByKey(t.dataset.key); if (!it) return;
     if (t.dataset.ep) return playItem(it, it.episodes.findIndex(x => String(x.id) === t.dataset.ep));
     if (it.kind === 'movie') return playItem(it, 0);
     openSheet(it);
   }
 });
-
 function nextUnwatched(it) {
-  // last one started but not finished, else first not finished
   let best = -1, ts = 0;
   it.episodes.forEach((e, i) => { const p = progress[e.id]; if (p && p.ts > ts && pct(e.id) < 0.95) { ts = p.ts; best = i; } });
   if (best >= 0) return best;
@@ -328,18 +351,19 @@ function nextUnwatched(it) {
 
 /* ---------- show sheet ---------- */
 function openSheet(it, season) {
-  const seasons = [...new Set(it.episodes.map(e => e.season || ''))];
-  const cur = season ?? seasons[0];
-  const eps = it.episodes.filter(e => (e.season || '') === cur);
+  const seasons = [...new Set(it.episodes.map(e => e.seasonLabel))];
+  const cur = season ?? (it.episodes[nextUnwatched(it)].seasonLabel);
+  const eps = it.episodes.filter(e => e.seasonLabel === cur);
+  const next = nextUnwatched(it);
   $('#sheet').innerHTML = `
     <button class="close" id="sheetClose" aria-label="Close">×</button>
     <div class="sheet-art" style="${bg(it.art)}"></div>
     <div class="sheet-head"><h2>${esc(it.title)}</h2>
-      <button class="btn" data-sheetplay="${nextUnwatched(it)}">${PLAY_ICON}${progress[it.episodes[nextUnwatched(it)].id] ? 'Resume' : 'Play'}</button></div>
-    ${seasons.length > 1 ? `<div class="seasons">${seasons.map(s => `<button data-season="${esc(s)}" class="${s === cur ? 'on' : ''}">${esc(s || 'Episodes')}</button>`).join('')}</div>` : ''}
+      <button class="btn" data-sheetplay="${next}">${PLAY_ICON}${progress[it.episodes[next].id] ? 'Resume' : 'Play'}</button></div>
+    ${seasons.length > 1 ? `<div class="seasons">${seasons.map(s => `<button data-season="${esc(s)}" class="${s === cur ? 'on' : ''}">${esc(s)}</button>`).join('')}</div>` : ''}
     <div class="eps">${eps.map(e => { const p = pct(e.id); return `
       <button class="ep" data-sheetplay="${e.idx}"><span class="ep-n">${e.n ?? e.idx + 1}</span>
-        <span class="ep-img" style="${bg(DEMO ? it.art : e.id)}">${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</span>
+        <span class="ep-img" style="${bg(e.id)}">${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</span>
         <span class="ep-t">${esc(e.title)}</span></button>`; }).join('')}</div>`;
   $('#sheetBg').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -362,11 +386,10 @@ async function playItem(it, idx) {
   const ep = it.episodes[nowIdx];
   cancelNext();
   $('#pTitle').innerHTML = it.kind === 'show'
-    ? `${esc(it.title)}<small>${ep.season ? esc(ep.season) + ' · ' : ''}${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</small>` : esc(it.title);
+    ? `${esc(it.title)}<small>${ep.seasonLabel ? esc(ep.seasonLabel) + ' · ' : ''}${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</small>` : esc(it.title);
   $('#player').classList.add('open');
   document.body.style.overflow = 'hidden';
   showChrome();
-  if (DEMO) { video.removeAttribute('src'); video.load(); $('#pTitle').innerHTML += '<small>Demo — no video loaded</small>'; return; }
   try {
     video.src = await videoURL(ep.id);
     video.play().catch(() => {});
@@ -384,9 +407,10 @@ video.addEventListener('timeupdate', () => {
 function saveProgress() {
   const ep = nowItem.episodes[nowIdx];
   progress[ep.id] = { t: video.currentTime, d: video.duration, ts: Date.now(), key: nowItem.key };
-  store.set(progress);
+  ls.set('ftv.progress', progress);
 }
 video.addEventListener('pause', () => nowItem && video.duration && saveProgress());
+video.addEventListener('error', () => { if (video.src) $('#pTitle').innerHTML += `<small>This file's format can't play in a browser — convert it to MP4 (H.264)</small>`; });
 video.addEventListener('ended', () => {
   saveProgress();
   const queue = upNext(); if (!queue) return;
@@ -397,14 +421,12 @@ video.addEventListener('ended', () => {
 });
 function upNext() {
   if (nowIdx + 1 < nowItem.episodes.length) {
-    const e = nowItem.episodes[nowIdx + 1], it = nowItem;
-    return { label: e.title, go: () => playItem(it, nowIdx + 1) };
+    const it = nowItem, i = nowIdx + 1;
+    return { label: it.episodes[i].title, go: () => playItem(it, i) };
   }
-  // movies: continue with the next tile in the same row
-  const row = CATALOG.find(r => r.items.includes(nowItem));
-  const i = row ? row.items.indexOf(nowItem) : -1;
-  const nx = row && row.items[i + 1];
-  return nx ? { label: nx.title, go: () => playItem(nx, 0) } : null;
+  const row = homeRow(nowItem);                 // movies roll into the next one in their row
+  const nx = row && row.items[row.items.indexOf(nowItem) + 1];
+  return nx ? { label: nx.title, go: () => playItem(nx, nextUnwatched(nx)) } : null;
 }
 function cancelNext() { clearInterval(nuTimer); $('#nextUp').classList.remove('show'); }
 $('#nuCancel').onclick = cancelNext;
@@ -420,22 +442,29 @@ $('#pBack').onclick = () => {
   render();
 };
 
-/* ---------- start ---------- */
+/* ---------- start: show the saved copy instantly, then refresh from pCloud ---------- */
+async function refresh() {
+  const tree = await loadTree();
+  ls.set('ftv.tree', tree);
+  LIB = buildCatalog(tree);
+  render();
+  const ids = new Set();
+  LIB.all.forEach(it => { ids.add(it.art); if (it.kind === 'show') it.episodes.forEach(e => ids.add(e.id)); });
+  ART = await thumbs([...ids], '640x360');
+  if (LIB.newest) HERO_ART = await thumbs([LIB.newest.art], '1280x720');
+  render();
+}
 (async function init() {
-  if (DEMO) { CATALOG = demoCatalog(); return render(); }
-  try {
-    CATALOG = buildCatalog(await loadTree());
-    render(); // show rows right away, artwork fills in
-    const ids = new Set();
-    CATALOG.forEach(r => r.items.forEach(it => { ids.add(it.art); if (it.kind === 'show') it.episodes.forEach(e => ids.add(e.id)); }));
-    ART = await thumbs([...ids], '640x360');
-    const hero = CATALOG[0] && CATALOG[0].items[0];
-    if (hero) HERO_ART = await thumbs([hero.art], '1280x720');
-    render();
-  } catch (err) {
-    const why = { 7001: 'The link in PCLOUD_LINK isn’t valid.', 7002: 'This pCloud link was deleted.', 7004: 'This pCloud link has expired.', 7005: 'pCloud’s monthly sharing limit for this link has been reached.' }[err && err.result];
+  const cached = ls.get('ftv.tree', null);
+  if (cached) { try { LIB = buildCatalog(cached); render(); } catch {} }
+  try { await refresh(); }
+  catch (err) {
+    if (cached) return;                          // keep showing the saved library
+    const why = { 7001: 'The pCloud link isn’t valid.', 7002: 'This pCloud link was deleted.', 7004: 'This pCloud link has expired.', 7005: 'pCloud’s monthly sharing limit for this link has been reached.' }[err && err.result];
     $('#app').innerHTML = `<div class="msg"><div><b>Can't reach the video library</b>${why || 'Check the internet connection and try again.'}</div></div>`;
   }
+  // pick up newly added videos when the app comes back to the foreground
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#player').classList.contains('open')) refresh().catch(() => {}); });
 })();
 </script>
 </body>
