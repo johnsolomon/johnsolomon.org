@@ -21,7 +21,7 @@
     --tile-w: clamp(200px, 26vw, 300px);
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html,body { margin:0; background:var(--bg); color:var(--fg); }
+  html,body { margin:0; background:var(--bg); color:var(--fg); overscroll-behavior:none; }
   body {
     font:15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
     overflow-x:hidden; padding-bottom:env(safe-area-inset-bottom);
@@ -115,11 +115,33 @@
   .msg b { display:block; color:var(--fg); font-size:20px; margin-bottom:6px; }
   .spinner { width:38px; height:38px; border:3px solid #ffffff22; border-top-color:var(--accent); border-radius:50%; animation:spin 0.9s linear infinite; margin:0 auto 14px; }
   @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* passcode */
+  .lock { position:fixed; inset:0; z-index:80; background:var(--bg); display:none; place-items:center; padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  .lock.open { display:grid; }
+  .lock-box { text-align:center; }
+  .lock-title { color:var(--muted); font-size:15px; margin:0 0 18px; }
+  .dots { display:flex; gap:14px; justify-content:center; margin-bottom:34px; }
+  .dots i { width:14px; height:14px; border-radius:50%; border:2px solid #ffffff55; }
+  .dots i.on { background:#fff; border-color:#fff; }
+  .dots.bad { animation:shake .35s; }
+  @keyframes shake { 25% { transform:translateX(-10px); } 75% { transform:translateX(10px); } }
+  .pad { display:grid; grid-template-columns:repeat(3, 76px); gap:16px; justify-content:center; }
+  .pad button { width:76px; height:76px; border-radius:50%; background:#ffffff14; font-size:30px; font-weight:400; }
+  .pad button:active { background:#ffffff33; }
+  .pad .ghost { background:none; font-size:22px; color:var(--muted); }
 </style>
 </head>
 <body>
 <header><div class="brand">Family<span>TV</span></div></header>
 <div id="app"><div class="msg"><div><div class="spinner"></div>Loading…</div></div></div>
+
+<div class="lock" id="lock"><div class="lock-box">
+  <div class="brand" style="margin-bottom:26px">Family<span>TV</span></div>
+  <p class="lock-title">Enter passcode</p>
+  <div class="dots" id="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="pad" id="pad"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button><button>6</button><button>7</button><button>8</button><button>9</button><span></span><button>0</button><button class="ghost" data-del aria-label="Delete">⌫</button></div>
+</div></div>
 
 <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
 
@@ -132,7 +154,7 @@
     <div class="p-title" id="pTitle"></div>
   </div>
   <div class="nextup" id="nextUp">
-    <div style="flex:1;min-width:0"><div style="color:#aaa;font-size:12px">Next in <span id="nuSec">8</span></div>
+    <div style="flex:1;min-width:0"><div style="color:#aaa;font-size:12px">Up next in <span id="nuSec">4</span></div>
       <div id="nuTitle" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div>
     <button class="btn" id="nuPlay">Play</button>
     <button class="x" id="nuCancel">Cancel</button>
@@ -140,9 +162,8 @@
 </div>
 
 <script>
-/* ======================= SETUP ======================= */
-const PCLOUD_LINK = "https://u.pcloud.link/publink/show?code=kZHvGbJZ70PTYyCR9UXpMTFCz7YI8VCoNX0k";
-/* ===================================================== */
+/* The pCloud link is stored encrypted; only the family passcode unlocks it. */
+const LOCK = {"salt": "X5WTWHI3NI3qk0QdyvB6fA==", "iv": "Xj5fHet9bnuFYeGG", "iter": 310000, "ct": "uuuoQDMcgdS6/+6j/dVeMt4gJZKE+bEm0xtrLA59SXb0XGDq04V7u7aWUnLwp6uWj3vuqq9rdxPyRqP4yfW738orKyWxZ31e8IQ/PAL8ByWk9pO4xw0jGlLINQ0="};
 
 const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm)$/i;          // formats browsers can play
@@ -163,8 +184,16 @@ let progress = ls.get('ftv.progress', {});
 const pct = id => { const p = progress[id]; return p && p.d ? Math.min(1, p.t / p.d) : 0; };
 
 /* ---------- pCloud ---------- */
-const linkCode = (PCLOUD_LINK.match(/[?&]code=([^&#]+)/) || [, PCLOUD_LINK.trim()])[1];
-let API = /\/\/e[\w.-]*pcloud\.(link|com)/i.test(PCLOUD_LINK) ? 'https://eapi.pcloud.com' : 'https://api.pcloud.com';
+let linkCode = null, API = 'https://api.pcloud.com';
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function unlock(pin) {
+  const raw = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(LOCK.salt), iterations: LOCK.iter, hash: 'SHA-256' },
+    raw, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const link = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(LOCK.iv) }, key, b64(LOCK.ct)));
+  if (/\/\/e[\w.-]*pcloud\.(link|com)/i.test(link)) API = 'https://eapi.pcloud.com';
+  return (link.match(/[?&]code=([^&#]+)/) || [, link.trim()])[1];
+}
 async function call(method, params = {}) {
   const q = new URLSearchParams({ code: linkCode, ...params });
   const r = await fetch(`${API}/${method}?${q}`, { referrerPolicy: 'no-referrer', cache: 'no-store' });
@@ -189,7 +218,9 @@ async function thumbs(ids, size) {
   }
   return out;
 }
+let ahead = null;                               // next episode's link, fetched before the current one ends
 async function videoURL(fileid) {
+  if (ahead && ahead.id === fileid && Date.now() - ahead.at < 5 * 60e3) { const u = ahead.url; ahead = null; return u; }
   const j = await call('getpublinkdownload', { fileid });
   if (j.result !== 0) throw j;
   return `https://${j.hosts[0]}${j.path}`;
@@ -421,7 +452,12 @@ video.addEventListener('timeupdate', () => {
   if (!nowItem || !video.duration) return;
   const now = Date.now(); if (now - lastSave < 4000) return; lastSave = now;
   saveProgress();
+  const nx = nextEpisode();
+  if (nx && video.duration - video.currentTime < 45 && (!ahead || ahead.id !== nx.id)) {
+    ahead = { id: nx.id }; videoURL(nx.id).then(url => ahead = { id: nx.id, url, at: Date.now() }).catch(() => ahead = null);
+  }
 });
+const nextEpisode = () => nowItem && nowItem.episodes[nowIdx + 1];
 function saveProgress() {
   const ep = nowItem.episodes[nowIdx];
   progress[ep.id] = { t: video.currentTime, d: video.duration, ts: Date.now(), key: nowItem.key };
@@ -432,7 +468,7 @@ video.addEventListener('ended', () => {
   saveProgress();
   const queue = upNext(); if (!queue) return;
   $('#nuTitle').textContent = queue.label;
-  let s = 8; $('#nuSec').textContent = s; $('#nextUp').classList.add('show'); showChrome();
+  let s = 4; $('#nuSec').textContent = s; $('#nextUp').classList.add('show'); showChrome();
   nuTimer = setInterval(() => { s--; $('#nuSec').textContent = s; if (s <= 0) { cancelNext(); queue.go(); } }, 1000);
   $('#nuPlay').onclick = () => { cancelNext(); queue.go(); };
 });
@@ -471,7 +507,26 @@ async function refresh() {
   if (LIB.newest) HERO_ART = await thumbs([LIB.newest.art], '1280x720');
   render();
 }
+function askPasscode() {
+  return new Promise(done => {
+    let pin = '';
+    const lock = $('#lock'), dots = $('#dots');
+    const paint = () => [...dots.children].forEach((d, i) => d.classList.toggle('on', i < pin.length));
+    lock.classList.add('open'); paint();
+    $('#pad').onclick = async e => {
+      const b = e.target.closest('button'); if (!b) return;
+      pin = b.hasAttribute('data-del') ? pin.slice(0, -1) : (pin + b.textContent).slice(0, 6);
+      paint();
+      if (pin.length < 6) return;
+      try { linkCode = await unlock(pin); ls.set('ftv.pin', pin); lock.classList.remove('open'); done(); }
+      catch { dots.classList.remove('bad'); void dots.offsetWidth; dots.classList.add('bad'); pin = ''; setTimeout(paint, 200); }
+    };
+  });
+}
 (async function init() {
+  const saved = ls.get('ftv.pin', null);
+  try { if (!saved) throw 0; linkCode = await unlock(saved); }
+  catch { $('#app').innerHTML = ''; await askPasscode(); }
   const cached = ls.get('ftv.tree', null);
   if (cached) { try { LIB = buildCatalog(cached); render(); } catch {} }
   try { await refresh(); }
