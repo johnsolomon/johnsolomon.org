@@ -146,7 +146,9 @@
     background:radial-gradient(120% 80% at 50% 0%, #2a2a36 0%, #0b0b0e 70%); }
   .lock.open { display:grid; }
   .lock-box { display:flex; flex-direction:column; align-items:center; }
-  .lock-title { font:400 20px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; margin:0 0 22px; }
+  .lock-title { font:400 20px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; margin:0 0 8px; }
+  .lock-sub { font:400 14px/1.3 -apple-system, BlinkMacSystemFont, sans-serif; color:#c9c9d1; margin:0 0 18px; min-height:18px; text-align:center; }
+  .pad.off { opacity:.3; pointer-events:none; }
   .dots { display:flex; gap:24px; margin-bottom:52px; }
   .dots i { width:13px; height:13px; border-radius:50%; border:1.5px solid #fff; transition:background .08s; }
   .dots i.on { background:#fff; }
@@ -171,7 +173,8 @@
 <div id="app"><div class="msg"><div><div class="spinner"></div>Loading…</div></div></div>
 
 <div class="lock" id="lock"><div class="lock-box">
-  <p class="lock-title">Enter Passcode</p>
+  <p class="lock-title" id="lockTitle">Enter Passcode</p>
+  <p class="lock-sub" id="lockSub"></p>
   <div class="dots" id="dots"><i></i><i></i><i></i><i></i></div>
   <div class="pad" id="pad"><button data-d="1"><b>1</b><small></small></button><button data-d="2"><b>2</b><small>ABC</small></button><button data-d="3"><b>3</b><small>DEF</small></button><button data-d="4"><b>4</b><small>GHI</small></button><button data-d="5"><b>5</b><small>JKL</small></button><button data-d="6"><b>6</b><small>MNO</small></button><button data-d="7"><b>7</b><small>PQRS</small></button><button data-d="8"><b>8</b><small>TUV</small></button><button data-d="9"><b>9</b><small>WXYZ</small></button><span></span><button data-d="0"><b>0</b><small></small></button><span></span></div>
   <button class="lock-del" id="lockDel">Delete</button>
@@ -212,8 +215,8 @@
 </div>
 
 <script>
-/* The pCloud link is stored encrypted; only the family passcode unlocks it. */
-const LOCK = {"salt": "GZiIdiZbbAjtFNnZk8XVrw==", "iv": "b1W1pC7ifx9gTnu0", "iter": 310000, "ct": "y3WdiT30nuqGjqS43XZLPej7Qo+115qYuX4ZzR7bIaGmL2NOwfTsV41loa530bXiSJkyB8ZljAhWsL4Pm+dSR/ehfRGUqyslV8peUfit/9DO26003JU+IuZY/Pg="};
+/* The passcode is checked on the server, which limits wrong guesses. Nothing secret is in this page. */
+const GATE = "https://noytzrdrvaztjeytdwma.supabase.co/functions/v1/family-tv";
 
 const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
 const SHUFFLE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>';
@@ -235,18 +238,18 @@ let progress = ls.get('ftv.progress', {});
 const pct = id => { const p = progress[id]; return p && p.d ? Math.min(1, p.t / p.d) : 0; };
 
 /* ---------- pCloud ---------- */
-let linkCode = null, API = 'https://api.pcloud.com';
-const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-async function unlock(pin) {
-  const raw = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
-  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(LOCK.salt), iterations: LOCK.iter, hash: 'SHA-256' },
-    raw, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
-  const link = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(LOCK.iv) }, key, b64(LOCK.ct)));
+let linkCode = null, linkPass = '', API = 'https://api.pcloud.com';
+function useLink(link, pass) {
+  linkPass = pass || '';
   if (/\/\/e[\w.-]*pcloud\.(link|com)/i.test(link)) API = 'https://eapi.pcloud.com';
-  return (link.match(/[?&]code=([^&#]+)/) || [, link.trim()])[1];
+  linkCode = (link.match(/[?&]code=([^&#]+)/) || [, link.trim()])[1];
+}
+async function gate(body) {
+  const r = await fetch(GATE, { method: 'POST', body: JSON.stringify(body), cache: 'no-store' });
+  return { status: r.status, ...(await r.json().catch(() => ({}))) };
 }
 async function call(method, params = {}) {
-  const q = new URLSearchParams({ code: linkCode, ...params });
+  const q = new URLSearchParams({ code: linkCode, ...(linkPass && { linkpassword: linkPass }), ...params });
   const r = await fetch(`${API}/${method}?${q}`, { referrerPolicy: 'no-referrer', cache: 'no-store' });
   return r.json();
 }
@@ -613,6 +616,10 @@ $('#pBack').onclick = () => {
 
 /* ---------- start: show the saved copy instantly, then refresh from pCloud ---------- */
 async function refresh() {
+  if (!linkCode) {                               // opened offline earlier; fetch the link now that we're back online
+    const r = await gate({ token: ls.get('ftv.token', null) });
+    if (r.link) useLink(r.link, r.pass); else if (r.status === 401) return location.reload(); else throw r;
+  }
   const tree = await loadTree();
   ls.set('ftv.tree', tree);
   LIB = buildCatalog(tree);
@@ -624,34 +631,59 @@ async function refresh() {
   render();
 }
 const PIN_LEN = 4;
+const later = iso => { const m = Math.max(1, Math.ceil((Date.parse(iso) - Date.now()) / 60e3));
+  return m < 60 ? `${m} minute${m > 1 ? 's' : ''}` : m < 1440 ? `${Math.ceil(m / 60)} hours` : `${Math.ceil(m / 1440)} days`; };
 function askPasscode() {
   return new Promise(done => {
-    let pin = '', busy = false;
-    const lock = $('#lock'), dots = $('#dots'), del = $('#lockDel');
+    let pin = '', busy = false, wait = null;
+    const lock = $('#lock'), dots = $('#dots'), del = $('#lockDel'), pad = $('#pad'), title = $('#lockTitle'), sub = $('#lockSub');
     const paint = () => { [...dots.children].forEach((d, i) => d.classList.toggle('on', i < pin.length)); del.classList.toggle('show', pin.length > 0); };
+    const say = (t, s) => { title.textContent = t; sub.textContent = s || ''; };
+    const shake = () => { dots.classList.remove('bad'); void dots.offsetWidth; dots.classList.add('bad'); navigator.vibrate?.(200); };
+    const lockedUntil = iso => {                // like "iPad is disabled": keypad off until the server allows tries again
+      pad.classList.add('off'); clearInterval(wait);
+      const tick = () => { if (Date.parse(iso) <= Date.now()) { clearInterval(wait); pad.classList.remove('off'); say('Enter Passcode'); }
+        else say('Too many wrong tries', `Try again in ${later(iso)}`); };
+      tick(); wait = setInterval(tick, 30e3);
+    };
     const press = async d => {
       if (busy || pin.length >= PIN_LEN) return;
       pin += d; paint();
       if (pin.length < PIN_LEN) return;
       busy = true;
-      try { linkCode = await unlock(pin); ls.set('ftv.pin', pin); lock.classList.remove('open'); document.removeEventListener('keydown', onKey); done(); }
-      catch { dots.classList.remove('bad'); void dots.offsetWidth; dots.classList.add('bad'); navigator.vibrate?.(200);
-        setTimeout(() => { pin = ''; paint(); busy = false; }, 500); }
+      let r;
+      try { r = await gate({ pin }); } catch { r = { status: 0 }; }
+      if (r.token && r.link) {
+        ls.set('ftv.token', r.token); useLink(r.link, r.pass);
+        lock.classList.remove('open'); document.removeEventListener('keydown', onKey); clearInterval(wait); return done();
+      }
+      shake();
+      if (r.error === 'locked') lockedUntil(r.retryAfter);
+      else if (r.error === 'wrong') say('Enter Passcode', r.left <= 3 ? `Wrong passcode · ${r.left} ${r.left === 1 ? 'try' : 'tries'} left` : 'Wrong passcode');
+      else say('Enter Passcode', 'No connection — check the internet and try again');
+      setTimeout(() => { pin = ''; paint(); busy = false; }, 500);
     };
     const back = () => { if (!busy) { pin = pin.slice(0, -1); paint(); } };
-    const onKey = e => { if (/^[0-9]$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') back(); };
+    const onKey = e => { if (pad.classList.contains('off')) return; if (/^[0-9]$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') back(); };
     // light the key the instant it's touched, like iOS
-    $('#pad').addEventListener('pointerdown', e => { const b = e.target.closest('button'); if (!b) return; b.classList.add('down'); press(b.dataset.d); });
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => $('#pad').addEventListener(t, () => $('#pad').querySelectorAll('.down').forEach(b => b.classList.remove('down'))));
+    pad.addEventListener('pointerdown', e => { const b = e.target.closest('button'); if (!b) return; b.classList.add('down'); press(b.dataset.d); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => pad.addEventListener(t, () => pad.querySelectorAll('.down').forEach(b => b.classList.remove('down'))));
     del.onclick = back;
     document.addEventListener('keydown', onKey);
     lock.classList.add('open'); paint();
   });
 }
 (async function init() {
-  const saved = ls.get('ftv.pin', null);
-  try { if (!saved) throw 0; linkCode = await unlock(saved); }
-  catch { $('#app').innerHTML = ''; await askPasscode(); }
+  try { localStorage.removeItem('ftv.pin'); } catch {}     // older versions saved the code itself on the device
+  const token = ls.get('ftv.token', null);
+  let r = { status: 401 };
+  if (token) { try { r = await gate({ token }); } catch { r = { status: 0 }; } }
+  if (r.link) useLink(r.link, r.pass);
+  else if (r.status === 0 && ls.get('ftv.tree', null)) { /* offline: show the saved library; videos need the internet anyway */ }
+  else {
+    try { localStorage.removeItem('ftv.token'); localStorage.removeItem('ftv.tree'); } catch {}
+    $('#app').innerHTML = ''; await askPasscode();
+  }
   const cached = ls.get('ftv.tree', null);
   if (cached) { try { LIB = buildCatalog(cached); render(); } catch {} }
   try { await refresh(); }
