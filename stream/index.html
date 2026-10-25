@@ -111,6 +111,28 @@
   .nextup.show { display:flex; }
   .nextup .btn { padding:9px 16px; font-size:15px; white-space:nowrap; }
   .nextup .x { color:var(--muted); font-size:14px; padding:6px; }
+  .p-tools { margin-left:auto; display:flex; gap:8px; position:relative; }
+  .p-tool { height:42px; padding:0 14px; border-radius:21px; background:#ffffff1f; font-weight:600; font-size:14px;
+    display:flex; align-items:center; gap:7px; white-space:nowrap; }
+  .p-tool svg { width:19px; height:19px; }
+  .p-tool.on { background:#fff; color:#000; }
+  .sleep-menu { position:absolute; top:50px; right:0; background:#1c1c22f2; border-radius:12px; padding:6px; display:none; min-width:200px; }
+  .sleep-menu.open { display:block; }
+  .sleep-menu button { display:block; width:100%; text-align:left; padding:11px 14px; border-radius:8px; font-size:15px; }
+  .sleep-menu button:active, .sleep-menu button:hover { background:#ffffff14; }
+  .sleep-menu small { display:block; color:var(--muted); font-size:12px; padding:6px 14px 4px; }
+  /* toddler lock: blocks every tap until a grown-up holds the lock button */
+  .kidlock { position:absolute; inset:0; z-index:5; display:none; }
+  .player.locked .kidlock { display:block; }
+  .player.locked .p-top, .player.locked .nextup { display:none; }
+  .unlock { position:absolute; top:calc(env(safe-area-inset-top) + 14px); right:16px; width:58px; height:58px; border-radius:50%;
+    background:conic-gradient(#fff var(--p, 0%), #0008 0); display:grid; place-items:center; opacity:.25; transition:opacity .3s; }
+  .unlock::before { content:""; position:absolute; inset:4px; border-radius:50%; background:#000b; }
+  .unlock svg { width:24px; height:24px; position:relative; }
+  .kidlock.peek .unlock { opacity:1; }
+  .unlock-hint { position:absolute; top:calc(env(safe-area-inset-top) + 30px); right:86px; color:#fff; font-size:14px; font-weight:600;
+    text-shadow:0 1px 6px #000; opacity:0; transition:opacity .3s; }
+  .kidlock.peek .unlock-hint { opacity:1; }
 
   /* states */
   .msg { min-height:70vh; display:grid; place-items:center; text-align:center; padding:0 8vw; color:var(--muted); }
@@ -164,6 +186,22 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
     </button>
     <div class="p-title" id="pTitle"></div>
+    <div class="p-tools">
+      <button class="p-tool" id="pSleep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span id="sleepLbl">Sleep</span></button>
+      <button class="p-tool" id="pLock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Lock</button>
+      <div class="sleep-menu" id="sleepMenu">
+        <small>Stop playing…</small>
+        <button data-sleep="ep">After this episode</button>
+        <button data-sleep="15">In 15 minutes</button>
+        <button data-sleep="30">In 30 minutes</button>
+        <button data-sleep="60">In 1 hour</button>
+        <button data-sleep="0">Off</button>
+      </div>
+    </div>
+  </div>
+  <div class="kidlock" id="kidLock">
+    <div class="unlock-hint">Hold to unlock</div>
+    <button class="unlock" id="unlockBtn" aria-label="Hold to unlock"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
   </div>
   <div class="nextup" id="nextUp">
     <div style="flex:1;min-width:0"><div style="color:#aaa;font-size:12px">Up next in <span id="nuSec">4</span></div>
@@ -175,9 +213,10 @@
 
 <script>
 /* The pCloud link is stored encrypted; only the family passcode unlocks it. */
-const LOCK = {"salt": "4wmvzyriKOEHUmoPGpHnSw==", "iv": "pq6LDjPdyMnNgeH4", "iter": 310000, "ct": "CRvobowUg4SEt6eWh53xd/BCrL+CaEXIC4+n3kTGFbCdZU84HjUnAf6IL3pVKO9fMcycOsphiWr0uHjvO0C71EuxitNJMO6oV9mXTQ/YKwxrT5k5Zbf6gsaVVpc="};
+const LOCK = {"salt": "GZiIdiZbbAjtFNnZk8XVrw==", "iv": "b1W1pC7ifx9gTnu0", "iter": 310000, "ct": "y3WdiT30nuqGjqS43XZLPej7Qo+115qYuX4ZzR7bIaGmL2NOwfTsV41loa530bXiSJkyB8ZljAhWsL4Pm+dSR/ehfRGUqyslV8peUfit/9DO26003JU+IuZY/Pg="};
 
 const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
+const SHUFFLE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>';
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm)$/i;          // formats browsers can play
 const POSTER_NAME = /^(poster|cover|folder)\.(jpe?g|png|webp)$/i;
 const SHOW_DIR = /^(shows?|tv|tv shows|series)$/i;
@@ -374,6 +413,7 @@ function render() {
 }
 
 document.addEventListener('click', e => {
+  if (!e.target.closest('.player, .sheet')) shuffle = false;   // shuffle only sticks when started from a show's Shuffle button
   const play = e.target.closest('[data-play]');
   if (play) { const it = itemByKey(play.dataset.play); return playItem(it, nextUnwatched(it)); }
   const t = e.target.closest('[data-key]');
@@ -402,7 +442,7 @@ function openSheet(it, season) {
     <button class="close" id="sheetClose" aria-label="Close">×</button>
     <div class="sheet-art" style="${bg(it.art)}"></div>
     <div class="sheet-head"><h2>${esc(it.title)}</h2>
-      <button class="btn" data-sheetplay="${next}">${PLAY_ICON}${progress[it.episodes[next].id] ? 'Resume' : 'Play'}</button></div>
+      <button class="btn" data-sheetplay="${next}">${PLAY_ICON}${progress[it.episodes[next].id] ? 'Resume' : 'Play'}</button>${it.episodes.length > 2 ? `<button class="btn ghost" data-shuffle>${SHUFFLE_ICON}Shuffle</button>` : ''}</div>
     ${seasons.length > 1 ? `<div class="seasons">${seasons.map(s => `<button data-season="${esc(s)}" class="${s === cur ? 'on' : ''}">${esc(s)}</button>`).join('')}</div>` : ''}
     <div class="eps">${eps.map(e => { const p = pct(e.id); return `
       <button class="ep" data-sheetplay="${e.idx}"><span class="ep-n">${e.n ?? e.idx + 1}</span>
@@ -412,7 +452,8 @@ function openSheet(it, season) {
   document.body.style.overflow = 'hidden';
   $('#sheet').onclick = ev => {
     const s = ev.target.closest('[data-season]'); if (s) return openSheet(it, s.dataset.season);
-    const p = ev.target.closest('[data-sheetplay]'); if (p) { closeSheet(); playItem(it, +p.dataset.sheetplay); }
+    if (ev.target.closest('[data-shuffle]')) { closeSheet(); shuffle = true; return playItem(it, Math.floor(Math.random() * it.episodes.length)); }
+    const p = ev.target.closest('[data-sheetplay]'); if (p) { closeSheet(); shuffle = false; playItem(it, +p.dataset.sheetplay); }
     if (ev.target.closest('#sheetClose')) closeSheet();
   };
 }
@@ -421,7 +462,7 @@ $('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') cl
 
 /* ---------- player ---------- */
 const video = $('#video');
-let nowItem = null, nowIdx = 0, nuTimer = null, hideTimer = null, lastSave = 0;
+let nowItem = null, nowIdx = 0, nextIdx = 1, shuffle = false, nuTimer = null, hideTimer = null, lastSave = 0;
 
 let retries = 0, resumeAt = 0, everPlayed = false;
 async function playItem(it, idx, keepTime) {
@@ -430,6 +471,10 @@ async function playItem(it, idx, keepTime) {
   // before any waiting, keeps the tap "valid" for when the real file arrives
   if (!keepTime) { try { video.load(); video.play().catch(() => {}); } catch {} retries = 0; resumeAt = 0; everPlayed = false; enterFull(); }
   nowItem = it; nowIdx = Math.max(0, idx);
+  if (!keepTime) {
+    const n = it.episodes.length;
+    nextIdx = shuffle && n > 1 ? (nowIdx + 1 + Math.floor(Math.random() * (n - 1))) % n : nowIdx + 1;
+  }
   const ep = it.episodes[nowIdx];
   cancelNext();
   $('#pTitle').innerHTML = it.kind === 'show'
@@ -474,12 +519,14 @@ video.addEventListener('timeupdate', () => {
   if (!nowItem || !video.duration) return;
   const now = Date.now(); if (now - lastSave < 4000) return; lastSave = now;
   saveProgress();
+  if (sleep.until && now >= sleep.until) { video.pause(); return goodnight(); }
+  paintSleep();
   const nx = nextEpisode();
   if (nx && video.duration - video.currentTime < 45 && (!ahead || ahead.id !== nx.id)) {
     ahead = { id: nx.id }; videoURL(nx.id).then(url => ahead = { id: nx.id, url, at: Date.now() }).catch(() => ahead = null);
   }
 });
-const nextEpisode = () => nowItem && nowItem.episodes[nowIdx + 1];
+const nextEpisode = () => nowItem && nowItem.episodes[nextIdx];
 function saveProgress() {
   const ep = nowItem.episodes[nowIdx];
   progress[ep.id] = { t: video.currentTime, d: video.duration, ts: Date.now(), key: nowItem.key };
@@ -488,6 +535,7 @@ function saveProgress() {
 video.addEventListener('pause', () => nowItem && video.duration && saveProgress());
 video.addEventListener('ended', () => {
   saveProgress();
+  if (sleep.ep) return goodnight();
   const queue = upNext(); if (!queue) return;
   $('#nuTitle').textContent = queue.label;
   let s = 4; $('#nuSec').textContent = s; $('#nextUp').classList.add('show'); showChrome();
@@ -495,8 +543,8 @@ video.addEventListener('ended', () => {
   $('#nuPlay').onclick = () => { cancelNext(); queue.go(); };
 });
 function upNext() {
-  if (nowIdx + 1 < nowItem.episodes.length) {
-    const it = nowItem, i = nowIdx + 1;
+  if (nextIdx < nowItem.episodes.length) {
+    const it = nowItem, i = nextIdx;
     return { label: it.episodes[i].title, go: () => playItem(it, i) };
   }
   const row = homeRow(nowItem);                 // movies roll into the next one in their row
@@ -510,7 +558,53 @@ function showChrome() {
   hideTimer = setTimeout(() => { if (!video.paused) $('#pTop').classList.add('hide'); }, 3000);
 }
 ['pointermove', 'touchstart', 'click'].forEach(ev => $('#player').addEventListener(ev, showChrome, { passive: true }));
+
+/* sleep timer: stop after this episode, or after a set time */
+let sleep = {};
+function paintSleep() {
+  const lbl = sleep.ep ? 'After this one' : sleep.until ? `${Math.max(1, Math.ceil((sleep.until - Date.now()) / 60e3))} min` : 'Sleep';
+  $('#sleepLbl').textContent = lbl;
+  $('#pSleep').classList.toggle('on', !!(sleep.ep || sleep.until));
+}
+function goodnight() {
+  sleep = {}; paintSleep(); cancelNext(); showChrome();
+  note('Sleep timer finished — press play to keep watching');
+}
+$('#pSleep').onclick = e => { e.stopPropagation(); $('#sleepMenu').classList.toggle('open'); };
+$('#sleepMenu').onclick = e => {
+  const b = e.target.closest('[data-sleep]'); if (!b) return;
+  const v = b.dataset.sleep;
+  sleep = v === 'ep' ? { ep: true } : +v ? { until: Date.now() + v * 60e3 } : {};
+  $('#sleepMenu').classList.remove('open'); paintSleep();
+};
+$('#player').addEventListener('click', e => { if (!e.target.closest('.p-tools')) $('#sleepMenu').classList.remove('open'); });
+
+/* toddler lock: covers the screen so little hands can't pause, skip or leave; hold the lock for 1.5s to undo */
+const kid = $('#kidLock'), unlockBtn = $('#unlockBtn');
+let peekTimer = null, holdTimer = null, holdStart = 0;
+function setLocked(on) {
+  $('#player').classList.toggle('locked', on);
+  video.controls = !on;
+  if (on) { $('#sleepMenu').classList.remove('open'); enterFull(); peek(); } else showChrome();
+}
+function peek() { kid.classList.add('peek'); clearTimeout(peekTimer); peekTimer = setTimeout(() => kid.classList.remove('peek'), 2500); }
+function endHold() { cancelAnimationFrame(holdTimer); unlockBtn.style.setProperty('--p', '0%'); }
+$('#pLock').onclick = () => setLocked(true);
+kid.addEventListener('pointerdown', e => { e.preventDefault(); peek(); });
+unlockBtn.addEventListener('pointerdown', e => {
+  e.preventDefault(); holdStart = performance.now();
+  const tick = () => {
+    const p = Math.min(1, (performance.now() - holdStart) / 1500);
+    unlockBtn.style.setProperty('--p', p * 100 + '%');
+    if (p >= 1) { endHold(); setLocked(false); } else holdTimer = requestAnimationFrame(tick);
+  };
+  tick();
+});
+['pointerup', 'pointerleave', 'pointercancel'].forEach(t => unlockBtn.addEventListener(t, endHold));
+kid.addEventListener('contextmenu', e => e.preventDefault());
+
 $('#pBack').onclick = () => {
+  setLocked(false); sleep = {}; paintSleep(); shuffle = false;
   if (nowItem && video.duration) saveProgress();
   video.pause(); video.removeAttribute('src'); video.load(); cancelNext(); exitFull();
   $('#player').classList.remove('open'); document.body.style.overflow = '';
