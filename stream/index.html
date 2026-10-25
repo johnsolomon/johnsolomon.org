@@ -53,6 +53,15 @@
     font-weight:700; font-size:17px; background:#fff; color:#000; vertical-align:top; }
   .btn svg { width:22px; height:22px; }
   .btn.ghost { background:#6d6d7466; color:#fff; margin-left:8px; }
+  .hero-sum { margin:-6px 0 18px; color:#d6d6dc; font-size:15px; line-height:1.45; max-width:480px; text-shadow:0 1px 8px #000a;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  @media (max-width:600px) { .hero-sum { -webkit-line-clamp:2; font-size:14px; } }
+  .moods { display:flex; gap:8px; overflow-x:auto; padding:0 4vw 18px; scrollbar-width:none; }
+  .moods::-webkit-scrollbar { display:none; }
+  .moods button { flex:none; padding:7px 14px; border-radius:999px; background:#ffffff14; font-size:14px; font-weight:600; color:#e4e4e8; }
+  .moods button.on { background:#fff; color:#000; }
+  .sheet-meta { color:var(--muted); font-size:14px; margin:-6px 0 10px; }
+  .sheet-sum { color:#d6d6dc; font-size:15px; line-height:1.5; margin:0 0 16px; max-width:640px; }
 
   /* rows */
   main { position:relative; z-index:3; margin-top:-8vh; }
@@ -95,7 +104,7 @@
   .ep-t { font-weight:600; }
 
   /* player */
-  .player { position:fixed; inset:0; z-index:60; background:#000; display:none; }
+  .player { position:fixed; inset:0; z-index:60; background:#000; display:none; height:100vh; height:100dvh; }
   .player.open { display:block; }
   .player:fullscreen, .player:-webkit-full-screen { width:100vw; height:100vh; background:#000; }
   .player video { width:100%; height:100%; object-fit:contain; background:#000; }
@@ -341,6 +350,7 @@ function buildCatalog(root) {
       s.episodes.push({
         id: v.f.fileid, season: ep ? ep.season : seasonFromDir || 1, n: ep ? ep.ep : (+(base(v.f.name).match(/^(?:episode|ep|e)\s*(\d+)/i) || [])[1] || null),
         title: ep ? (ep.title || `Episode ${ep.ep}`) : tidy(base(v.f.name), isScene(v.f.name)), sortName: v.f.name,
+        art: posterFor(v.f, v.siblings, null) || v.f.fileid,          // the still the drop folder saved beside the video
       });
       s.added = Math.max(s.added, created(v.f));
       if (!s.art) s.art = posterIn(showFolder);
@@ -361,13 +371,13 @@ function buildCatalog(root) {
     s.episodes.forEach((e, i) => e.idx = i);
     const multi = new Set(s.episodes.map(e => e.season)).size > 1;
     s.episodes.forEach(e => e.seasonLabel = multi ? `Season ${e.season}` : '');
-    s.art = s.art || s.episodes[0].id;
+    s.art = s.art || s.episodes[0].art;
     return s;
   }).sort((a, b) => natural(a.title, b.title));
 
   const rows = [];
   const all = [...showList, ...[...movieRows.values()].flat()];
-  if (all.length > 3) rows.push({ name: 'Recently Added', items: all.slice().sort((a, b) => b.added - a.added).slice(0, 12), virtual: true });
+  if (all.length > 11) rows.push({ name: 'Recently Added', items: all.slice().sort((a, b) => b.added - a.added).slice(0, 12), virtual: true });
   if (showList.length) rows.push({ name: 'Shows', items: showList });
   if (movieRows.has('Movies')) rows.push({ name: 'Movies', items: movieRows.get('Movies').sort((a, b) => natural(a.title, b.title)) });
   [...movieRows.keys()].filter(k => k !== 'Movies').sort(natural)
@@ -379,7 +389,6 @@ function buildCatalog(root) {
 let LIB = { rows: [], all: [] }, ART = {}, HERO_ART = {};
 const bg = id => ART[id] ? `background-image:url('${ART[id]}')` : '';
 const itemByKey = k => LIB.all.find(i => i.key === k);
-const homeRow = it => LIB.rows.find(r => !r.virtual && r.items.includes(it));
 
 function continueRow() {
   const seen = new Set(), items = [];
@@ -397,26 +406,85 @@ function tileHTML(it, ep) {
   const sub = ep && it.kind === 'show' ? `<span class="sub">${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</span>`
     : it.kind === 'show' ? `<span class="sub">${it.episodes.length} episodes</span>` : '';
   const p = ep ? pct(ep.id) : 0;
-  return `<button class="tile" data-key="${esc(it.key)}" ${ep ? `data-ep="${esc(ep.id)}"` : ''} style="${bg(ep && it.kind === 'show' ? ep.id : it.art)}">
+  return `<button class="tile" data-key="${esc(it.key)}" ${ep ? `data-ep="${esc(ep.id)}"` : ''} style="${bg(ep && it.kind === 'show' ? ep.art : it.art)}">
     <span class="t">${esc(it.title)}${sub}</span>${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</button>`;
 }
+/* ---------- genres, moods and picks (worked out by the server's AI; see loadMeta) ---------- */
+let META = ls.get('ftv.meta', {}), moodPick = null;
+const metaOf = it => META[it.key.toLowerCase()] || {};
+const MOOD_NAMES = { calm: 'Calm', funny: 'Funny', exciting: 'Exciting', musical: 'Musical', heartwarming: 'Heartwarming', learning: 'Learning' };
+const finished = it => it.episodes.every(e => pct(e.id) >= 0.95);
+const evening = () => { const h = new Date().getHours(); return h >= 18 || h < 6; };
+async function loadMeta() {
+  const items = LIB.all.map(it => ({ key: it.key, title: it.title, kind: it.kind, year: it.year,
+    eps: it.kind === 'show' ? it.episodes.slice(0, 25).map(e => e.title) : undefined }));
+  const before = JSON.stringify(META);
+  for (let i = 0; i < 40; i++) {                // new titles are described one AI step per request
+    const r = await gate({ token: ls.get('ftv.token', null), meta: items });
+    if (!r.meta) break;
+    META = r.meta;
+    if (!r.pending) break;
+  }
+  ls.set('ftv.meta', META);
+  if (JSON.stringify(META) !== before && !$('#player').classList.contains('open')) render();
+}
+// Picked for you: titles most like what's been watched lately (by the AI's similarity scores),
+// leaning calm in the evening and upbeat in the day, with a nudge for anything new.
+function forYou(skip = new Set()) {
+  const now = Date.now(), recent = {};
+  Object.values(progress).forEach(p => { if (p.key) recent[p.key.toLowerCase()] = Math.max(recent[p.key.toLowerCase()] || 0, p.ts); });
+  const night = evening();
+  return LIB.all.filter(it => !skip.has(it.key)).map(it => {
+    const m = metaOf(it), sim = Object.fromEntries(m.sim || []), md = m.moods || {};
+    let s = 0;
+    for (const [k, ts] of Object.entries(recent)) if (k !== it.key.toLowerCase()) s += 0.5 ** ((now - ts) / 6048e5) * ((sim[k] ?? 0.7) - 0.7);
+    s += night ? 0.02 * (md.calm || 0) : 0.01 * ((md.funny || 0) + (md.exciting || 0));
+    if (now - it.added < 6048e5) s += 0.03;
+    if (finished(it)) s -= 0.15;
+    return [it, s];
+  }).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+}
+const rowHTML = (name, items, ep) => items.length ? `<section class="row"><h2>${esc(name)}</h2><div class="rail">${items.map(x => ep ? tileHTML(x.it, x.ep) : tileHTML(x)).join('')}</div></section>` : '';
 function render() {
   if (!LIB.all.length) { $('#app').innerHTML = `<div class="msg"><div><b>Nothing here yet</b>Add videos to the shared pCloud folder and they'll show up.</div></div>`; return; }
-  const hero = LIB.newest;
-  const heroImg = HERO_ART[hero.art] || ART[hero.art];
+  const N = LIB.all.length, big = N >= 12;
   const cont = continueRow();
+  const picks = forYou(new Set(cont.map(c => c.it.key)));
+  const hero = (Object.keys(progress).length && picks[0]) || LIB.newest;
+  const hm = metaOf(hero), heroImg = HERO_ART[hero.art] || ART[hero.art];
+  const kicker = [hero.kind === 'show' ? 'Series' : 'Movie', hm.year || hero.year, (hm.genres || [])[0]].filter(Boolean).join(' · ');
+
+  // genre rows and mood chips only appear once the library is big enough to need them
+  let genreRows = '', moodBar = '';
+  if (big) {
+    const count = {};
+    LIB.all.forEach(it => (metaOf(it).genres || []).forEach(g => (count[g] = (count[g] || 0) + 1)));
+    genreRows = Object.entries(count).filter(([, c]) => c >= 4 && c <= N * 0.75).sort((a, b) => b[1] - a[1]).slice(0, 4)
+      .map(([g]) => rowHTML(g, LIB.all.filter(it => (metaOf(it).genres || []).includes(g)))).join('');
+    const moods = Object.keys(MOOD_NAMES).filter(k => LIB.all.filter(it => (metaOf(it).moods || {})[k] > 0.5).length >= 2);
+    if (moods.length >= 2) moodBar = `<div class="moods">${moods.map(k => `<button data-mood="${k}" class="${moodPick === k ? 'on' : ''}">${MOOD_NAMES[k]}</button>`).join('')}</div>`;
+  }
+  const body = moodPick
+    ? rowHTML(MOOD_NAMES[moodPick], LIB.all.filter(it => (metaOf(it).moods || {})[moodPick] > 0.5).sort((a, b) => metaOf(b).moods[moodPick] - metaOf(a).moods[moodPick]))
+    : `${rowHTML('Continue Watching', cont, true)}
+       ${N >= 4 ? rowHTML(evening() ? 'Tonight’s picks' : 'Picked for you', picks.slice(0, 12)) : ''}
+       ${LIB.rows.map(r => rowHTML(r.name, r.items)).join('')}
+       ${genreRows}`;
   $('#app').innerHTML = `
     <section class="hero"><div class="hero-img" style="background-image:${heroImg ? `url('${heroImg}')` : 'none'}"></div>
-      <div class="hero-info"><div class="hero-kicker">${hero.kind === 'show' ? 'Series' : 'New'}${hero.year ? ' · ' + hero.year : ''}</div><h1>${esc(hero.title)}</h1>
+      <div class="hero-info"><div class="hero-kicker">${esc(kicker)}</div><h1>${esc(hero.title)}</h1>
+        ${hm.summary ? `<p class="hero-sum">${esc(hm.summary)}</p>` : ''}
         <button class="btn" data-play="${esc(hero.key)}">${PLAY_ICON}${hero.episodes.some(e => progress[e.id]) ? 'Resume' : 'Play'}</button>${hero.kind === 'show' ? `<button class="btn ghost" data-key="${esc(hero.key)}">Episodes</button>` : ''}</div></section>
-    <main>
-      ${cont.length ? `<section class="row"><h2>Continue Watching</h2><div class="rail">${cont.map(c => tileHTML(c.it, c.ep)).join('')}</div></section>` : ''}
-      ${LIB.rows.map(r => `<section class="row"><h2>${esc(r.name)}</h2><div class="rail">${r.items.map(it => tileHTML(it)).join('')}</div></section>`).join('')}
-    </main>`;
+    <main>${moodBar}${body}</main>`;
+  if (!HERO_ART[hero.art]) thumbs([hero.art], '1280x720').then(o => {      // sharper picture for the big banner
+    Object.assign(HERO_ART, o); const el = $('.hero-img'); if (el && o[hero.art]) el.style.backgroundImage = `url('${o[hero.art]}')`;
+  });
 }
 
 document.addEventListener('click', e => {
   if (!e.target.closest('.player, .sheet')) shuffle = false;   // shuffle only sticks when started from a show's Shuffle button
+  const mood = e.target.closest('[data-mood]');
+  if (mood) { moodPick = moodPick === mood.dataset.mood ? null : mood.dataset.mood; return render(); }
   const play = e.target.closest('[data-play]');
   if (play) { const it = itemByKey(play.dataset.play); return playItem(it, nextUnwatched(it)); }
   const t = e.target.closest('[data-key]');
@@ -445,11 +513,13 @@ function openSheet(it, season) {
     <button class="close" id="sheetClose" aria-label="Close">×</button>
     <div class="sheet-art" style="${bg(it.art)}"></div>
     <div class="sheet-head"><h2>${esc(it.title)}</h2>
+      ${(() => { const m = metaOf(it), line = [m.year, (m.genres || []).join(' · '), m.rating, `${it.episodes.length} episodes`].filter(Boolean).join(' · ');
+        return `<div class="sheet-meta">${esc(line)}</div>${m.summary ? `<p class="sheet-sum">${esc(m.summary)}</p>` : ''}`; })()}
       <button class="btn" data-sheetplay="${next}">${PLAY_ICON}${progress[it.episodes[next].id] ? 'Resume' : 'Play'}</button>${it.episodes.length > 2 ? `<button class="btn ghost" data-shuffle>${SHUFFLE_ICON}Shuffle</button>` : ''}</div>
     ${seasons.length > 1 ? `<div class="seasons">${seasons.map(s => `<button data-season="${esc(s)}" class="${s === cur ? 'on' : ''}">${esc(s)}</button>`).join('')}</div>` : ''}
     <div class="eps">${eps.map(e => { const p = pct(e.id); return `
       <button class="ep" data-sheetplay="${e.idx}"><span class="ep-n">${e.n ?? e.idx + 1}</span>
-        <span class="ep-img" style="${bg(e.id)}">${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</span>
+        <span class="ep-img" style="${bg(e.art)}">${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</span>
         <span class="ep-t">${esc(e.title)}</span></button>`; }).join('')}</div>`;
   $('#sheetBg').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -485,6 +555,7 @@ async function playItem(it, idx, keepTime) {
   $('#player').classList.add('open');
   document.body.style.overflow = 'hidden';
   showChrome();
+  setNowPlaying(it, ep);
   try {
     video.src = await videoURL(ep.id);
     video.play().catch(() => {});
@@ -550,8 +621,8 @@ function upNext() {
     const it = nowItem, i = nextIdx;
     return { label: it.episodes[i].title, go: () => playItem(it, i) };
   }
-  const row = homeRow(nowItem);                 // movies roll into the next one in their row
-  const nx = row && row.items[row.items.indexOf(nowItem) + 1];
+  // end of a movie or a show: the top AI pick that hasn't been watched to the end
+  const nx = forYou(new Set([nowItem.key])).find(it => !finished(it));
   return nx ? { label: nx.title, go: () => playItem(nx, nextUnwatched(nx)) } : null;
 }
 function cancelNext() { clearInterval(nuTimer); $('#nextUp').classList.remove('show'); }
@@ -606,6 +677,39 @@ unlockBtn.addEventListener('pointerdown', e => {
 ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => unlockBtn.addEventListener(t, endHold));
 kid.addEventListener('contextmenu', e => e.preventDefault());
 
+/* lock screen / Control Center / AirPods controls, and the title on the lock screen */
+function setNowPlaying(it, ep) {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    const art = ART[(it.kind === 'show' ? ep.art : it.art)];
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: it.kind === 'show' ? ep.title : it.title, artist: it.kind === 'show' ? it.title : 'Family TV', album: 'Family TV',
+      artwork: art ? [{ src: art, sizes: '640x360', type: 'image/jpeg' }] : [],
+    });
+    const on = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch {} };
+    on('play', () => video.play()); on('pause', () => video.pause());
+    on('seekbackward', d => { video.currentTime = Math.max(0, video.currentTime - (d.seekOffset || 10)); });
+    on('seekforward', d => { video.currentTime = Math.min(video.duration || 0, video.currentTime + (d.seekOffset || 10)); });
+    on('seekto', d => { if (d.seekTime != null) video.currentTime = d.seekTime; });
+    on('nexttrack', () => { const q = upNext(); if (q) { cancelNext(); q.go(); } });
+  } catch {}
+}
+
+/* Mac keyboard: space play/pause · ←/→ 10 s · F full screen · N next · Esc back */
+document.addEventListener('keydown', e => {
+  if (!$('#player').classList.contains('open') || $('#player').classList.contains('locked') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (e.target === video && (k === ' ' || k.startsWith('arrow'))) return;   // the video's own controls already handle these
+  if (k === ' ' || k === 'k') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+  else if (k === 'arrowleft') { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 10); }
+  else if (k === 'arrowright') { e.preventDefault(); video.currentTime += 10; }
+  else if (k === 'f') (document.fullscreenElement || document.webkitFullscreenElement) ? exitFull() : enterFull();
+  else if (k === 'n') { const q = upNext(); if (q) { cancelNext(); q.go(); } }
+  else if (k === 'escape' && !document.fullscreenElement && !document.webkitFullscreenElement) $('#pBack').click();
+  else return;
+  showChrome();
+});
+
 $('#pBack').onclick = () => {
   setLocked(false); sleep = {}; paintSleep(); shuffle = false;
   if (nowItem && video.duration) saveProgress();
@@ -625,10 +729,10 @@ async function refresh() {
   LIB = buildCatalog(tree);
   render();
   const ids = new Set();
-  LIB.all.forEach(it => { ids.add(it.art); if (it.kind === 'show') it.episodes.forEach(e => ids.add(e.id)); });
+  LIB.all.forEach(it => { ids.add(it.art); if (it.kind === 'show') it.episodes.forEach(e => ids.add(e.art)); });
   ART = await thumbs([...ids], '640x360');
-  if (LIB.newest) HERO_ART = await thumbs([LIB.newest.art], '1280x720');
   render();
+  loadMeta().catch(() => {});
 }
 const PIN_LEN = 4;
 const later = iso => { const m = Math.max(1, Math.ceil((Date.parse(iso) - Date.now()) / 60e3));
