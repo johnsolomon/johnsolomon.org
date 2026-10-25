@@ -21,6 +21,7 @@
     --tile-w: clamp(200px, 26vw, 300px);
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { touch-action:manipulation; background:#0b0b0e; }
   html,body { margin:0; background:var(--bg); color:var(--fg); overscroll-behavior:none; }
   body {
     font:15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
@@ -96,6 +97,7 @@
   /* player */
   .player { position:fixed; inset:0; z-index:60; background:#000; display:none; }
   .player.open { display:block; }
+  .player:fullscreen, .player:-webkit-full-screen { width:100vw; height:100vh; background:#000; }
   .player video { width:100%; height:100%; object-fit:contain; background:#000; }
   .p-top { position:absolute; inset:0 0 auto 0; padding:calc(env(safe-area-inset-top) + 12px) 16px 30px;
     display:flex; align-items:center; gap:14px; background:linear-gradient(#000b,#0000); transition:opacity .3s; }
@@ -107,7 +109,7 @@
   .nextup { position:absolute; right:24px; bottom:90px; background:#111e; border-radius:10px; padding:14px 16px;
     display:none; align-items:center; gap:14px; max-width:min(420px, 86vw); }
   .nextup.show { display:flex; }
-  .nextup .btn { padding:9px 16px; font-size:15px; }
+  .nextup .btn { padding:9px 16px; font-size:15px; white-space:nowrap; }
   .nextup .x { color:var(--muted); font-size:14px; padding:6px; }
 
   /* states */
@@ -166,14 +168,14 @@
   <div class="nextup" id="nextUp">
     <div style="flex:1;min-width:0"><div style="color:#aaa;font-size:12px">Up next in <span id="nuSec">4</span></div>
       <div id="nuTitle" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div>
-    <button class="btn" id="nuPlay">Play</button>
+    <button class="btn" id="nuPlay">Play now</button>
     <button class="x" id="nuCancel">Cancel</button>
   </div>
 </div>
 
 <script>
 /* The pCloud link is stored encrypted; only the family passcode unlocks it. */
-const LOCK = {"salt": "yXePjJkUw+NvQYb6jepDqQ==", "iv": "LlTmSxVS6tsoXMbz", "iter": 310000, "ct": "jxlDzrSJ4Rclu39TizkcKF2dvEt4ajygYOKmOnYkVWmhGWPGvAOT0uEPROJuGOyv5sG20ZFuOHRnC3FHlxQVMJgRlqfEIrvHnFvCJ3A08kdI9KrGDO+zXxDlk0A="};
+const LOCK = {"salt": "/wgSoyuNExFN4rvbGoFTMw==", "iv": "JDkUur4RgBq3bSVr", "iter": 310000, "ct": "t3FQBeNnJYzQNNBo/bp5rXZUKHnA0LV+xBZsuMErDfEDvi2Pj7nU092vlf7jDLgzqc+qQWgqVcTJYhXSflE8JoxAEb+ux6G6by0RcUDe0r0R40DVN3vroOTKaAE="};
 
 const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm)$/i;          // formats browsers can play
@@ -426,7 +428,7 @@ async function playItem(it, idx, keepTime) {
   if (!it) return;
   // iPad/iPhone only start sound-on playback inside a tap; touching the player here,
   // before any waiting, keeps the tap "valid" for when the real file arrives
-  if (!keepTime) { try { video.load(); video.play().catch(() => {}); } catch {} retries = 0; resumeAt = 0; everPlayed = false; }
+  if (!keepTime) { try { video.load(); video.play().catch(() => {}); } catch {} retries = 0; resumeAt = 0; everPlayed = false; enterFull(); }
   nowItem = it; nowIdx = Math.max(0, idx);
   const ep = it.episodes[nowIdx];
   cancelNext();
@@ -439,6 +441,16 @@ async function playItem(it, idx, keepTime) {
     video.src = await videoURL(ep.id);
     video.play().catch(() => {});
   } catch (err) { note(err && err.result === 7005 ? 'pCloud sharing limit reached for this month' : "Couldn't reach pCloud — check the internet connection"); }
+}
+// Full screen on the whole player (not just the video), so the next episode keeps playing full screen.
+// Works on iPad; on iPhone the home-screen app is already edge to edge.
+function enterFull() {
+  const p = $('#player');
+  if (document.fullscreenElement || document.webkitFullscreenElement) return;
+  try { (p.requestFullscreen || p.webkitRequestFullscreen).call(p)?.catch?.(() => {}); } catch {}
+}
+function exitFull() {
+  try { if (document.fullscreenElement) document.exitFullscreen(); else if (document.webkitFullscreenElement) document.webkitExitFullscreen(); } catch {}
 }
 const note = msg => { const t = $('#pTitle'); t.querySelector('.warn')?.remove(); t.insertAdjacentHTML('beforeend', `<small class="warn">${esc(msg)}</small>`); };
 video.addEventListener('playing', () => { everPlayed = true; retries = 0; $('#pTitle .warn')?.remove(); });
@@ -500,7 +512,7 @@ function showChrome() {
 ['pointermove', 'touchstart', 'click'].forEach(ev => $('#player').addEventListener(ev, showChrome, { passive: true }));
 $('#pBack').onclick = () => {
   if (nowItem && video.duration) saveProgress();
-  video.pause(); video.removeAttribute('src'); video.load(); cancelNext();
+  video.pause(); video.removeAttribute('src'); video.load(); cancelNext(); exitFull();
   $('#player').classList.remove('open'); document.body.style.overflow = '';
   render();
 };
