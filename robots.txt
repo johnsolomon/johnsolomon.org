@@ -1,4 +1,2 @@
 User-agent: *
-Allow: /
-Disallow: /stream/
-Sitemap: https://johnsolomon.org/sitemap.xml
+Disallow: /
