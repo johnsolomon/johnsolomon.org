@@ -122,6 +122,7 @@
   .chips { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; padding:0 var(--gut); margin-bottom:26px; }
   .chip { height:64px; border-radius:var(--r); background:var(--panel-2); font-size:var(--fs-md); font-weight:700; text-align:left; padding:0 16px; }
   .page .search { margin:0 var(--gut) 22px; height:40px; }
+  .res-h { font-size:var(--fs-lg); font-weight:700; margin:22px var(--gut) 10px; }
   .empty { color:var(--muted); padding:0 var(--gut); font-size:var(--fs-md); }
 
   /* ---------- details sheet ---------- */
@@ -524,9 +525,9 @@ function continueRow() {
   return items.slice(0, 12);
 }
 function tileHTML(it, ep) {
-  const sub = ep && it.kind === 'show' ? `${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}`
+  const sub = ep && it.kind === 'show' ? `${ep.n ? 'E' + ep.n + ' · ' : ''}${ep.title}`
     : it.kind === 'show' ? `${it.episodes.length} episodes` : (metaOf(it).genres || [])[0] || '';
-  const p = ep ? pct(ep.id) : 0;
+  const p = ep ? pct(ep.id) : it.kind === 'movie' ? pct(it.episodes[0].id) : 0;   // movies show how far you got too
   return `<button class="tile" data-key="${esc(it.key)}" ${ep ? `data-ep="${esc(ep.id)}"` : ''} style="${bg(ep && it.kind === 'show' ? ep.art : it.art)}">
     <span class="t">${esc(it.title)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</span>${p ? `<span class="bar"><i style="width:${p * 100}%"></i></span>` : ''}</button>`;
 }
@@ -542,10 +543,14 @@ function genreList() {
 const moodItems = k => LIB.all.filter(it => ((metaOf(it).moods || {})[k] || 0) > 0.5).sort((a, b) => metaOf(b).moods[k] - metaOf(a).moods[k]);
 const moodList = () => Object.keys(MOOD_NAMES).map(k => [k, moodItems(k).length]).filter(([, n]) => n);
 const folderRows = () => LIB.rows.filter(r => !r.virtual);
-function matches(q) {
-  q = q.trim().toLowerCase(); if (!q) return [];
-  return LIB.all.filter(it => it.title.toLowerCase().includes(q) || (metaOf(it).genres || []).some(g => g.toLowerCase().includes(q))
-    || it.episodes.some(e => e.title.toLowerCase().includes(q)));
+// Search results: titles and genres first, then individual episodes whose name matches (tap plays that episode)
+function searchHTML(q) {
+  const t = q.trim().toLowerCase();
+  const titles = LIB.all.filter(it => it.title.toLowerCase().includes(t) || (metaOf(it).genres || []).some(g => g.toLowerCase().includes(t)));
+  const eps = LIB.all.filter(it => it.kind === 'show').flatMap(it => it.episodes.filter(e => e.title.toLowerCase().includes(t)).map(e => tileHTML(it, e))).slice(0, 24);
+  if (!titles.length && !eps.length) return `<p class="empty">No matches for “${esc(q.trim())}”</p>`;
+  return (titles.length ? `<div class="grid">${titles.map(it => tileHTML(it)).join('')}</div>` : '')
+    + (eps.length ? `<h2 class="res-h">Episodes</h2><div class="grid">${eps.join('')}</div>` : '');
 }
 
 // the phone's top bar turns solid once the page scrolls under it
@@ -580,7 +585,7 @@ function renderNav() {
     ${folderRows().map(r => item('row', r.name, r.name === 'Shows' ? I.tv : r.name === 'Movies' ? I.film : I.folder, r.name, r.items.length)).join('')}
     ${genres.length ? `<div class="nav-h">Genres</div>${genres.map(([g, n]) => item('genre', g, I.tag, g, n)).join('')}` : ''}
     ${moods.length ? `<div class="nav-h">Moods</div>${moods.map(([m, n]) => item('mood', m, I.spark, MOOD_NAMES[m], n)).join('')}` : ''}`);
-  side.querySelector('.search input').oninput = e => { view = { k: 'search', arg: e.target.value }; render(false); };
+  side.querySelector('.search input').oninput = e => { view = { k: 'search', arg: e.target.value }; side.querySelectorAll('.nav-i.on').forEach(b => b.classList.remove('on')); render(false); };
   const tab = (k, icon, label, on) => `<button data-go="${k}" class="${on ? 'on' : ''}">${icon}<span>${label}</span></button>`;
   const rows = folderRows(), shows = rows.find(r => r.name === 'Shows'), movies = rows.find(r => r.name === 'Movies');
   setHTML($('#tabs'), tab('home', I.home, 'Home', view.k === 'home')
@@ -603,7 +608,7 @@ function render(nav = true) {
   } else if (view.k === 'mood') {
     setApp(page(MOOD_NAMES[view.arg], gridHTML(moodItems(view.arg))));
   } else if (view.k === 'search' && !mobile()) {
-    setApp(page(view.arg.trim() ? `Results for “${view.arg.trim()}”` : 'Search', gridHTML(matches(view.arg))));
+    setApp(page(view.arg.trim() ? `Results for “${view.arg.trim()}”` : 'Search', view.arg.trim() ? searchHTML(view.arg) : ''));
   } else if (view.k === 'browse' || view.k === 'search') {
     // phone: search plus genres, moods and any extra folders as big buttons
     const q = view.k === 'search' ? view.arg : '';
@@ -613,7 +618,7 @@ function render(nav = true) {
       <div id="results"></div></div>`);
     const draw = () => {
       const v = $('#q').value;
-      $('#results').innerHTML = v.trim() ? gridHTML(matches(v))
+      $('#results').innerHTML = v.trim() ? searchHTML(v)
         : chips('Genres', genreList().map(([g]) => `<button class="chip" data-go="genre" data-arg="${esc(g)}">${esc(g)}</button>`))
         + chips('Moods', moodList().map(([m]) => `<button class="chip" data-go="mood" data-arg="${m}">${MOOD_NAMES[m]}</button>`))
         + chips('Folders', folderRows().filter(r => !['Shows', 'Movies'].includes(r.name)).map(r => `<button class="chip" data-go="row" data-arg="${esc(r.name)}">${esc(r.name)}</button>`));
@@ -737,7 +742,7 @@ function forYou(skip = new Set()) {
 /* ---------- player ---------- */
 const video = $('#video'), P = $('#player');
 let nowItem = null, nowIdx = 0, nextIdx = 1, shuffle = false, nuTimer = null, hideTimer = null, lastSave = 0;
-let retries = 0, resumeAt = 0, everPlayed = false;
+let retries = 0, resumeAt = 0, everPlayed = false, playTicket = 0;
 const fmt = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
 
@@ -760,10 +765,13 @@ async function playItem(it, idx, keepTime) {
   $('#app').style.overflowY = 'hidden';
   paintTime(); showChrome();
   setNowPlaying(it, ep);
+  const ticket = ++playTicket;           // only the latest choice may start playing
   try {
-    video.src = await videoURL(ep.id);
+    const url = await videoURL(ep.id);
+    if (ticket !== playTicket || !P.classList.contains('open')) return;   // closed, or something else was picked meanwhile
+    video.src = url;
     video.play().catch(() => {});
-  } catch (err) { P.classList.remove('wait'); note(err && err.result === 7005 ? 'pCloud’s sharing limit for this month has been reached' : 'Couldn’t reach pCloud — check the internet connection'); }
+  } catch (err) { if (ticket !== playTicket || !P.classList.contains('open')) return; P.classList.remove('wait'); note(err && err.result === 7005 ? 'pCloud’s sharing limit for this month has been reached' : 'Couldn’t reach pCloud — check the internet connection'); }
 }
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
 const canFull = !/FamilyTV-TV|Android TV|GoogleTV|AFT[A-Z]/i.test(navigator.userAgent) && !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
@@ -884,7 +892,8 @@ video.addEventListener('error', () => {
   if (retries < 3) {
     retries++; resumeAt = Math.max(resumeAt, video.currentTime || 0);
     note('Reconnecting…');
-    setTimeout(() => playItem(nowItem, nowIdx, true), 1500 * retries);
+    const ticket = playTicket;
+    setTimeout(() => { if (ticket === playTicket && P.classList.contains('open')) playItem(nowItem, nowIdx, true); }, 1500 * retries);
   } else { P.classList.remove('wait'); note(everPlayed ? 'Lost connection — go back and try again' : 'This file can’t play in a browser — drop it into the Inbox to convert it'); }
 });
 window.addEventListener('online', () => { if (P.classList.contains('open') && video.error) { retries = 0; playItem(nowItem, nowIdx, true); } });
@@ -1068,7 +1077,7 @@ $('#pBack').onclick = e => {
   e.stopPropagation();
   sleep = {}; paintSleep(); shuffle = false; $('#sleepMenu').classList.remove('open');
   if (nowItem && video.duration) saveProgress();
-  video.pause(); video.removeAttribute('src'); video.load(); cancelNext(); exitFull();
+  playTicket++; video.pause(); video.removeAttribute('src'); video.load(); cancelNext(); exitFull();
   P.classList.remove('open', 'hide', 'wait'); $('#app').style.overflowY = '';
   render();
 };
