@@ -26,7 +26,10 @@
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   [hidden] { display:none !important; }
   html { background:var(--bg); -webkit-text-size-adjust:100%; text-size-adjust:100%; }
-  html, body { margin:0; color:var(--fg); overscroll-behavior-y:none; }
+  html, body { margin:0; color:var(--fg); overscroll-behavior:none; height:100%; overflow:hidden; }
+  /* The page itself never scrolls — only #app does. On iPhone Safari a scrolling page makes the browser bar
+     grow and shrink, which moved the tab bar and swallowed taps near the bottom of the screen. */
+  #app { position:fixed; inset:0; overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
   body { font:400 var(--fs-md)/1.45 var(--font); background:var(--bg); -webkit-font-smoothing:antialiased; -webkit-user-select:none; user-select:none; }
   button, input { font:inherit; color:inherit; margin:0; -webkit-appearance:none; appearance:none; }
   button { background:none; border:0; padding:0; cursor:pointer; touch-action:manipulation; }
@@ -60,12 +63,14 @@
   .tabs button { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; font-weight:600; color:var(--muted); padding:4px 0; }
   .tabs svg { width:24px; height:24px; }
   .tabs button.on { color:#fff; }
-  .topbar { position:fixed; z-index:20; inset:0 0 auto 0; padding:calc(env(safe-area-inset-top) + 12px) var(--gut) 14px; background:linear-gradient(#0a0a0bdd, #0a0a0b00); pointer-events:none; }
+  .topbar { position:fixed; z-index:20; inset:0 0 auto 0; padding:calc(env(safe-area-inset-top) + 12px) var(--gut) 14px; background:linear-gradient(#0a0a0bdd, #0a0a0b00); pointer-events:none;
+    border-bottom:1px solid transparent; transition:background-color .2s, border-color .2s; }
+  .topbar.solid { background:#0d0d0fe8; -webkit-backdrop-filter:blur(20px) saturate(1.6); backdrop-filter:blur(20px) saturate(1.6); border-bottom-color:var(--line); }
 
   @media (min-width:768px) and (min-height:501px), (min-width:768px) and (hover:hover) {
     .side { display:block; }
     .tabs, .topbar { display:none; }
-    #app { margin-left:var(--side); }
+    #app { left:var(--side); }
   }
   @media (max-width:767px), (max-height:500px) and (hover:none) {
     :root { --tabs:calc(58px + env(safe-area-inset-bottom)); --tile:clamp(150px, 42vw, 220px); }
@@ -120,7 +125,7 @@
   .empty { color:var(--muted); padding:0 var(--gut); font-size:var(--fs-md); }
 
   /* ---------- details sheet ---------- */
-  .sheet-bg { position:fixed; inset:0; z-index:40; background:#000b; display:none; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .sheet-bg { position:fixed; inset:0; z-index:40; background:#000b; display:none; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
   .sheet-bg.open { display:block; }
   .sheet { position:relative; max-width:860px; margin:5vh auto; background:var(--panel); border-radius:14px; overflow:hidden; }
   .sheet-art { aspect-ratio:16/8; background:#1a1a1e center/cover no-repeat; position:relative; }
@@ -154,7 +159,8 @@
   .player video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; }
   .pc { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:space-between; transition:opacity .25s;
     background:linear-gradient(#000a 0%, #0000 22%, #0000 62%, #000c 100%); }
-  .player.hide .pc { opacity:0; pointer-events:none; }
+  .player.hide .pc { opacity:0; }
+  .player.hide .pc * { pointer-events:none; }   /* the tap lands on the picture and brings the controls back */
   .player.hide { cursor:none; }
   .pc-top { display:flex; align-items:center; gap:12px;
     padding:calc(env(safe-area-inset-top) + 14px) max(var(--gut), env(safe-area-inset-right)) 0 max(var(--gut), env(safe-area-inset-left)); }
@@ -542,10 +548,25 @@ function matches(q) {
     || it.episodes.some(e => e.title.toLowerCase().includes(q)));
 }
 
+// the phone's top bar turns solid once the page scrolls under it
+$('#app').addEventListener('scroll', () => $('.topbar').classList.toggle('solid', $('#app').scrollTop > 40), { passive: true });
+let appHTML = null;
+function setApp(html) {
+  const app = $('#app'), typing = document.activeElement?.matches?.('input') && app.contains(document.activeElement);
+  if (html === appHTML || typing) return false;
+  const rails = {};
+  app.querySelectorAll('.row').forEach(r => { const h = r.querySelector('h2'), x = r.querySelector('.rail'); if (h && x) rails[h.textContent] = x.scrollLeft; });
+  app.innerHTML = html; appHTML = html;
+  app.querySelectorAll('.row').forEach(r => { const h = r.querySelector('h2'), x = r.querySelector('.rail'); if (h && x && rails[h.textContent]) x.scrollLeft = rails[h.textContent]; });
+  return true;
+}
+const shownHTML = new WeakMap();
+const setHTML = (el, html) => { if (shownHTML.get(el) !== html) { el.innerHTML = html; shownHTML.set(el, html); } };
 function go(k, arg) {
   view = { k, arg };
+  if (k !== 'search' && document.activeElement?.matches?.('input')) document.activeElement.blur();   // iPhone keeps the search box focused otherwise
   if (k !== 'search') { const s = $('#side .search input'); if (s) s.value = ''; }
-  render(); window.scrollTo(0, 0);
+  render(); $('#app').scrollTop = 0;
 }
 const same = (k, arg) => view.k === k && (arg === undefined || view.arg === arg);
 function renderNav() {
@@ -553,43 +574,43 @@ function renderNav() {
   const genres = genreList(), moods = moodList();
   const side = $('#side');
   const q = side.querySelector('.search input')?.value || '';
-  side.innerHTML = `<div class="brand">Family<span>TV</span></div>
+  if (!side.contains(document.activeElement) || !document.activeElement.matches('input')) setHTML(side, `<div class="brand">Family<span>TV</span></div>
     <label class="search">${I.search}<input type="search" placeholder="Search" value="${esc(q)}" enterkeyhint="search" autocomplete="off"></label>
     ${item('home', null, I.home, 'Home')}
     ${folderRows().map(r => item('row', r.name, r.name === 'Shows' ? I.tv : r.name === 'Movies' ? I.film : I.folder, r.name, r.items.length)).join('')}
     ${genres.length ? `<div class="nav-h">Genres</div>${genres.map(([g, n]) => item('genre', g, I.tag, g, n)).join('')}` : ''}
-    ${moods.length ? `<div class="nav-h">Moods</div>${moods.map(([m, n]) => item('mood', m, I.spark, MOOD_NAMES[m], n)).join('')}` : ''}`;
+    ${moods.length ? `<div class="nav-h">Moods</div>${moods.map(([m, n]) => item('mood', m, I.spark, MOOD_NAMES[m], n)).join('')}` : ''}`);
   side.querySelector('.search input').oninput = e => { view = { k: 'search', arg: e.target.value }; render(false); };
   const tab = (k, icon, label, on) => `<button data-go="${k}" class="${on ? 'on' : ''}">${icon}<span>${label}</span></button>`;
   const rows = folderRows(), shows = rows.find(r => r.name === 'Shows'), movies = rows.find(r => r.name === 'Movies');
-  $('#tabs').innerHTML = tab('home', I.home, 'Home', view.k === 'home')
+  setHTML($('#tabs'), tab('home', I.home, 'Home', view.k === 'home')
     + (shows ? `<button data-go="row" data-arg="Shows" class="${same('row', 'Shows') ? 'on' : ''}">${I.tv}<span>Shows</span></button>` : '')
     + (movies ? `<button data-go="row" data-arg="Movies" class="${same('row', 'Movies') ? 'on' : ''}">${I.film}<span>Movies</span></button>` : '')
-    + tab('browse', I.grid, 'Browse', ['browse', 'genre', 'mood', 'search'].includes(view.k) || (view.k === 'row' && !['Shows', 'Movies'].includes(view.arg)));
+    + tab('browse', I.grid, 'Browse', ['browse', 'genre', 'mood', 'search'].includes(view.k) || (view.k === 'row' && !['Shows', 'Movies'].includes(view.arg))));
 }
 
 function render(nav = true) {
   const f = document.activeElement, sig = f && f !== document.body ? (f.dataset?.key || '') + '|' + (f.dataset?.go || '') + '|' + (f.dataset?.arg || '') + '|' + (f.dataset?.play || '') : '';
   setTimeout(() => { if (sig && document.activeElement === document.body) [...document.querySelectorAll('[data-key],[data-go],[data-play]')].find(x => (x.dataset.key || '') + '|' + (x.dataset.go || '') + '|' + (x.dataset.arg || '') + '|' + (x.dataset.play || '') === sig)?.focus({ preventScroll: true }); }, 0);
   if (nav) renderNav();
-  if (!LIB.all.length) { $('#app').innerHTML = `<div class="msg"><div><b>Nothing here yet</b>Drop videos into the Family TV Inbox on the Mac and they'll show up here.</div></div>`; return; }
+  if (!LIB.all.length) { setApp(`<div class="msg"><div><b>Nothing here yet</b>Drop videos into the Family TV Inbox on the Mac and they'll show up here.</div></div>`); return; }
   const page = (title, body) => `<div class="page"><h1>${esc(title)}</h1>${body}</div>`;
   if (view.k === 'row') {
     const r = LIB.rows.find(x => x.name === view.arg) || { items: [] };
-    $('#app').innerHTML = page(view.arg, gridHTML(r.items));
+    setApp(page(view.arg, gridHTML(r.items)));
   } else if (view.k === 'genre') {
-    $('#app').innerHTML = page(view.arg, gridHTML(LIB.all.filter(it => (metaOf(it).genres || []).includes(view.arg))));
+    setApp(page(view.arg, gridHTML(LIB.all.filter(it => (metaOf(it).genres || []).includes(view.arg)))));
   } else if (view.k === 'mood') {
-    $('#app').innerHTML = page(MOOD_NAMES[view.arg], gridHTML(moodItems(view.arg)));
+    setApp(page(MOOD_NAMES[view.arg], gridHTML(moodItems(view.arg))));
   } else if (view.k === 'search' && !mobile()) {
-    $('#app').innerHTML = page(view.arg.trim() ? `Results for “${view.arg.trim()}”` : 'Search', gridHTML(matches(view.arg)));
+    setApp(page(view.arg.trim() ? `Results for “${view.arg.trim()}”` : 'Search', gridHTML(matches(view.arg))));
   } else if (view.k === 'browse' || view.k === 'search') {
     // phone: search plus genres, moods and any extra folders as big buttons
     const q = view.k === 'search' ? view.arg : '';
     const chips = (h, list) => list.length ? `<section class="row"><h2>${h}</h2></section><div class="chips">${list.join('')}</div>` : '';
-    $('#app').innerHTML = `<div class="page"><h1>Browse</h1>
+    setApp(`<div class="page"><h1>Browse</h1>
       <label class="search">${I.search}<input type="search" id="q" placeholder="Shows, movies, episodes" value="${esc(q)}" enterkeyhint="search" autocomplete="off"></label>
-      <div id="results"></div></div>`;
+      <div id="results"></div></div>`);
     const draw = () => {
       const v = $('#q').value;
       $('#results').innerHTML = v.trim() ? gridHTML(matches(v))
@@ -609,7 +630,7 @@ function renderHome() {
   const hero = (Object.keys(progress).length && picks[0]) || LIB.newest;
   const hm = metaOf(hero), heroImg = HERO_ART[hero.art] || ART[hero.art];
   const kicker = [hero.kind === 'show' ? 'Series' : 'Movie', hm.year || hero.year, (hm.genres || [])[0]].filter(Boolean).join(' · ');
-  $('#app').innerHTML = `
+  setApp(`
     <section class="hero"><div class="hero-img" style="background-image:${heroImg ? `url('${heroImg}')` : 'none'}"></div>
       <div class="hero-info"><div class="kicker">${esc(kicker)}</div><h1>${esc(hero.title)}</h1>
         ${hm.summary ? `<p>${esc(hm.summary)}</p>` : ''}
@@ -618,7 +639,7 @@ function renderHome() {
       ${rowHTML('Continue Watching', cont, true)}
       ${N >= 4 ? rowHTML(evening() ? 'Tonight’s picks' : 'Picked for you', picks.slice(0, 12)) : ''}
       ${LIB.rows.map(r => rowHTML(r.name, r.items)).join('')}
-    </div>`;
+    </div>`);
   if (!HERO_ART[hero.art]) thumbs([hero.art], '1280x720').then(o => {      // sharper picture for the big banner
     Object.assign(HERO_ART, o); const el = $('.hero-img'); if (el && o[hero.art]) el.style.backgroundImage = `url('${o[hero.art]}')`;
   });
@@ -666,7 +687,7 @@ function openSheet(it, season) {
         <span class="ep-t">${esc(e.title)}</span></button>`; }).join('')}</div>`;
   if (!season) $('#sheetBg').scrollTop = 0;
   $('#sheetBg').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  $('#app').style.overflowY = 'hidden';
   $('#sheet').onclick = ev => {
     const s = ev.target.closest('[data-season]'); if (s) return openSheet(it, s.dataset.season);
     if (ev.target.closest('[data-shuffle]')) { closeSheet(); shuffle = true; return playItem(it, Math.floor(Math.random() * it.episodes.length)); }
@@ -674,7 +695,7 @@ function openSheet(it, season) {
     if (ev.target.closest('#sheetClose')) closeSheet();
   };
 }
-function closeSheet() { $('#sheetBg').classList.remove('open'); document.body.style.overflow = ''; }
+function closeSheet() { $('#sheetBg').classList.remove('open'); $('#app').style.overflowY = ''; }
 $('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') closeSheet(); });
 
 /* ---------- genres, moods and picks (worked out by the server's AI; see loadMeta) ---------- */
@@ -736,7 +757,7 @@ async function playItem(it, idx, keepTime) {
     ? `${esc(it.title)}<small>${ep.seasonLabel ? esc(ep.seasonLabel) + ' · ' : ''}${ep.n ? 'E' + ep.n + ' · ' : ''}${esc(ep.title)}</small>` : esc(it.title);
   $('#pNext').hidden = !upNext();
   P.classList.add('open', 'wait');
-  document.body.style.overflow = 'hidden';
+  $('#app').style.overflowY = 'hidden';
   paintTime(); showChrome();
   setNowPlaying(it, ep);
   try {
@@ -1048,7 +1069,7 @@ $('#pBack').onclick = e => {
   sleep = {}; paintSleep(); shuffle = false; $('#sleepMenu').classList.remove('open');
   if (nowItem && video.duration) saveProgress();
   video.pause(); video.removeAttribute('src'); video.load(); cancelNext(); exitFull();
-  P.classList.remove('open', 'hide', 'wait'); document.body.style.overflow = '';
+  P.classList.remove('open', 'hide', 'wait'); $('#app').style.overflowY = '';
   render();
 };
 paintPlay();
@@ -1123,7 +1144,7 @@ function askPasscode() {
   else if (r.status === 0 && ls.get('ftv.tree', null)) { /* offline: show the saved library; videos need the internet anyway */ }
   else {
     try { localStorage.removeItem('ftv.token'); localStorage.removeItem('ftv.tree'); } catch {}
-    $('#app').innerHTML = ''; await askPasscode();
+    setApp(''); await askPasscode();
   }
   const cached = ls.get('ftv.tree', null);
   if (cached) { try { LIB = buildCatalog(cached); render(); } catch {} }
@@ -1131,7 +1152,7 @@ function askPasscode() {
   catch (err) {
     if (cached) return;                          // keep showing the saved library
     const why = { 7001: 'The pCloud link isn’t valid.', 7002: 'This pCloud link was deleted.', 7004: 'This pCloud link has expired.', 7005: 'pCloud’s monthly sharing limit for this link has been reached.' }[err && err.result];
-    $('#app').innerHTML = `<div class="msg"><div><b>Can't reach the video library</b>${why || 'Check the internet connection and try again.'}</div></div>`;
+    setApp(`<div class="msg"><div><b>Can't reach the video library</b>${why || 'Check the internet connection and try again.'}</div></div>`);
   }
   // pick up newly added videos when the app comes back to the foreground
   const idle = () => !document.hidden && !$('#player').classList.contains('open');
