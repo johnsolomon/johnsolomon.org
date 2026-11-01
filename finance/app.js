@@ -153,14 +153,15 @@ function enter(me) {
   if (sessionStorage.getItem('justLinked')) { sessionStorage.removeItem('justLinked'); portal('finish').then(() => { invalidate(); route(); toast('Account linked. First sync running.'); }).catch(() => {}); }
 }
 addEventListener('hashchange', route);
-const TABS = { home: 'home', accounts: 'accounts', activity: 'activity', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', more: 'more', invest: 'more', credit: 'more', settings: 'more', cashflow: 'more' };
+const TABS = { home: 'home', activity: 'activity', insights: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', more: 'plan' };
 function route() {
   if (screens.app.hidden) return;
   const r = (location.hash || '#home').slice(1).split('/')[0];
   state.route = TABS[r] ? r : 'home';
-  $$('.tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === TABS[state.route]));
+  $$('.tabs a, .topbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === TABS[state.route] || a.dataset.tab === state.route));
   const view = $('#view');
   view.innerHTML = '<p class="muted">Loading…</p>';
+  if (state.route === 'cashflow') state.route = 'insights'; if (state.route === 'credit') state.route = 'debt'; if (state.route === 'more') state.route = 'budget';
   (VIEWS[state.route] || VIEWS.home)(view).catch((e) => { view.innerHTML = '<p class="err">' + h(e.message) + '</p>'; });
   window.scrollTo(0, 0);
 }
@@ -183,6 +184,12 @@ const D = {
   credit: () => cached('credit', () => q('credit_scores', (s) => s.order('as_of'))),
   fees: () => cached('fees', () => q('v_fees_interest', (s) => s.gte('month', iso(new Date(new Date().getFullYear(), new Date().getMonth() - 11, 1))).order('month'))),
   rules: () => cached('rules', () => q('category_rules', (s) => s.order('priority').order('id'))),
+  summary: () => cached('summary', () => q('v_monthly_summary', (s) => s.order('month'))),
+  nwm: () => cached('nwm', () => q('v_net_worth_monthly', (s) => s.order('month'))),
+  weekday: () => cached('weekday', () => q('v_weekday_spend', (s) => s.order('dow'))),
+  concentration: () => cached('concentration', () => q('v_concentration')),
+  drift: () => cached('drift', () => q('v_allocation_drift')),
+  settings: () => cached('settings', async () => Object.fromEntries((await q('app_settings')).map((r) => [r.key, r.value]))),
   lastSync: () => cached('lastSync', () => q('sync_runs', (s) => s.order('id', { ascending: false }).limit(1))),
   tx: (opts) => q('transactions', (s) => {
     s = s.order('date', { ascending: false }).order('amount', { ascending: false }).limit(opts.limit || 200);
@@ -249,7 +256,8 @@ const catOptions = (sel) => CATEGORIES.map((c) => `<option ${c === sel ? 'select
 const VIEWS = {};
 
 VIEWS.home = async (view) => {
-  const [nw, nwh, cf, acc, rec, spend, ls] = await Promise.all([D.nw(), D.nwh(), D.cashflow(), D.accounts(), D.recurring().catch(() => []), D.spend(), D.lastSync()]);
+  const [nw, nwh, cf, acc, rec, spend, ls, fc] = await Promise.all([D.nw(), D.nwh(), D.cashflow(), D.accounts(), D.recurring().catch(() => []), D.spend(), D.lastSync(), rpc('cash_forecast', { p_days: 30 }).catch(() => [])]);
+  const low = fc.length ? fc.reduce((m, r) => (num(r.balance) < num(m.balance) ? r : m), fc[0]) : null;
   const n = nw[0] || {};
   const first = nwh[0], last = nwh[nwh.length - 1];
   const change = first && last && first !== last ? num(last.net_worth) - num(first.net_worth) : null;
@@ -276,11 +284,11 @@ VIEWS.home = async (view) => {
         <div class="row between"><h2>Spent this month</h2><span class="stat"><span class="v">${money(num(cur.spending))}</span></span></div>
         <p class="muted small">${prev.spending ? money(num(prev.spending)) + ' all of ' + fmtMon(prevM) : 'No previous month yet'} · income ${money(num(cur.income))}</p>
         <div class="list">${topCats.map((c) => `<div class="item tap" data-go="#activity/${encodeURIComponent(c.category)}"><span class="t">${h(c.category)}</span><span class="a">${money(num(c.spent))}</span></div>`).join('') || '<p class="empty">No spending yet this month.</p>'}</div>
-        <a class="link small" href="#cashflow">Cash flow by month</a>
+        <a class="link small" href="#insights">Cash forecast and savings rate</a>
       </div>
     </div>
     <div class="card">
-      <h2>Coming up</h2>
+      <div class="row between wrap"><h2>Coming up</h2>${low ? `<a class="small ${num(low.balance) < 0 ? 'down' : num(low.balance) < 300 ? 'warn' : 'muted'}" href="#insights">cash low point ${money(num(low.balance))} on ${fmtDay(low.as_of)}</a>` : ''}</div>
       <div class="list">
         ${due.map((a) => `<div class="item"><span class="t">${h(a.nickname || a.name)} payment</span><span class="a">${a.minimum_payment_amount ? money2(num(a.minimum_payment_amount)) + ' min' : ''}</span><span class="s">${fmtDayLong(a.next_payment_due_date)}${a.is_overdue ? ' · <span class="down">overdue</span>' : ''}</span></div>`).join('')}
         ${soon.map((r) => `<div class="item"><span class="t">${h(r.merchant)}</span><span class="a">${money2(num(r.typical_amount))}</span><span class="s">expected ${fmtDayLong(r.next_expected)} · ${h(r.cadence)}</span></div>`).join('')}
@@ -415,38 +423,10 @@ function editTx(t, after) {
   };
 }
 
-VIEWS.cashflow = async (view) => {
-  const [cf, spend] = await Promise.all([D.cashflow(), D.spend()]);
-  const months = [...new Set(spend.map((r) => r.month))].sort().reverse();
-  const sel = months[0];
-  const avg = (k) => cf.length ? cf.reduce((s, r) => s + num(r[k]), 0) / cf.length : 0;
-  view.innerHTML = `
-    <h1>Cash flow</h1>
-    <div class="card">
-      <div class="row between wrap"><h2>Money in and out</h2><span class="legend"><span><i style="background:var(--up)"></i>In</span><span><i style="background:var(--bar2)"></i>Out</span></span></div>
-      ${barChart(cf, ['income', 'spending'])}
-      <div class="row wrap"><span class="stat"><span class="v">${money(avg('income'))}</span><span class="l">avg monthly income</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money(avg('spending'))}</span><span class="l">avg monthly spending</span></span><span style="width:16px"></span><span class="stat"><span class="v ${avg('income') - avg('spending') >= 0 ? 'up' : 'down'}">${signed(avg('income') - avg('spending'))}</span><span class="l">avg left over</span></span></div>
-      <p class="muted small">Transfers between your own accounts and credit-card payments are left out, so money isn’t counted twice.</p>
-    </div>
-    <div class="card">
-      <div class="row between wrap"><h2>By category</h2><select id="cf-month">${months.map((m) => `<option value="${m}">${fmtMonth(m)}</option>`).join('')}</select></div>
-      <div id="cf-cats"></div>
-    </div>`;
-  const draw = (m) => {
-    const rows = spend.filter((r) => r.month === m).sort((a, b) => num(b.spent) - num(a.spent));
-    const total = rows.reduce((s, r) => s + num(r.spent), 0), max = num(rows[0]?.spent) || 1;
-    $('#cf-cats').innerHTML = rows.length ? `<p class="muted small">${money(total)} total</p><div class="list">` + rows.map((r) => `<div class="item tap" data-go="#activity/${encodeURIComponent(r.category)}"><span class="t">${h(r.category)}</span><span class="a">${money(num(r.spent))}<span class="s">${(100 * num(r.spent) / total).toFixed(0)}% · ${r.n} items</span></span><span class="s" style="grid-column:1/-1">${progress(num(r.spent), max)}</span></div>`).join('') + '</div>' : '<p class="empty">Nothing for this month.</p>';
-    bindGo($('#cf-cats'));
-  };
-  $('#cf-month').onchange = (e) => draw(e.target.value);
-  if (sel) draw(sel);
-};
-
 VIEWS.plan = async (view) => { location.hash = '#budget'; };
 
 function subnav(items, on) { return `<div class="sub">${items.map(([k, l]) => `<a href="#${k}" class="${k === on ? 'on' : ''}">${l}</a>`).join('')}</div>`; }
-const PLAN_NAV = [['budget', 'Budget'], ['recurring', 'Recurring'], ['goals', 'Goals']];
-const MORE_NAV = [['invest', 'Investments'], ['credit', 'Credit & fees'], ['cashflow', 'Cash flow'], ['settings', 'Settings']];
+const PLAN_NAV = [['budget', 'Budget'], ['recurring', 'Recurring'], ['goals', 'Goals'], ['debt', 'Debt'], ['future', 'Future']];
 
 VIEWS.budget = async (view) => {
   const [status, budgets, spend] = await Promise.all([D.budget(), D.budgets(), D.spend()]);
@@ -546,75 +526,18 @@ VIEWS.goals = async (view) => {
     };
   };
   $('#btn-goal').onclick = () => edit(null);
+  for (const g of goals.filter((x) => x.kind !== 'spending_cap' && x.target_date && x.status !== 'paused')) {
+    rpc('goal_odds', { p_goal_id: g.id }).then((o) => { const r = o && o[0]; const el = $(`[data-goal="${g.id}"]`); if (!r || !el) return;
+      el.insertAdjacentHTML('beforeend', `<p class="small"><b class="${num(r.p_hit) >= 70 ? 'up' : num(r.p_hit) >= 40 ? 'warn' : 'down'}">${Number(r.p_hit).toFixed(0)}% chance</b> of making it by then, going by your last 12 months · needs ${money(num(r.needed_per_month))}/mo, you’ve kept a median ${money(num(r.median_saving))}/mo · likely end point ${money(num(r.p10_end))}–${money(num(r.p90_end))}</p>`); }).catch(() => {});
+  }
   view.onclick = (e) => { const el = e.target.closest('[data-goal]'); if (el) edit(goals.find((x) => String(x.id) === el.dataset.goal)); };
-};
-
-VIEWS.more = async (view) => {
-  view.innerHTML = `<h1>More</h1><div class="card"><div class="list">${[...MORE_NAV].map(([k, l]) => `<a class="item tap" href="#${k}"><span class="t">${l}</span><span class="a muted">›</span></a>`).join('')}</div></div>`;
-};
-
-VIEWS.invest = async (view) => {
-  const [hold, alloc, acc, nwh] = await Promise.all([D.holdings(), D.alloc(), D.accounts(), D.nwh()]);
-  const inv = acc.filter((a) => a.type === 'investment' && !a.hidden);
-  const total = inv.reduce((s, a) => s + num(a.current_balance), 0);
-  const cost = hold.reduce((s, x) => s + (num(x.cost_basis) || 0), 0), val = hold.reduce((s, x) => s + num(x.institution_value), 0);
-  const colors = ['var(--bar2)', 'var(--up)', 'var(--warn)', 'var(--down)', 'var(--muted)', 'var(--bar)'];
-  const typeName = { equity: 'Stocks', etf: 'ETFs', mutual_fund: 'Mutual funds', fixed_income: 'Bonds', cash: 'Cash', derivative: 'Options', cryptocurrency: 'Crypto', other: 'Other' };
-  view.innerHTML = `
-    <h1>Investments</h1>${subnav(MORE_NAV, 'invest')}
-    ${inv.length ? `
-    <div class="card">
-      <div class="hero"><span class="label">Invested</span><span class="big">${money(total)}</span>${cost ? `<span class="small ${val - cost >= 0 ? 'up' : 'down'}">${signed(val - cost)} vs cost (${pct(100 * (val - cost) / cost)})</span>` : ''}</div>
-      ${alloc.length ? `<div class="alloc">${alloc.map((a, i) => `<i style="width:${a.pct}%;background:${colors[i % colors.length]}" title="${h(a.asset_type)}"></i>`).join('')}</div>
-      <div class="legend" style="flex-wrap:wrap">${alloc.map((a, i) => `<span><i style="background:${colors[i % colors.length]}"></i>${h(typeName[a.asset_type] || a.asset_type)} ${Number(a.pct).toFixed(0)}%</span>`).join('')}</div>` : ''}
-      <div class="list">${inv.map((a) => `<div class="item"><span class="t">${h(a.nickname || a.name)}</span><span class="a">${money(num(a.current_balance))}</span><span class="s">${h(a.institution_name)} · ${h(a.subtype || '')}</span></div>`).join('')}</div>
-    </div>
-    <div class="card"><h2>Holdings</h2><div class="scroll"><table class="data"><thead><tr><th>Security</th><th class="num">Value</th><th class="num">Gain</th><th class="num">Qty</th></tr></thead><tbody>
-      ${hold.map((x) => { const g = x.cost_basis != null ? num(x.institution_value) - num(x.cost_basis) : null; return `<tr><td>${h(x.ticker || x.security_name || '')}<br><span class="muted small">${h(x.ticker ? x.security_name : x.account_name)}</span></td><td class="num">${money(num(x.institution_value))}</td><td class="num ${g == null ? '' : g >= 0 ? 'up' : 'down'}">${g == null ? '—' : signed(g)}</td><td class="num">${Number(x.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}</td></tr>`; }).join('') || '<tr><td colspan="4" class="empty">No holdings reported yet.</td></tr>'}
-    </tbody></table></div></div>` : '<div class="card"><p class="empty">No investment accounts linked. Add a brokerage or retirement account from Accounts.</p></div>'}`;
-};
-
-VIEWS.credit = async (view) => {
-  const [credit, fees, acc] = await Promise.all([D.credit(), D.fees(), D.accounts()]);
-  const last = credit[credit.length - 1], prev = credit[credit.length - 2];
-  const cards = acc.filter((a) => a.type === 'credit' && !a.hidden);
-  const util = cards.reduce((s, a) => s + num(a.current_balance), 0), limit = cards.reduce((s, a) => s + (num(a.credit_limit) || 0), 0);
-  const feesYear = fees.reduce((s, r) => s + num(r.fees), 0), intYear = fees.reduce((s, r) => s + num(r.interest_paid), 0), earned = fees.reduce((s, r) => s + num(r.interest_earned), 0);
-  view.innerHTML = `
-    <h1>Credit & fees</h1>${subnav(MORE_NAV, 'credit')}
-    <div class="card">
-      <div class="row between wrap"><div class="hero"><span class="label">Credit score</span><span class="big">${last ? last.score : '—'}</span><span class="muted small">${last ? `${h(last.bureau || '')} ${fmtDay(last.as_of)}${prev ? ` · <span class="${last.score - prev.score >= 0 ? 'up' : 'down'}">${last.score - prev.score >= 0 ? '+' : ''}${last.score - prev.score}</span> since ${fmtDay(prev.as_of)}` : ''}` : 'Log it from your card’s app whenever you check it'}</span></div><button class="primary" id="btn-score">Log score</button></div>
-      ${credit.length > 1 ? lineChart(credit.map((c) => ({ t: c.as_of, v: c.score })), 640, 150, (v) => String(Math.round(v))) : ''}
-      ${limit ? `<p class="small">Card balances ${money(util)} of ${money(limit)} limits · <b class="${util / limit > 0.3 ? 'warn' : 'up'}">${(100 * util / limit).toFixed(0)}% used</b> <span class="muted">(under 30% helps the score)</span></p>` : ''}
-    </div>
-    <div class="card">
-      <h2>Fees and interest, last 12 months</h2>
-      <div class="row wrap"><span class="stat"><span class="v ${feesYear ? 'down' : ''}">${money2(feesYear)}</span><span class="l">fees paid</span></span><span style="width:16px"></span><span class="stat"><span class="v ${intYear ? 'down' : ''}">${money2(intYear)}</span><span class="l">interest paid</span></span><span style="width:16px"></span><span class="stat"><span class="v up">${money2(earned)}</span><span class="l">interest earned</span></span></div>
-      ${barChart(fees.map((r) => ({ month: r.month, fees: num(r.fees), interest_paid: num(r.interest_paid) })), ['fees', 'interest_paid'], 640, 140)}
-      <div class="legend"><span><i style="background:var(--bar2)"></i>Fees</span><span><i style="background:var(--bar)"></i>Interest</span></div>
-      <div class="list">${cards.map((a) => `<div class="item"><span class="t">${h(a.nickname || a.name)}</span><span class="a">${a.interest_rate != null ? Number(a.interest_rate).toFixed(2) + '% APR' : '—'}</span><span class="s">${a.next_payment_due_date ? 'due ' + fmtDay(a.next_payment_due_date) : ''}${a.minimum_payment_amount ? ' · minimum ' + money2(num(a.minimum_payment_amount)) : ''}${a.is_overdue ? ' · <span class="down">overdue</span>' : ''}</span></div>`).join('')}</div>
-    </div>`;
-  $('#btn-score').onclick = () => {
-    openSheet(`<h2>Log credit score</h2><div class="form">
-      <label class="field">Score <input id="c-score" class="short" type="number" inputmode="numeric" min="300" max="850" value="${last ? last.score : ''}"></label>
-      <label class="field">Date <input id="c-date" type="date" value="${today()}" style="width:auto"></label>
-      <label class="field">Bureau <select id="c-bureau"><option>Experian</option><option>Equifax</option><option>TransUnion</option></select></label>
-      <label class="field">Seen in <input id="c-src" type="text" size="16" value="${h(last?.source || 'Amex app')}"></label>
-      <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
-    if (last?.bureau) $('#c-bureau').value = last.bureau;
-    $('#sheet-body').onclick = async (e) => {
-      if (e.target.closest('[data-cancel]')) closeSheet();
-      if (e.target.closest('[data-save]')) { const s = Number($('#c-score').value); if (!(s >= 300 && s <= 850)) return toast('Score is 300–850');
-        try { await rpc('log_credit_score', { p_as_of: $('#c-date').value, p_score: s, p_bureau: $('#c-bureau').value, p_source: $('#c-src').value }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
-    };
-  };
 };
 
 VIEWS.settings = async (view) => {
   const [{ data: pk }, rules, ls] = await Promise.all([sb.auth.passkey.list().catch(() => ({ data: [] })), D.rules(), D.lastSync()]);
   const keys = (pk && (pk.passkeys || pk)) || [];
   view.innerHTML = `
-    <h1>Settings</h1>${subnav(MORE_NAV, 'settings')}
+    <h1>Settings</h1>
     <div class="card"><h2>Signed in as ${h(state.me.display_name || '')}</h2>
       <p class="muted small">Locks itself after 5 minutes without a touch, or when the app has been in the background 5 minutes. Face ID to come back.</p>
       <div class="row wrap"><button class="quiet" id="btn-sync">Refresh from banks now</button><button class="quiet" id="btn-signout">Sign out</button><button class="quiet" id="btn-signout-all">Sign out everywhere</button></div>
@@ -639,6 +562,279 @@ VIEWS.settings = async (view) => {
     if (dr) { try { await rpc('delete_rule', { p_id: Number(dr.dataset.delrule) }); invalidate(); route(); } catch (err) { toast(err.message); } }
   };
 };
+
+// ---------- Insights ----------
+const INS_NAV = [['insights', 'Cash'], ['spending', 'Spending'], ['income', 'Income'], ['fees', 'Fees']];
+const fmtPct = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toFixed(d) + '%';
+const dayOfMonth = new Date().getDate();
+
+VIEWS.insights = async (view) => {
+  const [fc, sum, nwm, acc] = await Promise.all([rpc('cash_forecast', { p_days: 45 }), D.summary(), D.nwm(), D.accounts()]);
+  const cash = acc.filter((a) => a.type === 'depository' && !a.hidden).reduce((s, a) => s + num(a.available_balance ?? a.current_balance), 0);
+  const low = fc.reduce((m, r) => (num(r.balance) < num(m.balance) ? r : m), fc[0]);
+  const below = fc.filter((r) => num(r.balance) < 0).length;
+  const done = sum.filter((r) => !r.partial);
+  const last12 = done.slice(-12), last3 = done.slice(-3), last6 = done.slice(-6);
+  const rate = (rows) => { const i = rows.reduce((s, r) => s + num(r.income), 0), n = rows.reduce((s, r) => s + num(r.net), 0); return i > 0 ? (100 * n) / i : null; };
+  const spend12 = last12.reduce((s, r) => s + num(r.spending), 0) / Math.max(1, last12.length);
+  const runway = spend12 > 0 ? cash / spend12 : null;
+  const sdNet = stdev(last12.map((r) => num(r.net)));
+  const events = fc.filter((r) => r.events && r.events.length).slice(0, 8);
+  view.innerHTML = `
+    <h1>Insights</h1>${subnav(INS_NAV, 'insights')}
+    <div class="grid2">
+      <div class="card">
+        <div class="row between"><h2>Cash, next 45 days</h2><span class="stat"><span class="v">${money(cash)}</span><span class="l">available now</span></span></div>
+        ${lineChart(fc.map((r) => ({ t: r.as_of, v: num(r.balance) })), 640, 150, money, true)}
+        <p class="small">Lowest point <b class="${num(low.balance) < 0 ? 'down' : num(low.balance) < 300 ? 'warn' : ''}">${money(num(low.balance))}</b> on ${fmtDayLong(low.as_of)}${below ? ` · <span class="down">${below} day${below > 1 ? 's' : ''} below zero</span>` : ''}</p>
+        <p class="muted small">Expected paychecks and recurring charges on their usual dates, card minimums on their due dates, plus your average everyday spend of the last 90 days spread over each day. Transfers between your own accounts are ignored.</p>
+        <div class="list">${events.map((r) => `<div class="item"><span class="t">${r.events.map(h).join(', ')}</span><span class="a ${num(r.inflow) > num(r.outflow) ? 'up' : ''}">${signed(num(r.inflow) - num(r.outflow), 0)}</span><span class="s">${fmtDayLong(r.as_of)} · balance after ${money(num(r.balance))}</span></div>`).join('')}</div>
+      </div>
+      <div class="card">
+        <h2>How much you keep</h2>
+        <div class="row wrap">
+          <span class="stat"><span class="v ${rate(last3) < 0 ? 'down' : ''}">${fmtPct(rate(last3))}</span><span class="l">last 3 months</span></span><span style="width:16px"></span>
+          <span class="stat"><span class="v ${rate(last6) < 0 ? 'down' : ''}">${fmtPct(rate(last6))}</span><span class="l">last 6</span></span><span style="width:16px"></span>
+          <span class="stat"><span class="v ${rate(last12) < 0 ? 'down' : ''}">${fmtPct(rate(last12))}</span><span class="l">last 12</span></span>
+        </div>
+        <p class="muted small">Share of income left after spending. Card payments and transfers don't count as spending; purchases on linked cards count when they happen.</p>
+        ${barChart(last12.map((r) => ({ month: r.month, income: num(r.income), spending: num(r.spending) })), ['income', 'spending'])}
+        <div class="row wrap"><span class="stat"><span class="v">${runway == null ? '—' : runway.toFixed(1) + ' mo'}</span><span class="l">cash covers this much spending</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money(sdNet)}</span><span class="l">typical swing in a month’s result</span></span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Month by month</h2>
+      <div class="scroll"><table class="data"><thead><tr><th>Month</th><th class="num">In</th><th class="num">Out</th><th class="num">Kept</th><th class="num">Rate</th></tr></thead><tbody>
+        ${sum.slice(-13).reverse().map((r) => `<tr><td>${fmtMonth(r.month)}${r.partial ? ' <span class="muted">(so far)</span>' : ''}</td><td class="num">${money(num(r.income))}</td><td class="num">${money(num(r.spending))}</td><td class="num ${num(r.net) < 0 ? 'down' : 'up'}">${signed(num(r.net))}</td><td class="num">${fmtPct(r.savings_rate_pct)}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+    ${nwm.length > 1 ? `<div class="card"><h2>Where net worth changes come from</h2>
+      <div class="scroll"><table class="data"><thead><tr><th>Month</th><th class="num">Net worth</th><th class="num">Change</th><th class="num">Kept from income</th><th class="num">Debt paid down</th><th class="num">Investments</th></tr></thead><tbody>
+        ${nwm.slice(-12).reverse().map((r) => `<tr><td>${fmtMonth(r.month)}</td><td class="num">${money(num(r.net_worth))}</td><td class="num ${num(r.change) < 0 ? 'down' : 'up'}">${r.change == null ? '—' : signed(num(r.change))}</td><td class="num">${signed(num(r.saved))}</td><td class="num">${r.debt_paid_down == null ? '—' : signed(num(r.debt_paid_down))}</td><td class="num">${r.investment_change == null ? '—' : signed(num(r.investment_change))}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="muted small">Balances are snapshotted every morning; this fills in as months pass.</p></div>` : ''}`;
+};
+
+VIEWS.spending = async (view) => {
+  const [cs, ms, wd] = await Promise.all([rpc('category_stats', { p_months: 12 }), rpc('merchant_stats', { p_days: 90 }), D.weekday()]);
+  const early = dayOfMonth < 5;
+  const flagged = early ? [] : cs.filter((c) => Math.abs(num(c.z)) >= 1.5 && num(c.mean_month) > 50);
+  const wmax = Math.max(1, ...wd.map((r) => num(r.per_day)));
+  view.innerHTML = `
+    <h1>Insights</h1>${subnav(INS_NAV, 'spending')}
+    ${flagged.length ? `<div class="card"><h2>Out of the usual range this month</h2><div class="list">${flagged.map((c) => `<div class="item tap" data-go="#activity/${encodeURIComponent(c.category)}"><span class="t">${h(c.category)}</span><span class="a ${num(c.z) > 0 ? 'down' : 'up'}">${money(num(c.this_month_projected))} <span class="s">on pace · usual ${money(num(c.mean_month))}</span></span><span class="s">${num(c.z) > 0 ? 'above' : 'below'} your normal band by ${Math.abs(num(c.z)).toFixed(1)} standard deviations</span></div>`).join('')}</div></div>` : ''}
+    <div class="card">
+      <h2>Categories, last 12 complete months</h2>
+      <p class="muted small">Mean and standard deviation per month. “On pace” scales this month’s spending to a full month${early ? ' (too early in the month to judge)' : ''}. Trend is the fitted slope per month as a share of the mean.</p>
+      <div class="scroll"><table class="data"><thead><tr><th>Category</th><th class="num">Share</th><th class="num">Mean ± sd</th><th class="num">On pace</th><th class="num">Trend</th></tr></thead><tbody>
+        ${cs.filter((c) => num(c.last_12m) > 0).map((c) => `<tr class="tap" data-go="#activity/${encodeURIComponent(c.category)}"><td>${h(c.category)}</td><td class="num">${fmtPct(c.share_pct)}</td><td class="num">${money(num(c.mean_month))} <span class="muted">± ${money(num(c.sd_month))}</span></td><td class="num ${!early && num(c.z) >= 1.5 ? 'down' : ''}">${early ? '—' : money(num(c.this_month_projected))}</td><td class="num ${num(c.trend_pct_per_month) > 3 ? 'warn' : ''}">${c.trend_pct_per_month == null ? '—' : pct(num(c.trend_pct_per_month)) + '/mo'}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Merchants, last 90 days</h2>
+        <div class="list">${ms.slice(0, 15).map((m) => `<div class="item"><span class="t">${h(m.merchant)}</span><span class="a">${money(num(m.total))}<span class="s">${fmtPct(m.share_pct)} · ${m.n}×</span></span><span class="s">${m.change_pct == null ? 'new in this period' : (num(m.change_pct) >= 0 ? '<span class="warn">+' : '<span class="up">') + Math.abs(num(m.change_pct)).toFixed(0) + '%</span> vs the 90 days before'}</span></div>`).join('')}</div>
+      </div>
+      <div class="card">
+        <h2>Day of the week</h2>
+        <p class="muted small">Average spent on days you spent anything, last 6 months.</p>
+        <div class="list">${wd.map((r) => `<div class="item"><span class="t">${h(r.weekday)}</span><span class="a">${money(num(r.per_day))}</span><span class="s" style="grid-column:1/-1">${progress(num(r.per_day), wmax)}</span></div>`).join('')}</div>
+      </div>
+    </div>`;
+  bindGo(view);
+};
+
+VIEWS.income = async (view) => {
+  const [src, sum] = await Promise.all([rpc('income_sources'), D.summary()]);
+  const active = src.filter((s) => d(s.last_date) >= new Date(Date.now() - 75 * 864e5));
+  const monthly = active.reduce((s, r) => s + num(r.monthly_equiv), 0);
+  const done = sum.filter((r) => !r.partial).slice(-12);
+  view.innerHTML = `
+    <h1>Insights</h1>${subnav(INS_NAV, 'income')}
+    <div class="card">
+      <div class="row between wrap"><h2>Regular income</h2><span class="stat"><span class="v">${money(monthly)}</span><span class="l">per month from active sources</span></span></div>
+      <div class="list">${src.map((s) => `<div class="item"><span class="t">${h(titleCase(s.source))}${d(s.last_date) < new Date(Date.now() - 75 * 864e5) ? ' <span class="pill">stopped</span>' : ''}</span><span class="a">${money2(num(s.typical_amount))}<span class="s">${h(s.cadence)}</span></span><span class="s">${s.occurrences}× · last ${fmtDay(s.last_date)}${s.next_expected && d(s.next_expected) >= d(today()) ? ' · next ' + fmtDay(s.next_expected) : ''}${s.trend_pct_per_month ? ' · ' + pct(num(s.trend_pct_per_month)) + '/mo trend' : ''}</span></div>`).join('') || '<p class="empty">No regular deposits found yet.</p>'}</div>
+      <p class="muted small">Deposits grouped by sender; cadence from the median gap between them. Transfers from your own accounts are not income.</p>
+    </div>
+    <div class="card"><h2>Income by month</h2>${barChart(done.map((r) => ({ month: r.month, income: num(r.income) })), ['income'])}</div>`;
+};
+
+VIEWS.fees = async (view) => {
+  const [fa, fees, acc] = await Promise.all([rpc('fee_analysis'), D.fees(), D.accounts()]);
+  const f = fa[0] || {};
+  const cards = acc.filter((a) => a.type === 'credit' && !a.hidden);
+  const util = cards.reduce((s, a) => s + num(a.current_balance), 0), limit = cards.reduce((s, a) => s + (num(a.credit_limit) || 0), 0);
+  view.innerHTML = `
+    <h1>Insights</h1>${subnav(INS_NAV, 'fees')}
+    <div class="card">
+      <h2>Fees and interest, last 12 months</h2>
+      <div class="row wrap"><span class="stat"><span class="v ${num(f.fees_12m) ? 'down' : ''}">${money2(num(f.fees_12m))}</span><span class="l">${f.fee_count_12m || 0} fees</span></span><span style="width:16px"></span><span class="stat"><span class="v ${num(f.overdrafts_12m) ? 'down' : ''}">${money2(num(f.overdrafts_12m))}</span><span class="l">${f.overdraft_count_12m || 0} overdrafts</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money2(num(f.interest_12m))}</span><span class="l">card interest</span></span></div>
+      ${f.overdraft_count_12m ? `<p class="small">Overdrafts land a median of <b>${f.median_days_before_payday} day${f.median_days_before_payday == 1 ? '' : 's'}</b> before a paycheck. Worst month: ${h(f.worst_month)} (${money(num(f.worst_month_fees))}). A cushion of about one paycheck in checking, or moving autopays to the day after payday, removes most of this.</p>` : ''}
+      ${barChart(fees.map((r) => ({ month: r.month, fees: num(r.fees), interest_paid: num(r.interest_paid) })), ['fees', 'interest_paid'], 640, 140)}
+      <div class="legend"><span><i style="background:var(--bar2)"></i>Fees</span><span><i style="background:var(--bar)"></i>Interest</span></div>
+    </div>
+    ${limit ? `<div class="card"><h2>Card use</h2><p class="small">${money(util)} of ${money(limit)} across linked cards · <b class="${util / limit > 0.3 ? 'warn' : 'up'}">${(100 * util / limit).toFixed(0)}% used</b> <span class="muted">(scores reward staying under 30%, and under 10% is better)</span></p>
+      <div class="list">${cards.map((a) => `<div class="item"><span class="t">${h(a.nickname || a.name)}</span><span class="a">${money(num(a.current_balance))}<span class="s">of ${money(num(a.credit_limit))}</span></span><span class="s" style="grid-column:1/-1">${progress(num(a.current_balance), num(a.credit_limit), num(a.current_balance) / num(a.credit_limit) > 0.3 ? 'over' : 'ok')}</span></div>`).join('')}</div></div>` : ''}`;
+};
+
+// ---------- Plan: debt & credit, future ----------
+VIEWS.debt = async (view) => {
+  const [credit, acc] = await Promise.all([D.credit(), D.accounts()]);
+  const last = credit[credit.length - 1], prev = credit[credit.length - 2];
+  const unl = (await D.rules()).filter((r) => r.category === 'Card payment (not linked)').map((r) => r.match);
+  let extra = Number(localStorage.getItem('debt_extra') || 100);
+  const draw = async () => {
+    const plan = await rpc('debt_plan', { p_extra: extra });
+    const totMin = plan.reduce((s, r) => s + num(r.interest_min), 0), totPlan = plan.reduce((s, r) => s + num(r.interest_plan), 0);
+    const last_pay = plan.reduce((m, r) => Math.max(m, r.months_plan), 0);
+    $('#debt-body').innerHTML = plan.length ? `
+      <div class="row wrap"><span class="stat"><span class="v">${money(plan.reduce((s, r) => s + num(r.balance), 0))}</span><span class="l">owed on linked debts</span></span><span style="width:16px"></span><span class="stat"><span class="v down">${money2(plan.reduce((s, r) => s + num(r.daily_interest), 0))}</span><span class="l">interest per day right now</span></span></div>
+      <div class="scroll"><table class="data"><thead><tr><th>Debt</th><th class="num">Balance</th><th class="num">APR</th><th class="num">Minimum only</th><th class="num">With ${money(extra)} extra</th></tr></thead><tbody>
+        ${plan.map((r) => `<tr><td>${h(r.name)}</td><td class="num">${money(num(r.balance))}</td><td class="num">${fmtPct(r.apr, 2)}</td><td class="num">${r.months_min >= 600 ? '<span class="down">never</span>' : r.months_min + ' mo · ' + money(num(r.interest_min)) + ' interest'}</td><td class="num">${r.months_plan >= 600 ? '<span class="down">never</span>' : r.months_plan + ' mo · ' + money(num(r.interest_plan)) + ' interest'}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="small">Paying minimums only costs <b class="down">${money(totMin)}</b> in interest. Adding ${money(extra)} a month, highest APR first, costs <b>${money(totPlan)}</b> and clears everything in <b>${last_pay} months</b> — saving ${money(totMin - totPlan)}.</p>` : '<p class="empty">No balances on linked cards or loans.</p>';
+  };
+  view.innerHTML = `
+    <h1>Plan</h1>${subnav(PLAN_NAV, 'debt')}
+    <div class="card">
+      <div class="row between wrap"><h2>Paying it down</h2><label class="field" style="display:flex;align-items:center;gap:8px">Extra per month <input id="debt-extra" class="short" type="number" inputmode="numeric" min="0" step="25" value="${extra}" style="width:8ch"></label></div>
+      <div id="debt-body"><p class="muted">Calculating…</p></div>
+      ${unl.length ? `<p class="muted small">Not included: ${unl.map(h).join(', ')} — those aren’t linked, so their balances and rates are unknown. Link them from Accounts (Apple Card can’t be linked).</p>` : ''}
+    </div>
+    <div class="card">
+      <div class="row between wrap"><div class="hero"><span class="label">Credit score</span><span class="big">${last ? last.score : '—'}</span><span class="muted small">${last ? `${h(last.bureau || '')} ${fmtDay(last.as_of)}${prev ? ` · <span class="${last.score - prev.score >= 0 ? 'up' : 'down'}">${last.score - prev.score >= 0 ? '+' : ''}${last.score - prev.score}</span> since ${fmtDay(prev.as_of)}` : ''}` : 'Log it from your card’s app whenever you check it'}</span></div><button class="primary" id="btn-score">Log score</button></div>
+      ${credit.length > 1 ? lineChart(credit.map((c) => ({ t: c.as_of, v: c.score })), 640, 150, (v) => String(Math.round(v))) : ''}
+    </div>`;
+  await draw();
+  let t; $('#debt-extra').oninput = (e) => { extra = Math.max(0, Number(e.target.value) || 0); localStorage.setItem('debt_extra', String(extra)); clearTimeout(t); t = setTimeout(draw, 350); };
+  $('#btn-score').onclick = () => {
+    openSheet(`<h2>Log credit score</h2><div class="form">
+      <label class="field">Score <input id="c-score" class="short" type="number" inputmode="numeric" min="300" max="850" value="${last ? last.score : ''}"></label>
+      <label class="field">Date <input id="c-date" type="date" value="${today()}" style="width:auto"></label>
+      <label class="field">Bureau <select id="c-bureau" style="width:auto"><option>Experian</option><option>Equifax</option><option>TransUnion</option></select></label>
+      <label class="field">Seen in <input id="c-src" type="text" size="16" value="${h(last?.source || 'Amex app')}"></label>
+      <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
+    if (last?.bureau) $('#c-bureau').value = last.bureau;
+    $('#sheet-body').onclick = async (e) => {
+      if (e.target.closest('[data-cancel]')) closeSheet();
+      if (e.target.closest('[data-save]')) { const s = Number($('#c-score').value); if (!(s >= 300 && s <= 850)) return toast('Score is 300–850');
+        try { await rpc('log_credit_score', { p_as_of: $('#c-date').value, p_score: s, p_bureau: $('#c-bureau').value, p_source: $('#c-src').value }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
+    };
+  };
+};
+
+VIEWS.future = async (view) => {
+  const settings = await D.settings();
+  const p = Object.assign({ attending_start: '2028-07-01', attending_net_monthly: 20000, spending_after: 9000, return_pct: 6, years: 15, extra_debts: [] }, settings.projection || {});
+  const sum = await D.summary();
+  const lastDone = sum.filter((r) => !r.partial).slice(-1)[0] || {};
+  const draw = async () => {
+    const rows = await rpc('projection', { p });
+    const cross = rows.find((r) => num(r.net_worth) >= 1000000);
+    $('#proj-body').innerHTML = `
+      ${lineChart(rows.map((r) => ({ t: r.year_end, v: num(r.net_worth) })), 640, 170, money, true)}
+      <p class="small">Starts from today’s balances, your actual 12-month average income (${money(num(lastDone.income_12m_avg))}) and spending (${money(num(lastDone.spending_12m_avg))}) until ${fmtDay(p.attending_start)} ${d(p.attending_start).getFullYear()}, then the attending figures. Spare cash goes to the highest-rate debt first, then to investments at ${p.return_pct}% a year.${cross ? ` Crosses $1M at the end of <b>${d(cross.year_end).getFullYear()}</b>.` : ''}</p>
+      <div class="scroll"><table class="data"><thead><tr><th>Year</th><th class="num">Net worth</th><th class="num">Cash + investments</th><th class="num">Debt</th><th class="num">Saved that year</th></tr></thead><tbody>
+        ${rows.map((r) => `<tr><td>${d(r.year_end).getFullYear()} <span class="muted">${h(r.age_note)}</span></td><td class="num">${money(num(r.net_worth))}</td><td class="num">${money(num(r.cash_and_invest))}</td><td class="num">${money(num(r.debt))}</td><td class="num">${signed(num(r.saved_year))}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  };
+  view.innerHTML = `
+    <h1>Plan</h1>${subnav(PLAN_NAV, 'future')}
+    <div class="card">
+      <h2>Residency to attending</h2>
+      <div class="row wrap" style="gap:14px">
+        <label class="field">First attending month <input id="pj-start" type="month" value="${p.attending_start.slice(0, 7)}" style="width:auto"></label>
+        <label class="field">Take-home per month then <input id="pj-inc" class="short" type="number" inputmode="numeric" step="500" value="${p.attending_net_monthly}" style="width:9ch"></label>
+        <label class="field">Spending per month then <input id="pj-sp" class="short" type="number" inputmode="numeric" step="500" value="${p.spending_after}" style="width:9ch"></label>
+        <label class="field">Investment return %/yr <input id="pj-ret" class="short" type="number" inputmode="decimal" step="0.5" value="${p.return_pct}" style="width:6ch"></label>
+        <label class="field">Years <input id="pj-yrs" class="short" type="number" inputmode="numeric" min="2" max="40" value="${p.years}" style="width:7ch"></label>
+      </div>
+      <div class="row between wrap"><span class="muted small">Debts not linked yet (student loans, etc.) can be added so the plan accounts for them.</span><span class="row"><button class="quiet small" id="pj-adddebt">Add a debt</button><button class="primary" id="pj-save">Recalculate</button></span></div>
+      ${p.extra_debts.length ? `<div class="list">${p.extra_debts.map((x, i) => `<div class="item"><span class="t">${h(x.name)}</span><span class="a">${money(num(x.bal))}<span class="s">${fmtPct(x.apr, 2)} · ${money(num(x.pay))}/mo</span></span><span class="s"><button class="link small" data-deldebt="${i}">remove</button></span></div>`).join('')}</div>` : ''}
+      <div id="proj-body"><p class="muted">Calculating…</p></div>
+    </div>`;
+  await draw();
+  const read = () => { p.attending_start = $('#pj-start').value + '-01'; p.attending_net_monthly = Number($('#pj-inc').value) || 0; p.spending_after = Number($('#pj-sp').value) || 0; p.return_pct = Number($('#pj-ret').value) || 0; p.years = Math.min(40, Math.max(2, Number($('#pj-yrs').value) || 15)); };
+  const save = async () => { read(); try { await rpc('set_setting', { p_key: 'projection', p_value: p }); invalidate(); } catch (e) { toast(e.message); } await draw(); };
+  $('#pj-save').onclick = save;
+  $('#pj-adddebt').onclick = () => {
+    openSheet(`<h2>Add a debt</h2><div class="form">
+      <label class="field">Name <input id="xd-name" type="text" size="20" placeholder="Student loans"></label>
+      <label class="field">Balance <input id="xd-bal" class="short" type="number" inputmode="numeric" style="width:10ch"></label>
+      <label class="field">Interest rate % <input id="xd-apr" class="short" type="number" inputmode="decimal" step="0.01" style="width:7ch"></label>
+      <label class="field">Payment per month <input id="xd-pay" class="short" type="number" inputmode="numeric" style="width:8ch"></label>
+      <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Add</button></div></div>`);
+    $('#sheet-body').onclick = async (e) => {
+      if (e.target.closest('[data-cancel]')) closeSheet();
+      if (e.target.closest('[data-save]')) { const x = { name: $('#xd-name').value.trim() || 'Debt', bal: Number($('#xd-bal').value) || 0, apr: Number($('#xd-apr').value) || 0, pay: Number($('#xd-pay').value) || 0 }; if (!x.bal) return toast('Enter a balance'); p.extra_debts.push(x); closeSheet(); await save(); route(); }
+    };
+  };
+  view.onclick = async (e) => { const b = e.target.closest('[data-deldebt]'); if (b) { p.extra_debts.splice(Number(b.dataset.deldebt), 1); await save(); route(); } };
+};
+
+// ---------- Invest ----------
+const INV_NAV = [['invest', 'Overview'], ['holdings', 'Holdings'], ['allocation', 'Allocation']];
+const TYPE_NAME = { equity: 'Stocks', etf: 'ETFs', mutual_fund: 'Mutual funds', fixed_income: 'Bonds', cash: 'Cash', derivative: 'Options', cryptocurrency: 'Crypto', other: 'Other' };
+const COLORS = ['var(--bar2)', 'var(--up)', 'var(--warn)', 'var(--down)', 'var(--muted)', 'var(--bar)'];
+
+VIEWS.invest = async (view) => {
+  const [perf, acc, nwm] = await Promise.all([rpc('investment_performance'), D.accounts(), D.nwm()]);
+  const inv = acc.filter((a) => a.type === 'investment' && !a.hidden);
+  const total = inv.reduce((s, a) => s + num(a.current_balance), 0);
+  const cost = perf.reduce((s, x) => s + (num(x.cost_basis) || 0), 0), val = perf.reduce((s, x) => s + num(x.value), 0);
+  view.innerHTML = `
+    <h1>Invest</h1>${subnav(INV_NAV, 'invest')}
+    ${inv.length ? `
+    <div class="card">
+      <div class="hero"><span class="label">Invested</span><span class="big">${money(total)}</span>${cost ? `<span class="small ${val - cost >= 0 ? 'up' : 'down'}">${signed(val - cost)} vs cost (${pct(100 * (val - cost) / cost)})</span>` : ''}</div>
+      ${nwm.filter((r) => num(r.invested) > 0).length > 1 ? lineChart(nwm.filter((r) => num(r.invested) > 0).map((r) => ({ t: r.as_of, v: num(r.invested) })), 640, 140) : ''}
+      <div class="scroll"><table class="data"><thead><tr><th>Account</th><th class="num">Value</th><th class="num">Gain</th><th class="num">Your return</th><th class="num">Investment return, 12 mo</th></tr></thead><tbody>
+        ${perf.map((x) => `<tr><td>${h(x.name)}<br><span class="muted small">${h(x.institution)}</span></td><td class="num">${money(num(x.value))}</td><td class="num ${x.unrealized == null ? '' : num(x.unrealized) >= 0 ? 'up' : 'down'}">${x.unrealized == null ? '—' : signed(num(x.unrealized)) + ' (' + pct(num(x.unrealized_pct)) + ')'}</td><td class="num">${x.xirr_pct == null ? '—' : fmtPct(x.xirr_pct, 1) + '/yr'}</td><td class="num">${x.twr_12m_pct == null ? '—' : fmtPct(x.twr_12m_pct, 1)}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="muted small">“Your return” is money-weighted (XIRR): it depends on when you put money in. “Investment return” is time-weighted from daily balances with deposits removed: how the holdings themselves did. Both need deposit history, which builds from the day an account is linked.</p>
+      <div class="list">${perf.map((x) => `<div class="item"><span class="t">${h(x.name)}</span><span class="a">${signed(num(x.contributed_12m))}<span class="s">put in, 12 mo</span></span><span class="s">dividends ${money2(num(x.dividends_12m))} · fees ${money2(num(x.fees_12m))}</span></div>`).join('')}</div>
+    </div>` : '<div class="card"><p class="empty">No investment accounts linked yet. From Accounts → Add account → “Brokerage, retirement or kids’ investment account”.</p></div>'}`;
+};
+
+VIEWS.holdings = async (view) => {
+  const [hold, conc] = await Promise.all([D.holdings(), D.concentration()]);
+  const c = conc[0] || {};
+  view.innerHTML = `
+    <h1>Invest</h1>${subnav(INV_NAV, 'holdings')}
+    <div class="card">
+      ${c.positions ? `<div class="row wrap"><span class="stat"><span class="v">${c.positions}</span><span class="l">positions</span></span><span style="width:16px"></span><span class="stat"><span class="v ${num(c.top_pct) > 25 ? 'warn' : ''}">${fmtPct(c.top_pct)}</span><span class="l">in ${h(c.top_ticker || 'largest')}</span></span><span style="width:16px"></span><span class="stat"><span class="v">${fmtPct(c.top5_pct)}</span><span class="l">in the top 5</span></span></div>` : ''}
+      <div class="scroll"><table class="data"><thead><tr><th>Security</th><th class="num">Value</th><th class="num">Gain</th><th class="num">Qty</th></tr></thead><tbody>
+        ${hold.map((x) => { const g = x.cost_basis != null ? num(x.institution_value) - num(x.cost_basis) : null; return `<tr><td>${h(x.ticker || x.security_name || '')}<br><span class="muted small">${h(x.ticker ? x.security_name : x.account_name)}</span></td><td class="num">${money(num(x.institution_value))}</td><td class="num ${g == null ? '' : g >= 0 ? 'up' : 'down'}">${g == null ? '—' : signed(g)}</td><td class="num">${Number(x.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}</td></tr>`; }).join('') || '<tr><td colspan="4" class="empty">No holdings reported yet.</td></tr>'}
+      </tbody></table></div>
+    </div>`;
+};
+
+VIEWS.allocation = async (view) => {
+  const [drift, settings] = await Promise.all([D.drift(), D.settings()]);
+  const target = settings.target_allocation || {};
+  const rows = drift.filter((r) => num(r.value) > 0 || r.target_pct != null);
+  view.innerHTML = `
+    <h1>Invest</h1>${subnav(INV_NAV, 'allocation')}
+    <div class="card">
+      <div class="row between wrap"><h2>Mix vs your target</h2><button class="quiet small" id="btn-target">Set target</button></div>
+      ${rows.length ? `<div class="alloc">${rows.filter((r) => num(r.pct) > 0).map((r, i) => `<i style="width:${r.pct}%;background:${COLORS[i % COLORS.length]}" title="${h(r.asset_type)}"></i>`).join('')}</div>
+      <div class="list">${rows.map((r, i) => `<div class="item"><span class="t"><i class="legend" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${COLORS[i % COLORS.length]};margin-right:6px"></i>${h(TYPE_NAME[r.asset_type] || r.asset_type)}</span><span class="a">${fmtPct(r.pct)}${r.target_pct != null ? `<span class="s ${Math.abs(num(r.drift_pct)) >= 5 ? 'warn' : ''}">target ${fmtPct(r.target_pct)} · ${num(r.drift_pct) >= 0 ? '+' : ''}${num(r.drift_pct).toFixed(1)}</span>` : ''}</span><span class="s">${money(num(r.value))}</span></div>`).join('')}</div>
+      <p class="muted small">Drift of 5 points or more from target is flagged. Rebalance with new contributions rather than selling when you can.</p>` : '<p class="empty">Nothing to allocate yet.</p>'}
+    </div>`;
+  $('#btn-target').onclick = () => {
+    const keys = Object.keys(TYPE_NAME);
+    openSheet(`<h2>Target mix</h2><p class="muted small">Percent of the whole portfolio. Leave blank for none.</p><div class="form">${keys.map((k) => `<label class="field" style="display:flex;align-items:center;justify-content:space-between">${TYPE_NAME[k]} <input data-tk="${k}" class="short" type="number" inputmode="numeric" min="0" max="100" value="${target[k] ?? ''}" style="width:6ch"></label>`).join('')}
+      <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
+    $('#sheet-body').onclick = async (e) => {
+      if (e.target.closest('[data-cancel]')) closeSheet();
+      if (e.target.closest('[data-save]')) { const t = {}; let sum = 0; $$('[data-tk]').forEach((i) => { const v = Number(i.value); if (i.value !== '' && v >= 0) { t[i.dataset.tk] = v; sum += v; } }); if (Math.round(sum) !== 100) return toast('Targets add up to ' + sum + '%, not 100%');
+        try { await rpc('set_setting', { p_key: 'target_allocation', p_value: t }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
+    };
+  };
+};
+
+function stdev(xs) { if (xs.length < 2) return 0; const m = xs.reduce((s, x) => s + x, 0) / xs.length; return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1)); }
+function titleCase(s) { return String(s || '').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/^Electronic Deposit /, ''); }
 
 async function nameKey(reg, friendlyName) {
   const id = reg?.passkey?.id || reg?.id || reg?.credential_id;
