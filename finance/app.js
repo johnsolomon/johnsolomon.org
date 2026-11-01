@@ -153,7 +153,7 @@ function enter(me) {
   if (sessionStorage.getItem('justLinked')) { sessionStorage.removeItem('justLinked'); portal('finish').then(() => { invalidate(); route(); toast('Linked. Initial sync running.'); }).catch(() => {}); }
 }
 addEventListener('hashchange', route);
-const TABS = { home: 'home', activity: 'activity', insights: 'insights', cycle: 'insights', trends: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', contributions: 'invest', strategy: 'invest', home_purchase: 'plan', business: 'plan', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', review: 'insights', more: 'plan' };
+const TABS = { home: 'home', activity: 'activity', insights: 'insights', cycle: 'insights', trends: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', contributions: 'invest', strategy: 'invest', home_purchase: 'plan', business: 'plan', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', review: 'insights', cash: 'insights', habits: 'insights', more: 'plan' };
 function route() {
   if (screens.app.hidden) return;
   const r = (location.hash || '#home').slice(1).split('/')[0];
@@ -204,57 +204,33 @@ const D = {
   }),
 };
 
-// ---------- charts (plain SVG) ----------
-function barChart(rows, keys, W = 640, H = 180) {
+// ---------- chart helpers (all rendered by the interactive engine) ----------
+function barChart(rows, keys) {
   if (!rows.length) return '<p class="empty">Nothing yet.</p>';
-  const m = { t: 8, r: 8, b: 22, l: 44 };
-  const max = Math.max(1, ...rows.flatMap((r) => keys.map((k) => num(r[k]) || 0)));
-  const nice = niceMax(max);
-  const iw = W - m.l - m.r, ih = H - m.t - m.b;
-  const gw = iw / rows.length, bw = (gw * 0.72) / keys.length;
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">`;
-  for (let i = 0; i <= 4; i++) { const y = m.t + ih - (ih * i) / 4; s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text x="${m.l - 6}" y="${y + 4}" text-anchor="end">${short(nice * i / 4)}</text>`; }
-  rows.forEach((r, i) => {
-    const x0 = m.l + i * gw + gw * 0.14;
-    keys.forEach((k, j) => { const v = num(r[k]) || 0, bh = (ih * v) / nice; s += `<rect class="${k === 'income' ? 'in' : k === 'interest_paid' ? 'bar-muted' : 'out'}" x="${x0 + j * bw}" y="${m.t + ih - bh}" width="${bw - 1}" height="${bh}" rx="2"><title>${h(fmtMonth(r.month))}: ${money2(v)}</title></rect>`; });
-    if (rows.length <= 12 || i % 2 === 0) s += `<text x="${m.l + i * gw + gw / 2}" y="${H - 6}" text-anchor="middle">${fmtMon(r.month)}</text>`;
-  });
-  return s + '</svg>';
+  const NM = { income: ['Income', C.green], spending: ['Spending', C.blue], fees: ['Fees', C.red], interest_paid: ['Interest', C.amber] };
+  return ix({ type: 'cbar', height: 190, yfmt: yMoney, cats: rows.map((r) => monLabel(r.month)), tipCats: rows.map((r) => monLong(r.month)),
+    series: keys.map((k, i) => ({ name: (NM[k] || [k])[0], color: (NM[k] || [0, PAL[i]])[1], vals: rows.map((r) => num(r[k]) || 0) })) });
 }
 function lineChart(pts, W = 640, H = 160, fmt = money, yMin0 = false) {
   if (!pts.length) return '<p class="empty">Nothing yet.</p>';
-  const m = { t: 10, r: 10, b: 22, l: 48 };
-  const vs = pts.map((p) => p.v);
-  let lo = Math.min(...vs), hi = Math.max(...vs);
-  if (yMin0) lo = Math.min(0, lo);
-  const pad = Math.max((hi - lo) * 0.15, hi === lo ? Math.abs(hi) * 0.1 || 10 : 0);
-  lo -= pad; hi += pad;
-  const iw = W - m.l - m.r, ih = H - m.t - m.b;
-  const xs = pts.map((p) => d(p.t).getTime()); const x0 = Math.min(...xs), x1 = Math.max(...xs) || x0 + 1;
-  const X = (t) => m.l + (x1 === x0 ? iw / 2 : (iw * (t - x0)) / (x1 - x0)), Y = (v) => m.t + ih - (ih * (v - lo)) / (hi - lo);
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">`;
-  for (let i = 0; i <= 3; i++) { const v = lo + ((hi - lo) * i) / 3, y = Y(v); s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text x="${m.l - 6}" y="${y + 4}" text-anchor="end">${short(v)}</text>`; }
-  if (lo < 0 && hi > 0) s += `<line class="axis" x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}" stroke-dasharray="3 3"/>`;
-  const path = pts.map((p, i) => (i ? 'L' : 'M') + X(d(p.t).getTime()).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(' ');
-  s += `<path class="area" d="${path} L${X(x1).toFixed(1)} ${(m.t + ih).toFixed(1)} L${X(x0).toFixed(1)} ${(m.t + ih).toFixed(1)} Z"/><path class="line" d="${path}"/>`;
-  const last = pts[pts.length - 1];
-  s += `<circle class="dot" cx="${X(d(last.t).getTime())}" cy="${Y(last.v)}" r="3.5"/>`;
-  const lx = X(d(last.t).getTime()); s += `<text class="label" x="${Math.min(lx, W - 60)}" y="${Y(last.v) - 8}" text-anchor="${lx > W - 70 ? 'end' : 'start'}">${fmt(last.v)}</text>`;
-  const n = Math.min(5, pts.length); for (let i = 0; i < n; i++) { const p = pts[Math.round((i * (pts.length - 1)) / Math.max(1, n - 1))]; s += `<text x="${X(d(p.t).getTime())}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}">${fmtDay(p.t)}</text>`; }
-  return s + '</svg>';
+  return ix({ type: 'xy', height: H + 24, zero: yMin0, legend: false, yfmt: (v, ax) => ax ? short(v) : fmt(v), series: [{ name: 'Value', data: pts.map((p) => [mx(p.t), p.v]), kind: 'area', color: C.blue }] });
 }
-const PIE = ['#1f5cf0', '#1e8e5a', '#b26a12', '#c8382e', '#7c3aed', '#0e9aa7', '#d9488b', '#6b7480', '#8ab4f8', '#a3b18a', '#e0a458', '#5b8dff'];
 function topN(items, n = 9) { const xs = items.filter((i) => i.v > 0).sort((a, b) => b.v - a.v); if (xs.length <= n) return xs; const rest = xs.slice(n - 1); return [...xs.slice(0, n - 1), { k: `Other (${rest.length})`, v: rest.reduce((s, i) => s + i.v, 0) }]; }
 function pieChart(items, o = {}) {
-  const tot = items.reduce((s, i) => s + Math.max(0, i.v), 0); if (!tot) return '<p class="empty">Nothing in range.</p>';
-  const R = 62, r = 38, c = 70; let a0 = -Math.PI / 2, paths = '';
-  const P = (a, rad) => `${(c + rad * Math.cos(a)).toFixed(2)} ${(c + rad * Math.sin(a)).toFixed(2)}`;
-  items.forEach((it, i) => { const f = Math.max(0, it.v) / tot; if (!f) return; const a1 = a0 + f * 2 * Math.PI, big = f > 0.5 ? 1 : 0;
-    const dd = f > 0.9999 ? `M${P(a0, R)} A${R} ${R} 0 1 1 ${P(a0 + Math.PI, R)} A${R} ${R} 0 1 1 ${P(a0, R)} M${P(a0, r)} A${r} ${r} 0 1 0 ${P(a0 + Math.PI, r)} A${r} ${r} 0 1 0 ${P(a0, r)}`
-      : `M${P(a0, R)} A${R} ${R} 0 ${big} 1 ${P(a1, R)} L${P(a1, r)} A${r} ${r} 0 ${big} 0 ${P(a0, r)} Z`;
-    paths += `<path d="${dd}" fill="${PIE[i % PIE.length]}" fill-rule="evenodd"><title>${h(it.k)}: ${money(it.v)} (${(100 * f).toFixed(1)}%)</title></path>`; a0 = a1; });
-  const legend = items.map((it, i) => `<div class="pie-row${it.go ? ' tap' : ''}"${it.go ? ` data-go="${h(it.go)}"` : ''}><i style="background:${PIE[i % PIE.length]}"></i><span class="k">${h(it.k)}</span><span class="v">${money(it.v)}</span><span class="p">${(100 * Math.max(0, it.v) / tot).toFixed(0)}%</span></div>`).join('');
-  return `<div class="pie"><svg viewBox="0 0 140 140" class="pie-svg" role="img">${paths}<text x="70" y="67" text-anchor="middle" class="pie-c">${h(o.center || money(tot))}</text><text x="70" y="82" text-anchor="middle" class="pie-l">${h(o.label || '')}</text></svg><div class="pie-legend">${legend}</div></div>`;
+  return ix({ type: 'donut', items: items.map((it) => ({ k: it.k, v: it.v })), label: o.label, center: o.center,
+    onClick: items.some((i) => i.go) ? (k) => { const it = items.find((x) => x.k === k); if (it && it.go) location.hash = it.go; } : undefined });
+}
+function chart(series, o = {}) {
+  const xs = series.flatMap((s) => (s.pts || []).map((p) => +p.x)); const isDate = xs.length && Math.min(...xs) > 1e11;
+  const colorOf = (cls = 'line') => cls.includes('alt') ? C.amber : /\bin\b/.test(cls) ? C.green : cls.includes('thin') || cls.includes('fit') ? C.gray : cls.includes('bar-muted') ? '#9fb0d6' : C.blue;
+  const out = []; let band;
+  series.forEach((s, i) => {
+    if (s.band) band = { lo: s.band.map((b) => [+b.x, b.lo]), hi: s.band.map((b) => [+b.x, b.hi]), name: '10th–90th percentile', color: colorOf(s.cls) };
+    if (s.pts && s.pts.length) out.push({ name: s.label || s.name || (series.length > 1 ? 'Series ' + (i + 1) : 'Value'), data: s.pts.map((p) => [+p.x, p.y]), kind: s.bars ? 'bar' : 'line', color: s.color || colorOf(s.cls), dash: (s.cls || '').includes('fit'), width: (s.cls || '').includes('thin') ? 1.2 : 2 });
+  });
+  const marks = series.flatMap((s) => (s.marks || []).map((mk) => ({ x: +mk.x, y: mk.y, label: mk.label })));
+  return ix({ type: 'xy', x: isDate ? 'date' : 'num', height: (o.H || 170) + 20, series: out, band, refs: o.refs, marks, zero: !!o.zero, yMax: o.yMax,
+    yfmt: o.fmtY ? (v) => o.fmtY(v) : undefined, xfmt: isDate ? undefined : o.fmtX, xtick: isDate ? undefined : o.fmtX, xticks: o.xticks, legend: out.length > 1 });
 }
 function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); const f = v / p; const n = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10; return n * p; }
 function short(v) { const a = Math.abs(v); return (v < 0 ? '−' : '') + (a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(a >= 1e4 ? 0 : 1) + 'k' : a.toFixed(0)); }
@@ -267,6 +243,316 @@ $('#sheet').addEventListener('click', (e) => { if (e.target === $('#sheet')) clo
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 const catOptions = (sel) => { const groups = []; for (const c of CATS) { let g = groups.find((x) => x.g === c.grp); if (!g) groups.push(g = { g: c.grp, items: [] }); g.items.push(c.name); }
   return groups.map((g) => `<optgroup label="${h(g.g)}">${g.items.map((c) => `<option ${c === sel ? 'selected' : ''}>${h(c)}</option>`).join('')}</optgroup>`).join(''); };
+
+// ---------- inline styles under CSP ----------
+// The page CSP (style-src 'self') blocks style="" attributes in parsed HTML; CSSOM writes are allowed.
+// Re-apply every style attribute through CSSOM as nodes are inserted.
+function applyInlineStyles(root) {
+  const els = root.nodeType === 1 ? [root, ...root.querySelectorAll('[style]')] : [];
+  for (const el of els) { const s = el.getAttribute && el.getAttribute('style'); if (s && !el.__st) { el.__st = 1; el.style.cssText = s; } }
+}
+new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { applyInlineStyles(n); ixMountIn(n); } })
+  .observe(document.documentElement, { childList: true, subtree: true });
+
+// ---------- interactive charts ----------
+// ix(spec) returns a placeholder; the observer mounts it once it is in the DOM, re-rendering on resize.
+// Types: xy (time or numeric x; line/area/step/bar/dots series, band, refs, shaded danger zone, markers, brush zoom),
+//        cbar (category bars, grouped or stacked, optional line overlay), donut, hbar, heat.
+const IX = { specs: new Map(), n: 0 };
+const PAL = ['#1f5cf0', '#1e8e5a', '#b26a12', '#c8382e', '#7c3aed', '#0e9aa7', '#d9488b', '#6b7480', '#8ab4f8', '#a3b18a', '#e0a458', '#5b8dff'];
+const C = { blue: '#1f5cf0', green: '#1e8e5a', amber: '#b26a12', red: '#c8382e', gray: '#8a929e', violet: '#7c3aed', teal: '#0e9aa7' };
+function ix(spec) { const id = 'ix' + (++IX.n); IX.specs.set(id, spec); return `<div class="ix" data-ix="${id}"></div>`; }
+function ixMountIn(node) { const els = node.matches && node.matches('.ix[data-ix]') ? [node] : [...(node.querySelectorAll ? node.querySelectorAll('.ix[data-ix]') : [])]; els.forEach(ixMount); }
+function ixMount(el) {
+  if (el.__ix) return; const spec = IX.specs.get(el.dataset.ix); if (!spec) return; el.__ix = { spec, state: {} };
+  const draw = () => { try { IXR[spec.type](el, spec, el.__ix.state); } catch (e) { el.innerHTML = '<p class="err">' + h(e.message) + '</p>'; } };
+  draw(); let w = el.clientWidth;
+  if (window.ResizeObserver) new ResizeObserver(() => { if (Math.abs(el.clientWidth - w) > 4) { w = el.clientWidth; draw(); } }).observe(el);
+}
+function ixTip() { let t = document.getElementById('ixtip'); if (!t) { t = document.createElement('div'); t.id = 'ixtip'; t.className = 'ixtip'; t.hidden = true; document.body.appendChild(t); } return t; }
+function ixShowTip(html, ev) {
+  const t = ixTip(); t.innerHTML = html; t.hidden = false;
+  const r = t.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = window.innerHeight;
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > vw - 8) x = ev.clientX - r.width - 14; if (x < 8) x = 8;
+  if (y + r.height > vh - 8) y = ev.clientY - r.height - 14; if (y < 8) y = 8;
+  t.style.left = x + 'px'; t.style.top = y + 'px';
+}
+function ixHideTip() { const t = document.getElementById('ixtip'); if (t) t.hidden = true; }
+document.addEventListener('scroll', ixHideTip, { passive: true });
+const sw = (c, dash) => `<i class="sw${dash ? ' dash' : ''}" data-c="${c}"></i>`;
+function paintSwatches(root) { root.querySelectorAll('i.sw[data-c]').forEach((i) => { i.style.background = i.dataset.c; }); }
+
+function niceTicks(lo, hi, n = 4) {
+  if (!(hi > lo)) { hi = lo + 1; }
+  const span = hi - lo, step0 = span / n, p = Math.pow(10, Math.floor(Math.log10(step0))), f = step0 / p;
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step, out = [];
+  for (let v = a; v <= b + step / 2; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function dateTicks(x0, x1, maxN) {
+  const days = (x1 - x0) / 864e5, out = [];
+  const a = new Date(x0);
+  if (days > 75) {
+    const stepM = Math.max(1, Math.ceil((days / 30.44) / maxN));
+    let d0 = new Date(a.getFullYear(), a.getMonth() + (a.getDate() > 1 ? 1 : 0), 1);
+    while (d0.getMonth() % stepM) d0 = new Date(d0.getFullYear(), d0.getMonth() + 1, 1);
+    for (let d1 = d0; +d1 <= x1; d1 = new Date(d1.getFullYear(), d1.getMonth() + stepM, 1)) out.push(+d1);
+  } else {
+    const stepD = Math.max(1, Math.ceil(days / maxN));
+    for (let t = +new Date(a.getFullYear(), a.getMonth(), a.getDate()); t <= x1; t += stepD * 864e5) if (t >= x0) out.push(t);
+  }
+  return out;
+}
+const fmtTickDate = (t, span) => { const d0 = new Date(t); return span > 330 * 864e5 ? (d0.getMonth() === 0 ? String(d0.getFullYear()) : MON[d0.getMonth()]) : span > 75 * 864e5 ? MON[d0.getMonth()] : MON[d0.getMonth()] + ' ' + d0.getDate(); };
+const fmtTipDate = (t) => { const d0 = new Date(t); return d0.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); };
+function nearestIdx(arr, v) { let lo = 0, hi = arr.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (arr[m] < v) lo = m; else hi = m; } return Math.abs(arr[lo] - v) <= Math.abs(arr[hi] - v) ? lo : hi; }
+const svgEl = (W, H, inner, cls = '') => `<svg class="ixsvg ${cls}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${inner}</svg>`;
+const legendHtml = (items, extra = '') => `<div class="ixlegend">${items.map((it, i) => `<button type="button" class="ixleg${it.off ? ' off' : ''}" data-li="${i}">${sw(it.color, it.dash)}${h(it.name)}</button>`).join('')}${extra}</div>`;
+
+const IXR = {};
+
+// ---- xy ----
+IXR.xy = (el, spec, st) => {
+  const W = Math.max(280, el.clientWidth || 640), H = spec.height || 200;
+  const isDate = (spec.x || 'date') === 'date';
+  const series = spec.series.map((s, i) => ({ color: s.color || PAL[i % PAL.length], kind: s.kind || 'line', ...s, off: st.off ? st.off.has(i) : !!s.hidden }));
+  if (!st.off) st.off = new Set(series.map((s, i) => (s.off ? i : -1)).filter((i) => i >= 0));
+  const vis = series.filter((s) => !s.off);
+  const hasR = vis.some((s) => s.axis === 'right');
+  const m = { t: 12, r: hasR ? 46 : 14, b: 24, l: 50 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  // x domain
+  const allX = [...new Set(series.flatMap((s) => s.data.map((p) => +p[0])).concat(spec.band ? spec.band.lo.map((p) => +p[0]) : []))].sort((a, b) => a - b);
+  if (!allX.length) { el.innerHTML = '<p class="empty">Nothing in range.</p>'; return; }
+  let x0 = allX[0], x1 = allX[allX.length - 1];
+  const hasBars = vis.some((s) => s.kind === 'bar');
+  let pad = 0;
+  if (hasBars) { const gaps = allX.slice(1).map((v, i) => v - allX[i]); pad = (gaps.length ? Math.min(...gaps) : 864e5) / 2; }
+  if (x0 === x1) { x0 -= isDate ? 864e5 : 1; x1 += isDate ? 864e5 : 1; }
+  let dx0 = x0 - pad, dx1 = x1 + pad;
+  if (st.zoom) { dx0 = st.zoom[0]; dx1 = st.zoom[1]; }
+  const inX = (v) => v >= dx0 && v <= dx1;
+  const X = (v) => m.l + (iw * (v - dx0)) / (dx1 - dx0);
+  // y domains
+  const yVals = (axis) => {
+    const out = [];
+    for (const s of vis) { if ((s.axis || 'left') !== axis) continue;
+      if (s.stack) continue;
+      s.data.forEach((p) => { if (inX(+p[0]) && p[1] != null && isFinite(p[1])) out.push(+p[1]); }); }
+    if (axis === 'left') {
+      // stacked bars contribute their sums
+      const stacks = {}; for (const s of vis) if (s.stack) s.data.forEach((p) => { if (!inX(+p[0])) return; const k = s.stack + '|' + p[0]; stacks[k] = stacks[k] || [0, 0]; if (p[1] >= 0) stacks[k][0] += +p[1]; else stacks[k][1] += +p[1]; });
+      Object.values(stacks).forEach(([a, b]) => out.push(a, b));
+      if (spec.band) { spec.band.lo.forEach((p) => inX(+p[0]) && out.push(+p[1])); spec.band.hi.forEach((p) => inX(+p[0]) && out.push(+p[1])); }
+      (spec.refs || []).forEach((r) => out.push(r.y));
+    }
+    return out;
+  };
+  const yl = yVals('left'); let lo = yl.length ? Math.min(...yl) : 0, hi = yl.length ? Math.max(...yl) : 1;
+  if (spec.zero !== false && (spec.zero || hasBars)) { lo = Math.min(0, lo); hi = Math.max(0, hi); }
+  if (spec.yMin != null) lo = Math.min(lo, spec.yMin); if (spec.yMax != null) hi = Math.max(hi, spec.yMax);
+  if (spec.yFix) { lo = spec.yFix[0]; hi = spec.yFix[1]; }
+  const ticks = niceTicks(lo, hi, H < 150 ? 3 : 4); lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
+  if (spec.yFix) { lo = spec.yFix[0]; hi = spec.yFix[1]; }
+  const Y = (v) => m.t + ih - (ih * (v - lo)) / ((hi - lo) || 1);
+  let Y2 = null, t2 = [];
+  // right axis shares the left axis's zero and gridlines: each left tick v maps to v * k on the right
+  if (hasR) { const yr = yVals('right'), rmax = Math.max(...yr, 1e-9), rmin = Math.min(0, ...yr);
+    const lstep = ticks[1] - ticks[0], up = Math.max(1, ticks.filter((v) => v > 0).length), dn = ticks.filter((v) => v < 0).length;
+    const niceUp = (x) => { const p = Math.pow(10, Math.floor(Math.log10(x))), f = x / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; };
+    const rstep = niceUp(Math.max(rmax / up, dn ? -rmin / dn : 0, 1e-9)); const k = rstep / lstep;
+    t2 = ticks.map((v) => v * k).filter((v) => v >= Math.min(0, rmin) - 1e-9); Y2 = (v) => Y(v / k); }
+  const yf = spec.yfmt || short, y2f = spec.y2fmt || short;
+  const xf = spec.xfmt || (isDate ? fmtTipDate : (v) => String(v));
+  const xtf = spec.xtick || (isDate ? (t) => fmtTickDate(t, dx1 - dx0) : xf);
+  let s = `<defs><clipPath id="c${el.dataset.ix}"><rect x="${m.l}" y="${m.t - 2}" width="${iw}" height="${ih + 4}"/></clipPath></defs>`;
+  // danger shading
+  if (spec.shadeBelow != null && spec.shadeBelow > lo) s += `<rect class="ixdanger" x="${m.l}" y="${Y(Math.min(spec.shadeBelow, hi))}" width="${iw}" height="${Y(lo) - Y(Math.min(spec.shadeBelow, hi))}"/>`;
+  ticks.forEach((v) => { s += `<line class="ixgrid" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ixax" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${h(yf(v, true))}</text>`; });
+  if (hasR) t2.forEach((v) => { s += `<text class="ixax" x="${W - m.r + 6}" y="${Y2(v) + 4}">${h(y2f(v, true))}</text>`; });
+  if (lo < 0 && hi > 0) s += `<line class="ixzero" x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+  // x ticks
+  const xt = isDate ? dateTicks(dx0, dx1, Math.max(3, Math.floor(iw / 70))) : (spec.xticks || niceTicks(dx0, dx1, Math.max(3, Math.floor(iw / 80)))).filter(inX);
+  xt.forEach((t) => { const x = X(t); if (x < m.l - 1 || x > W - m.r + 1) return; s += `<text class="ixax" x="${x}" y="${H - 6}" text-anchor="middle">${h(xtf(t))}</text>`; });
+  s += `<g clip-path="url(#c${el.dataset.ix})">`;
+  if (spec.band) { const lo2 = spec.band.lo, hi2 = spec.band.hi; s += `<path class="ixband" fill="${spec.band.color || C.blue}" d="${hi2.map((p, i) => (i ? 'L' : 'M') + X(+p[0]).toFixed(1) + ' ' + Y(+p[1]).toFixed(1)).join(' ')} ${[...lo2].reverse().map((p) => 'L' + X(+p[0]).toFixed(1) + ' ' + Y(+p[1]).toFixed(1)).join(' ')} Z"/>`; }
+  // bars (grouped by non-stack series, stacks combined)
+  const barSeries = vis.filter((s0) => s0.kind === 'bar' && (s0.axis || 'left') === 'left');
+  if (barSeries.length) {
+    const groups = []; barSeries.forEach((b) => { const g = b.stack || ('_' + b.name); if (!groups.includes(g)) groups.push(g); });
+    const stepPx = (iw * (2 * pad)) / (dx1 - dx0), gw = Math.max(2, stepPx * 0.78), bw = gw / groups.length;
+    const base = {};
+    for (const b of barSeries) { const gi = groups.indexOf(b.stack || ('_' + b.name));
+      for (const p of b.data) { const xv = +p[0], v = +p[1]; if (!inX(xv) || !v) continue; const k = gi + '|' + xv; const bse = base[k] || [0, 0]; const from = v >= 0 ? bse[0] : bse[1], to = from + v; if (v >= 0) bse[0] = to; else bse[1] = to; base[k] = bse;
+        s += `<rect class="ixbar" fill="${b.color}" x="${(X(xv) - gw / 2 + gi * bw).toFixed(1)}" y="${Math.min(Y(from), Y(to)).toFixed(1)}" width="${Math.max(1, bw - 1).toFixed(1)}" height="${Math.abs(Y(to) - Y(from)).toFixed(1)}" rx="1.5"/>`; } }
+  }
+  for (const sr of vis) {
+    if (sr.kind === 'bar') continue;
+    const YY = sr.axis === 'right' ? Y2 : Y;
+    const pts = sr.data.filter((p) => p[1] != null && isFinite(p[1]));
+    if (sr.kind === 'dots') { pts.forEach((p) => { s += `<circle class="ixdot" cx="${X(+p[0])}" cy="${YY(+p[1])}" r="${sr.r || 3}" fill="${sr.color}"/>`; }); continue; }
+    let d = '';
+    pts.forEach((p, i) => { const x = X(+p[0]).toFixed(1), y = YY(+p[1]).toFixed(1); if (sr.kind === 'step' && i) d += `H${x}V${y}`; else d += (i ? 'L' : 'M') + x + ' ' + y; });
+    if (sr.kind === 'area' && pts.length) s += `<path class="ixarea" fill="${sr.color}" d="${d} L${X(+pts[pts.length - 1][0]).toFixed(1)} ${YY(Math.max(lo, 0)).toFixed(1)} L${X(+pts[0][0]).toFixed(1)} ${YY(Math.max(lo, 0)).toFixed(1)} Z"/>`;
+    s += `<path class="ixline${sr.dash ? ' dash' : ''}" stroke="${sr.color}" stroke-width="${sr.width || 2}" d="${d}"/>`;
+  }
+  (spec.refs || []).forEach((r) => { if (r.y < lo || r.y > hi) return; s += `<line class="ixref" stroke="${r.color || C.gray}" x1="${m.l}" x2="${W - m.r}" y1="${Y(r.y)}" y2="${Y(r.y)}"/><text class="ixreflabel" x="${W - m.r - 4}" y="${Y(r.y) - 4}" text-anchor="end">${h(r.label || '')}</text>`; });
+  (spec.marks || []).forEach((mk) => { const x = +mk.x; if (!inX(x)) return; const y = mk.y != null ? Y(mk.y) : m.t + ih; s += `<circle class="ixmark" cx="${X(x)}" cy="${y}" r="${mk.r || 3.5}" fill="${mk.color || C.red}"/>`; });
+  s += `</g><line class="ixcross" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" visibility="hidden"/><g class="ixhov"></g><rect class="ixbrush" x="0" y="${m.t}" width="0" height="${ih}" visibility="hidden"/><rect class="ixhit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/>`;
+  const legendItems = spec.legend === false || series.length < 2 && !spec.band ? [] : series.map((sr) => ({ name: sr.name, color: sr.color, off: sr.off, dash: sr.dash }));
+  el.innerHTML = svgEl(W, H, s) + (legendItems.length || st.zoom ? legendHtml(legendItems, st.zoom ? '<button type="button" class="ixleg reset">Reset zoom</button>' : '') : '');
+  paintSwatches(el);
+  // interaction
+  const svg = el.querySelector('svg'), hit = el.querySelector('.ixhit'), cross = el.querySelector('.ixcross'), hov = el.querySelector('.ixhov'), brush = el.querySelector('.ixbrush');
+  const visX = allX.filter(inX);
+  const toLocal = (ev) => { const r = svg.getBoundingClientRect(); return (ev.clientX - r.left) * (W / r.width); };
+  const invX = (px) => dx0 + ((px - m.l) / iw) * (dx1 - dx0);
+  let drag = null;
+  const show = (ev) => {
+    if (!visX.length) return; const px = toLocal(ev); const xv = visX[nearestIdx(visX, invX(px))]; const cx = X(xv);
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
+    let dots = '', rows = '';
+    for (const sr of vis) { const p = sr.data.find((q) => +q[0] === xv); if (!p || p[1] == null) continue; const YY = sr.axis === 'right' ? Y2 : Y;
+      if (sr.kind !== 'bar') dots += `<circle cx="${cx}" cy="${YY(+p[1])}" r="4" fill="${sr.color}" class="ixhovdot"/>`;
+      if (sr.tip === false) continue;
+      rows += `<div class="r">${sw(sr.color, sr.dash)}<span>${h(sr.name)}</span><b>${h((sr.fmt || (sr.axis === 'right' ? y2f : yf))(+p[1]))}</b></div>`; }
+    if (spec.band) { const a = spec.band.lo.find((q) => +q[0] === xv), b = spec.band.hi.find((q) => +q[0] === xv); if (a && b) rows += `<div class="r">${sw(spec.band.color || C.blue)}<span>${h(spec.band.name || 'range')}</span><b>${h(yf(+a[1]))} – ${h(yf(+b[1]))}</b></div>`; }
+    (spec.marks || []).filter((mk) => +mk.x === xv && mk.label).forEach((mk) => { rows += `<div class="r">${sw(mk.color || C.red)}<span>${h(mk.label)}</span></div>`; });
+    if (spec.extra) rows += spec.extra(xv) || '';
+    hov.innerHTML = dots;
+    const tip = ixTip(); ixShowTip(`<div class="hd">${h(xf(xv))}</div>${rows}`, ev); paintSwatches(tip);
+  };
+  const hide = () => { cross.setAttribute('visibility', 'hidden'); hov.innerHTML = ''; ixHideTip(); };
+  hit.addEventListener('pointermove', (ev) => {
+    if (drag) { const px = Math.max(m.l, Math.min(m.l + iw, toLocal(ev))); brush.setAttribute('x', Math.min(drag, px)); brush.setAttribute('width', Math.abs(px - drag)); brush.setAttribute('visibility', 'visible'); hide(); return; }
+    show(ev);
+  });
+  hit.addEventListener('pointerleave', () => { if (!drag) hide(); });
+  hit.addEventListener('pointerdown', (ev) => { if (spec.zoom === false || ev.pointerType !== 'mouse') { show(ev); return; } drag = toLocal(ev); hit.setPointerCapture(ev.pointerId); });
+  hit.addEventListener('pointerup', (ev) => {
+    if (drag == null) { return; } const px = toLocal(ev), a = Math.min(drag, px), b = Math.max(drag, px); drag = null; brush.setAttribute('visibility', 'hidden');
+    if (b - a > 10) { st.zoom = [invX(a), invX(b)]; IXR.xy(el, spec, st); }
+    else if (spec.onClick && visX.length) spec.onClick(visX[nearestIdx(visX, invX(px))]);
+  });
+  hit.addEventListener('dblclick', () => { if (st.zoom) { st.zoom = null; IXR.xy(el, spec, st); } });
+  el.querySelectorAll('.ixleg[data-li]').forEach((b) => b.onclick = () => { const i = +b.dataset.li; if (st.off.has(i)) st.off.delete(i); else if (series.length - st.off.size > 1) st.off.add(i); IXR.xy(el, spec, st); });
+  const rz = el.querySelector('.ixleg.reset'); if (rz) rz.onclick = () => { st.zoom = null; IXR.xy(el, spec, st); };
+};
+
+// ---- category bars ----
+// spec: { cats: [label], series: [{ name, vals: [n], color, stack?, kind: 'bar'|'line', fmt }], yfmt, height, onClick(i), tip(i) }
+IXR.cbar = (el, spec, st) => {
+  const W = Math.max(280, el.clientWidth || 640), H = spec.height || 200;
+  if (!st.off) st.off = new Set((spec.series || []).map((s, i) => (s.hidden ? i : -1)).filter((i) => i >= 0));
+  const series = spec.series.map((s, i) => ({ color: s.color || PAL[i % PAL.length], kind: s.kind || 'bar', ...s, off: st.off.has(i) }));
+  const vis = series.filter((s) => !s.off), n = spec.cats.length;
+  if (!n) { el.innerHTML = '<p class="empty">Nothing in range.</p>'; return; }
+  const m = { t: 12, r: 12, b: spec.rotate ? 36 : 24, l: 50 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const groups = []; vis.filter((s) => s.kind === 'bar').forEach((b) => { const g = b.stack || ('_' + b.name); if (!groups.includes(g)) groups.push(g); });
+  const tops = []; for (let i = 0; i < n; i++) { const acc = {}; let mx0 = 0, mn0 = 0; vis.forEach((s) => { const v = +s.vals[i] || 0; if (s.kind === 'line') { mx0 = Math.max(mx0, v); mn0 = Math.min(mn0, v); return; } const g = s.stack || ('_' + s.name); acc[g] = acc[g] || [0, 0]; if (v >= 0) acc[g][0] += v; else acc[g][1] += v; }); Object.values(acc).forEach(([a, b]) => { mx0 = Math.max(mx0, a); mn0 = Math.min(mn0, b); }); tops.push([mn0, mx0]); }
+  let lo = Math.min(0, ...tops.map((t) => t[0])), hi = Math.max(...tops.map((t) => t[1]), (spec.refs || []).reduce((a, r) => Math.max(a, r.y), 0), 1);
+  const ticks = niceTicks(lo, hi, H < 150 ? 3 : 4); lo = ticks[0]; hi = ticks[ticks.length - 1];
+  const Y = (v) => m.t + ih - (ih * (v - lo)) / ((hi - lo) || 1), cw = iw / n, gw = cw * 0.76, bw = gw / Math.max(1, groups.length);
+  const cx = (i) => m.l + cw * i + cw / 2;
+  const yf = spec.yfmt || short;
+  let s = '';
+  ticks.forEach((v) => { s += `<line class="ixgrid" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ixax" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${h(yf(v, true))}</text>`; });
+  if (lo < 0) s += `<line class="ixzero" x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+  const every = Math.ceil(n / Math.max(1, Math.floor(iw / (spec.rotate ? 26 : 46))));
+  spec.cats.forEach((c, i) => { if (i % every) return; s += spec.rotate ? `<text class="ixax" x="${cx(i)}" y="${H - 6}" text-anchor="end" transform="rotate(-35 ${cx(i)} ${H - 6})">${h(c)}</text>` : `<text class="ixax" x="${cx(i)}" y="${H - 6}" text-anchor="middle">${h(c)}</text>`; });
+  for (let i = 0; i < n; i++) { const base = {};
+    vis.filter((sr) => sr.kind === 'bar').forEach((sr) => { const v = +sr.vals[i] || 0; if (!v) return; const g = sr.stack || ('_' + sr.name), gi = groups.indexOf(g); const bse = base[g] || [0, 0]; const from = v >= 0 ? bse[0] : bse[1], to = from + v; if (v >= 0) bse[0] = to; else bse[1] = to; base[g] = bse;
+      s += `<rect class="ixbar" data-i="${i}" fill="${sr.color}" x="${(cx(i) - gw / 2 + gi * bw).toFixed(1)}" y="${Math.min(Y(from), Y(to)).toFixed(1)}" width="${Math.max(1, bw - 1.5).toFixed(1)}" height="${Math.max(0.5, Math.abs(Y(to) - Y(from))).toFixed(1)}" rx="1.5"/>`; }); }
+  vis.filter((sr) => sr.kind === 'line').forEach((sr) => { s += `<path class="ixline${sr.dash ? ' dash' : ''}" stroke="${sr.color}" stroke-width="2" d="${sr.vals.map((v, i) => (i ? 'L' : 'M') + cx(i).toFixed(1) + ' ' + Y(+v || 0).toFixed(1)).join(' ')}"/>`; sr.vals.forEach((v, i) => { s += `<circle cx="${cx(i)}" cy="${Y(+v || 0)}" r="2.5" fill="${sr.color}"/>`; }); });
+  (spec.refs || []).forEach((r) => { s += `<line class="ixref" stroke="${r.color || C.gray}" x1="${m.l}" x2="${W - m.r}" y1="${Y(r.y)}" y2="${Y(r.y)}"/><text class="ixreflabel" x="${W - m.r - 4}" y="${Y(r.y) - 4}" text-anchor="end">${h(r.label || '')}</text>`; });
+  s += `<rect class="ixcol" x="0" y="${m.t}" width="${cw}" height="${ih}" visibility="hidden"/>`;
+  for (let i = 0; i < n; i++) s += `<rect class="ixhitc" data-i="${i}" x="${m.l + cw * i}" y="${m.t}" width="${cw}" height="${ih}"/>`;
+  const leg = series.length > 1 && spec.legend !== false ? legendHtml(series.map((sr) => ({ name: sr.name, color: sr.color, off: sr.off, dash: sr.dash }))) : '';
+  el.innerHTML = svgEl(W, H, s, spec.onClick ? 'clickable' : '') + leg; paintSwatches(el);
+  const col = el.querySelector('.ixcol');
+  el.querySelectorAll('.ixhitc').forEach((r) => {
+    const i = +r.dataset.i;
+    r.addEventListener('pointermove', (ev) => {
+      col.setAttribute('x', m.l + cw * i); col.setAttribute('visibility', 'visible');
+      let rows = '', tot = 0, nb = 0;
+      vis.forEach((sr) => { const v = +sr.vals[i] || 0; if (sr.kind === 'bar' && sr.stack) { tot += v; nb++; } if (sr.tip === false) return; rows += `<div class="r">${sw(sr.color, sr.dash)}<span>${h(sr.name)}</span><b>${h((sr.fmt || yf)(v))}</b></div>`; });
+      if (spec.stackTotal && nb > 1) rows += `<div class="r tot"><span>Total</span><b>${h(yf(tot))}</b></div>`;
+      if (spec.tip) rows += spec.tip(i) || '';
+      ixShowTip(`<div class="hd">${h(spec.tipCats ? spec.tipCats[i] : spec.cats[i])}</div>${rows}`, ev); paintSwatches(ixTip());
+    });
+    r.addEventListener('pointerleave', () => { col.setAttribute('visibility', 'hidden'); ixHideTip(); });
+    if (spec.onClick) r.addEventListener('click', () => { ixHideTip(); spec.onClick(i); });
+  });
+  el.querySelectorAll('.ixleg[data-li]').forEach((b) => b.onclick = () => { const i = +b.dataset.li; if (st.off.has(i)) st.off.delete(i); else if (series.length - st.off.size > 1) st.off.add(i); IXR.cbar(el, spec, st); });
+};
+
+// ---- donut ----
+// spec: { items: [{ k, v, color?, sub? }], center?, label, fmt, onClick(k, i), selected? }
+IXR.donut = (el, spec) => {
+  const items = spec.items.filter((it) => it.v > 0), tot = items.reduce((a, it) => a + it.v, 0), f = spec.fmt || money;
+  if (!tot) { el.innerHTML = '<p class="empty">Nothing in range.</p>'; return; }
+  const R = 66, r = 42, c = 74, S = 148; let a0 = -Math.PI / 2, paths = '';
+  const P = (a, rad) => `${(c + rad * Math.cos(a)).toFixed(2)} ${(c + rad * Math.sin(a)).toFixed(2)}`;
+  items.forEach((it, i) => { it.color = it.color || PAL[i % PAL.length]; const fr = it.v / tot, a1 = a0 + fr * 2 * Math.PI, big = fr > 0.5 ? 1 : 0, mid = (a0 + a1) / 2;
+    const d = fr > 0.9999 ? `M${P(a0, R)} A${R} ${R} 0 1 1 ${P(a0 + Math.PI, R)} A${R} ${R} 0 1 1 ${P(a0, R)} M${P(a0, r)} A${r} ${r} 0 1 0 ${P(a0 + Math.PI, r)} A${r} ${r} 0 1 0 ${P(a0, r)}` : `M${P(a0, R)} A${R} ${R} 0 ${big} 1 ${P(a1, R)} L${P(a1, r)} A${r} ${r} 0 ${big} 0 ${P(a0, r)} Z`;
+    paths += `<path class="ixslice" data-i="${i}" d="${d}" fill="${it.color}" fill-rule="evenodd" data-dx="${(4 * Math.cos(mid)).toFixed(2)}" data-dy="${(4 * Math.sin(mid)).toFixed(2)}"/>`; a0 = a1; });
+  const center = spec.center || f(tot);
+  const legend = items.map((it, i) => `<div class="ixdrow${spec.onClick ? ' tap' : ''}" data-i="${i}">${sw(it.color)}<span class="k">${h(it.k)}</span><span class="v">${h(f(it.v))}</span><span class="p">${(100 * it.v / tot).toFixed(0)}%</span></div>`).join('');
+  el.innerHTML = `<div class="ixdonut"><svg viewBox="0 0 ${S} ${S}" class="ixdsvg">${paths}<text x="${c}" y="${c - 2}" text-anchor="middle" class="ixdc">${h(center)}</text><text x="${c}" y="${c + 13}" text-anchor="middle" class="ixdl">${h(spec.label || '')}</text></svg><div class="ixdleg">${legend}</div></div>`;
+  paintSwatches(el);
+  const cT = el.querySelector('.ixdc'), lT = el.querySelector('.ixdl');
+  const focus = (i, ev) => {
+    el.querySelectorAll('.ixslice').forEach((p) => { const on = +p.dataset.i === i; p.setAttribute('transform', on ? `translate(${p.dataset.dx} ${p.dataset.dy})` : ''); p.classList.toggle('dim', i != null && !on); });
+    el.querySelectorAll('.ixdrow').forEach((d0) => d0.classList.toggle('on', +d0.dataset.i === i));
+    if (i == null) { cT.textContent = center; lT.textContent = spec.label || ''; ixHideTip(); return; }
+    const it = items[i]; cT.textContent = (100 * it.v / tot).toFixed(1) + '%'; lT.textContent = it.k.length > 16 ? it.k.slice(0, 15) + '…' : it.k;
+    if (ev && ev.pointerType !== undefined) { ixShowTip(`<div class="hd">${h(it.k)}</div><div class="r"><span>Amount</span><b>${h(f(it.v))}</b></div><div class="r"><span>Share</span><b>${(100 * it.v / tot).toFixed(1)}%</b></div>${it.sub ? `<div class="r"><span>${h(it.sub)}</span></div>` : ''}${spec.onClick ? '<div class="r muted"><span>Click to open</span></div>' : ''}`, ev); }
+  };
+  el.querySelectorAll('.ixslice, .ixdrow').forEach((n0) => {
+    n0.addEventListener('pointermove', (ev) => focus(+n0.dataset.i, n0.classList.contains('ixslice') ? ev : null));
+    n0.addEventListener('pointerleave', () => focus(null));
+    if (spec.onClick) n0.addEventListener('click', () => { ixHideTip(); spec.onClick(items[+n0.dataset.i].k, +n0.dataset.i); });
+  });
+};
+
+// ---- horizontal bars ----
+// spec: { items: [{ k, v, prev?, sub?, color? }], fmt, onClick(k), max }
+IXR.hbar = (el, spec) => {
+  const items = spec.items, f = spec.fmt || money; if (!items.length) { el.innerHTML = '<p class="empty">Nothing in range.</p>'; return; }
+  const mx = Math.max(...items.map((it) => Math.max(it.v, it.prev || 0)), 1);
+  el.innerHTML = `<div class="ixhbar">${items.map((it, i) => `<div class="ixhrow${spec.onClick ? ' tap' : ''}" data-i="${i}"><span class="k">${h(it.k)}</span><span class="track"><i class="cur" data-w="${(100 * Math.max(0, it.v) / mx).toFixed(2)}" data-c="${it.color || C.blue}"></i>${it.prev != null ? `<i class="prev" data-w="${(100 * Math.max(0, it.prev) / mx).toFixed(2)}"></i>` : ''}</span><span class="v">${h(f(it.v))}</span></div>`).join('')}</div>${items.some((it) => it.prev != null) ? `<div class="ixlegend"><span class="ixleg">${sw(C.blue)}${h(spec.curLabel || 'This period')}</span><span class="ixleg">${sw('#9aa3af', true)}${h(spec.prevLabel || 'Prior period')}</span></div>` : ''}`;
+  el.querySelectorAll('i[data-w]').forEach((i) => { i.style.width = i.dataset.w + '%'; if (i.dataset.c) i.style.background = i.dataset.c; }); paintSwatches(el);
+  el.querySelectorAll('.ixhrow').forEach((r) => { const it = items[+r.dataset.i];
+    r.addEventListener('pointermove', (ev) => ixShowTip(`<div class="hd">${h(it.k)}</div><div class="r"><span>${h(spec.curLabel || 'This period')}</span><b>${h(f(it.v))}</b></div>${it.prev != null ? `<div class="r"><span>${h(spec.prevLabel || 'Prior period')}</span><b>${h(f(it.prev))}</b></div><div class="r"><span>Change</span><b>${it.prev ? pct(100 * (it.v - it.prev) / it.prev) : 'new'}</b></div>` : ''}${it.sub ? `<div class="r"><span>${h(it.sub)}</span></div>` : ''}`, ev));
+    r.addEventListener('pointerleave', ixHideTip);
+    if (spec.onClick) r.addEventListener('click', () => { ixHideTip(); spec.onClick(it.k); }); });
+};
+
+// ---- heatmap ----
+// spec: { rows: [label], cols: [label], vals: [[n]] (rows x cols), fmt, tip(r, c) }
+IXR.heat = (el, spec) => {
+  const W = Math.max(280, el.clientWidth || 640), lw = 92, ch = 26, H = 22 + spec.rows.length * ch, cw = (W - lw - 4) / spec.cols.length;
+  const mx = Math.max(...spec.vals.flat().map((v) => +v || 0), 1), f = spec.fmt || money;
+  let s = '';
+  spec.cols.forEach((c, j) => { s += `<text class="ixax" x="${lw + cw * j + cw / 2}" y="14" text-anchor="middle">${h(c)}</text>`; });
+  spec.rows.forEach((r, i) => { s += `<text class="ixax lab" x="${lw - 8}" y="${22 + ch * i + ch / 2 + 4}" text-anchor="end">${h(r)}</text>`;
+    spec.cols.forEach((c, j) => { const v = +spec.vals[i][j] || 0; s += `<rect class="ixcell" data-r="${i}" data-c="${j}" x="${lw + cw * j + 1}" y="${22 + ch * i + 1}" width="${cw - 2}" height="${ch - 2}" rx="3" fill="${spec.color || C.blue}" fill-opacity="${(0.06 + 0.94 * Math.sqrt(v / mx)).toFixed(3)}"/>`; }); });
+  el.innerHTML = svgEl(W, H, s);
+  el.querySelectorAll('.ixcell').forEach((cell) => { const i = +cell.dataset.r, j = +cell.dataset.c;
+    cell.addEventListener('pointermove', (ev) => ixShowTip(`<div class="hd">${h(spec.rows[i])} · ${h(spec.cols[j])}</div><div class="r"><span>${h(spec.valueLabel || 'Value')}</span><b>${h(f(+spec.vals[i][j] || 0))}</b></div>${spec.tip ? spec.tip(i, j) || '' : ''}`, ev));
+    cell.addEventListener('pointerleave', ixHideTip); });
+};
+
+// ---- helpers for analysis ----
+function ols(ys) { const n = ys.length; if (n < 2) return { a: ys[0] || 0, b: 0 }; const xm = (n - 1) / 2, ym = ys.reduce((a, y) => a + y, 0) / n; let sxy = 0, sxx = 0; ys.forEach((y, i) => { sxy += (i - xm) * (y - ym); sxx += (i - xm) ** 2; }); const b = sxx ? sxy / sxx : 0; return { a: ym - b * xm, b }; }
+function movAvg(ys, k) { return ys.map((_, i) => { const a = ys.slice(Math.max(0, i - k + 1), i + 1); return a.reduce((s, v) => s + v, 0) / a.length; }); }
+const mean = (a) => a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0;
+const sum = (a) => a.reduce((s, v) => s + v, 0);
+const monLabel = (iso0) => { const d0 = d(iso0); return MON[d0.getMonth()] + (d0.getMonth() === 0 ? ' ' + String(d0.getFullYear()).slice(2) : ''); };
+const monLong = (iso0) => d(iso0).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
 // ---------- views ----------
 const VIEWS = {};
@@ -614,131 +900,303 @@ VIEWS.settings = async (view) => {
 };
 
 // ---------- Insights ----------
-const INS_NAV = [['insights', 'Cash'], ['cycle', 'Pay cycle'], ['trends', 'Trends'], ['spending', 'Spending'], ['income', 'Income'], ['fees', 'Fees'], ['review', 'Review']];
+// Each card states a conclusion computed from the data, then the chart that supports it.
+const INS_NAV = [['insights', 'Overview'], ['spending', 'Spending'], ['cash', 'Cash'], ['habits', 'Habits'], ['income', 'Income'], ['review', 'Review']];
 const fmtPct = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toFixed(d) + '%';
 const dayOfMonth = new Date().getDate();
+const finding = (title, sub, body, note) => `<div class="card finding"><h2>${title}</h2>${sub ? `<p class="muted small">${sub}</p>` : ''}${body}${note ? `<p class="small note">${note}</p>` : ''}</div>`;
+const yMoney = (v, ax) => ax ? short(v) : money(v);
+const yMoney2 = (v, ax) => ax ? short(v) : money2(v);
+const dShort = (iso0) => d(iso0).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const dLong = (iso0) => d(iso0).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const isOverdraft = (e) => e.kind === 'fee' && /overdraft/i.test(e.label) && num(e.amount) < 0;
+const isWaiver = (e) => e.kind === 'fee' && num(e.amount) > 0;
+const mainPayer = (ev) => { const by = {}; ev.filter((e) => e.kind === 'income').forEach((e) => { by[e.label] = (by[e.label] || 0) + num(e.amount); }); return Object.entries(by).sort((a, b) => b[1] - a[1])[0]?.[0]; };
 
 VIEWS.insights = async (view) => {
-  const [fc, sum, nwm, acc] = await Promise.all([rpc('cash_forecast', { p_days: 45 }), D.summary(), D.nwm(), D.accounts()]);
-  const cash = acc.filter((a) => a.type === 'depository' && !a.hidden).reduce((s, a) => s + num(a.available_balance ?? a.current_balance), 0);
-  const low = fc.reduce((m, r) => (num(r.balance) < num(m.balance) ? r : m), fc[0]);
-  const below = fc.filter((r) => num(r.balance) < 0).length;
-  const done = sum.filter((r) => !r.partial);
-  const last12 = done.slice(-12), last3 = done.slice(-3), last6 = done.slice(-6);
-  const rate = (rows) => { const i = rows.reduce((s, r) => s + num(r.income), 0), n = rows.reduce((s, r) => s + num(r.net), 0); return i > 0 ? (100 * n) / i : null; };
-  const spend12 = last12.reduce((s, r) => s + num(r.spending), 0) / Math.max(1, last12.length);
-  const runway = spend12 > 0 ? cash / spend12 : null;
-  const sdNet = stdev(last12.map((r) => num(r.net)));
-  const events = fc.filter((r) => r.events && r.events.length).slice(0, 8);
-  view.innerHTML = `
-    <h1>Insights</h1>${subnav(INS_NAV, 'insights')}
-    <div class="grid2">
-      <div class="card">
-        <div class="row between"><h2>Cash forecast, 45 days</h2><span class="stat"><span class="v">${money(cash)}</span><span class="l">available</span></span></div>
-        ${lineChart(fc.map((r) => ({ t: r.as_of, v: num(r.balance) })), 640, 150, money, true)}
-        <p class="small">Minimum <b class="${num(low.balance) < 0 ? 'down' : num(low.balance) < 300 ? 'warn' : ''}">${money(num(low.balance))}</b> on ${fmtDayLong(low.as_of)}${below ? ` · <span class="down">${below} day${below > 1 ? 's' : ''} negative</span>` : ''}</p>
-        <p class="muted small">Method: scheduled income and recurring charges at expected dates, card minimums at due dates, plus trailing-90-day mean daily discretionary spend. Internal transfers excluded.</p>
-        <div class="list">${events.map((r) => `<div class="item"><span class="t">${r.events.map(h).join(', ')}</span><span class="a ${num(r.inflow) > num(r.outflow) ? 'up' : ''}">${signed(num(r.inflow) - num(r.outflow), 0)}</span><span class="s">${fmtDayLong(r.as_of)} · balance after ${money(num(r.balance))}</span></div>`).join('')}</div>
-      </div>
-      <div class="card">
-        <h2>Savings rate</h2>
-        <div class="row wrap">
-          <span class="stat"><span class="v ${rate(last3) < 0 ? 'down' : ''}">${fmtPct(rate(last3))}</span><span class="l">3 mo</span></span><span style="width:16px"></span>
-          <span class="stat"><span class="v ${rate(last6) < 0 ? 'down' : ''}">${fmtPct(rate(last6))}</span><span class="l">6 mo</span></span><span style="width:16px"></span>
-          <span class="stat"><span class="v ${rate(last12) < 0 ? 'down' : ''}">${fmtPct(rate(last12))}</span><span class="l">12 mo</span></span>
-        </div>
-        <p class="muted small">(income − spending) / income. Card purchases count at purchase; card payments and transfers excluded.</p>
-        ${barChart(last12.map((r) => ({ month: r.month, income: num(r.income), spending: num(r.spending) })), ['income', 'spending'])}
-        <div class="row wrap"><span class="stat"><span class="v">${runway == null ? '—' : runway.toFixed(1) + ' mo'}</span><span class="l">runway: cash / mean monthly spending</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money(sdNet)}</span><span class="l">σ of monthly net cash flow</span></span></div>
-      </div>
-    </div>
-    <div class="card">
-      <h2>Monthly cash flow</h2>
-      <div class="scroll"><table class="data"><thead><tr><th>Month</th><th class="num">Income</th><th class="num">Spending</th><th class="num">Net</th><th class="num">Rate</th></tr></thead><tbody>
-        ${sum.slice(-13).reverse().map((r) => `<tr><td>${fmtMonth(r.month)}${r.partial ? ' <span class="muted">MTD</span>' : ''}</td><td class="num">${money(num(r.income))}</td><td class="num">${money(num(r.spending))}</td><td class="num ${num(r.net) < 0 ? 'down' : 'up'}">${signed(num(r.net))}</td><td class="num">${fmtPct(r.savings_rate_pct)}</td></tr>`).join('')}
-      </tbody></table></div>
-    </div>
-    ${nwm.length > 1 ? `<div class="card"><h2>Net worth attribution</h2>
-      <div class="scroll"><table class="data"><thead><tr><th>Month</th><th class="num">Net worth</th><th class="num">Change</th><th class="num">Net cash flow</th><th class="num">Debt reduction</th><th class="num">Investment change</th></tr></thead><tbody>
-        ${nwm.slice(-12).reverse().map((r) => `<tr><td>${fmtMonth(r.month)}</td><td class="num">${money(num(r.net_worth))}</td><td class="num ${num(r.change) < 0 ? 'down' : 'up'}">${r.change == null ? '—' : signed(num(r.change))}</td><td class="num">${signed(num(r.saved))}</td><td class="num">${r.debt_paid_down == null ? '—' : signed(num(r.debt_paid_down))}</td><td class="num">${r.investment_change == null ? '—' : signed(num(r.investment_change))}</td></tr>`).join('')}
-      </tbody></table></div>
-      <p class="muted small">From daily balance snapshots.</p></div>` : ''}`;
+  const y0 = iso(new Date(Date.now() - 365 * 864e5));
+  const [liq, flow, hw, ev, bc, cc] = await Promise.all([rpc('liquid_daily', { p_days: 365 }), rpc('monthly_flow', { p_months: 13 }), rpc('habit_weekly', { p_weeks: 52 }),
+    rpc('money_events', { p_days: 400 }), rpc('spend_breakdown', { p_from: y0, p_to: today(), p_by: 'category' }), rpc('cushion_curve').catch(() => [])]);
+  const cards = [];
+
+  // 1. Liquid position
+  if (liq.length > 30) {
+    const L = liq.map((r) => num(r.liquid)), f = ols(L), perMo = f.b * 30.44;
+    const end = L[L.length - 1], a30 = mean(L.slice(0, 30)), b30 = mean(L.slice(-30));
+    const iMax = L.indexOf(Math.max(...L)), iMin = L.indexOf(Math.min(...L));
+    const verdict = Math.abs(b30 - a30) < 500 ? 'no lasting gain in 12 months' : b30 > a30 ? `up ${money(b30 - a30)} in 12 months` : `down ${money(a30 - b30)} in 12 months`;
+    cards.push(finding(`Cash minus card debt: ${money(end)} today, ${verdict}`,
+      `Checking + savings − card balance, end of each day. 30-day average ${money(b30)} now vs ${money(a30)} a year ago; fitted trend ${signed(perMo)}/month. High ${money(L[iMax])} on ${dLong(liq[iMax].as_of)}; low ${money(L[iMin])} on ${dLong(liq[iMin].as_of)}.`,
+      ix({ type: 'xy', height: 220, yfmt: yMoney, shadeBelow: 0, series: [
+        { name: 'Cash minus card debt', data: liq.map((r) => [mx(r.as_of), num(r.liquid)]), kind: 'area', color: C.blue },
+        { name: 'Trend', data: liq.map((r, i) => [mx(r.as_of), f.a + f.b * i]), color: C.gray, dash: true, width: 1.5 },
+        { name: 'Checking', data: liq.map((r) => [mx(r.as_of), num(r.checking)]), color: C.teal, width: 1.2, hidden: true },
+        { name: 'Savings', data: liq.map((r) => [mx(r.as_of), num(r.savings)]), color: C.green, width: 1.2, hidden: true },
+        { name: 'Card balance', data: liq.map((r) => [mx(r.as_of), num(r.cards)]), color: C.red, width: 1.2, hidden: true }] }),
+      `${perMo > 50 ? `At ${signed(perMo)}/month a $10,000 reserve is ${(Math.max(0, 10000 - end) / perMo / 12).toFixed(1)} years away.` : b30 - a30 >= 500 ? 'The recent rise is from the last few paychecks; the 12-month trend is still flat, so no reserve is building yet.' : 'Money comes in and goes back out each pay cycle; no reserve is building.'} Drag across the chart to zoom; click legend items to add checking, savings or card balance.`));
+  }
+
+  // 2. Money in vs money out
+  const full = flow.filter((r) => !r.partial).slice(-12);
+  if (full.length) {
+    const inc = full.map((r) => num(r.income)), sp = full.map((r) => num(r.spending)), so = full.map((r) => Math.max(0, num(r.sent_out)));
+    const out = sp.map((v, i) => v + so[i]), net = inc.map((v, i) => v - out[i]);
+    const over = net.filter((v) => v < 0).length, gap = mean(out) - mean(inc);
+    cards.push(finding(`Money out exceeded money in during ${over} of the last ${full.length} months`,
+      `Average in ${money(mean(inc))}/month. Average out ${money(mean(out))}: ${money(mean(sp))} spending + ${money(mean(so))} sent to people (Zelle to Begum, Revolut, Apple Cash). Card payments and moves between your own accounts are excluded.`,
+      ix({ type: 'cbar', height: 230, yfmt: yMoney, stackTotal: false, cats: full.map((r) => monLabel(r.month)), tipCats: full.map((r) => monLong(r.month)),
+        series: [{ name: 'Income', vals: inc, color: C.green, stack: 'in' }, { name: 'Spending', vals: sp, color: C.blue, stack: 'out' }, { name: 'Sent to people', vals: so, color: C.amber, stack: 'out' }, { name: 'Net', vals: net, kind: 'line', color: C.violet }],
+        tip: (i) => `<div class="r tot"><span>Out total</span><b>${money(out[i])}</b></div>`,
+        onClick: (i) => { localStorage.setItem('sp_period', 'm:' + full[i].month); location.hash = '#spending'; } }),
+      gap > 0 ? `Average shortfall ${money(gap)}/month, covered by refunds, one-off deposits and savings drawdowns. Click a month to open its spending.` : `Average surplus ${money(-gap)}/month. Click a month to open its spending.`));
+  }
+
+  // 3. Composition
+  if (full.length) {
+    const tot = {}; full.forEach((r) => Object.entries(r.by_group || {}).forEach(([g, v]) => { tot[g] = (tot[g] || 0) + num(v); }));
+    const groups = Object.entries(tot).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const top = groups.slice(0, 7).map(([g]) => g), incAvg = mean(full.map((r) => num(r.income)));
+    const cat = (k) => num((bc.find((r) => r.key === k) || {}).total);
+    const deliv = cat('Food delivery') / 12, groc = cat('Groceries') / 12, amz = cat('Amazon') / 12;
+    const [g1, v1] = groups[0] || ['—', 0];
+    cards.push(finding(`${g1} takes ${fmtPct(100 * v1 / 12 / incAvg)} of income (${money(v1 / 12)}/month)`,
+      `Food delivery ${money(deliv)}/month vs groceries ${money(groc)}/month (${groc ? (deliv / groc).toFixed(1) + '×' : '—'}). Amazon ${money(amz)}/month. Trailing 12 months.`,
+      ix({ type: 'cbar', height: 230, yfmt: yMoney, stackTotal: true, cats: full.map((r) => monLabel(r.month)), tipCats: full.map((r) => monLong(r.month)),
+        series: [...top.map((g, i) => ({ name: g, vals: full.map((r) => num((r.by_group || {})[g])), stack: 's', color: PAL[i] })),
+          { name: 'Other', vals: full.map((r) => Object.entries(r.by_group || {}).filter(([g]) => !top.includes(g)).reduce((a, [, v]) => a + num(v), 0)), stack: 's', color: '#b8bec8' }],
+        onClick: (i) => { localStorage.setItem('sp_period', 'm:' + full[i].month); location.hash = '#spending'; } }),
+      `Halving delivery orders frees about ${money(deliv / 2)}/month. Click legend items to isolate a group; click a month to drill in.`));
+  }
+
+  // 4. Checking buffer
+  if (liq.length > 30) {
+    const ch = liq.map((r) => num(r.checking)), neg = ch.filter((v) => v < 0).length, low = ch.filter((v) => v < 300).length;
+    const od = ev.filter((e) => isOverdraft(e) && e.date >= liq[0].as_of), waived = ev.filter((e) => isWaiver(e) && /overdraft/i.test(e.label) && e.date >= liq[0].as_of);
+    const net = sum(od.map((e) => -num(e.amount))) - sum(waived.map((e) => num(e.amount)));
+    const full100 = (cc || []).find((r) => num(r.prevented_pct) >= 100);
+    const chAt = Object.fromEntries(liq.map((r) => [r.as_of, num(r.checking)]));
+    cards.push(finding(`Checking was negative on ${neg} days and under $300 on ${low} of the last ${liq.length}`,
+      `${od.length} overdraft fees (${money(sum(od.map((e) => -num(e.amount))))}), ${waived.length} waived; net cost ${money(net)}. Median end-of-day balance ${money(quantile(ch, 0.5))}.`,
+      ix({ type: 'xy', height: 210, yfmt: yMoney, shadeBelow: 0, refs: [{ y: 300, label: '$300' }],
+        series: [{ name: 'Checking', data: liq.map((r) => [mx(r.as_of), num(r.checking)]), color: C.blue, kind: 'area' }],
+        marks: od.map((e) => ({ x: mx(e.date), y: chAt[e.date] ?? 0, label: `Overdraft fee ${money(-num(e.amount))}`, color: C.red })) }),
+      full100 ? `A standing balance of ${money(num(full100.cushion))} would have prevented every overdraft in the period. Red dots are fees.` : 'Red dots are overdraft fees.'));
+  }
+
+  // 5. Purchase frequency
+  const wk = hw.slice(0, -1);
+  if (wk.length >= 16) {
+    const a = wk.slice(0, 8), b = wk.slice(-8), avg = (rows, k) => mean(rows.map((r) => num(r[k])));
+    const drivers = [['delivery_n', 'delivery'], ['amazon_n', 'Amazon'], ['cafeteria_n', 'cafeteria']].map(([k, l]) => [l, avg(b, k) - avg(a, k)]).sort((x, y) => y[1] - x[1]);
+    const P = wk.map((r) => num(r.purchases_n));
+    cards.push(finding(`${avg(b, 'purchases_n').toFixed(0)} purchases a week now, vs ${avg(a, 'purchases_n').toFixed(0)} a year ago`,
+      `Last 8 weeks vs first 8 weeks of the year. Average ticket ${money2(avg(b, 'purchases_amt') / Math.max(1, avg(b, 'purchases_n')))} now vs ${money2(avg(a, 'purchases_amt') / Math.max(1, avg(a, 'purchases_n')))}.`,
+      ix({ type: 'xy', height: 210, yfmt: (v) => Math.round(v), zoom: true, series: [
+        { name: 'Purchases', data: wk.map((r) => [mx(r.week), num(r.purchases_n)]), kind: 'bar', color: '#b8c4e6' },
+        { name: '8-week average', data: wk.map((r, i) => [mx(r.week), movAvg(P, 8)[i]]), color: C.blue, fmt: (v) => v.toFixed(1) },
+        { name: 'Delivery orders', data: wk.map((r) => [mx(r.week), num(r.delivery_n)]), color: C.amber, width: 1.5 },
+        { name: 'Amazon orders', data: wk.map((r) => [mx(r.week), num(r.amazon_n)]), color: C.teal, width: 1.5 },
+        { name: 'Cafeteria', data: wk.map((r) => [mx(r.week), num(r.cafeteria_n)]), color: C.gray, width: 1.2, hidden: true }],
+        xfmt: (t) => 'Week of ' + dLong(iso(new Date(t))) }),
+      `Largest change: ${drivers[0][0]} (${drivers[0][1] >= 0 ? '+' : ''}${drivers[0][1].toFixed(1)} a week).`));
+  }
+
+  // 6. Pay
+  const payer = mainPayer(ev.filter((e) => e.date >= iso(new Date(Date.now() - 200 * 864e5))));
+  const pays = ev.filter((e) => e.kind === 'income' && e.label === payer);
+  if (pays.length > 4) {
+    const last = num(pays[pays.length - 1].amount), yrAgo = pays.filter((e) => e.date <= iso(new Date(Date.now() - 365 * 864e5))).slice(-1)[0] || pays[0];
+    // a level is a paycheck amount repeated on the next check; a change is a new level
+    const changes = []; let level = null;
+    for (let i = 0; i < pays.length - 1; i++) { const b0 = num(pays[i].amount), c0 = num(pays[i + 1].amount);
+      if (Math.abs(c0 - b0) < 40) { if (level != null && Math.abs(b0 - level) > 40) changes.push(`${dLong(pays[i].date)} ${signed(b0 - level)}`); level = b0; } }
+    const others = ev.filter((e) => e.kind === 'income' && e.label !== payer);
+    cards.push(finding(`Net pay ${money2(last)} per check, ${signed(last - num(yrAgo.amount))} vs ${dLong(yrAgo.date)}`,
+      `${titleCase(payer)}. Lasting changes in take-home: ${changes.slice(-5).join(' · ') || 'none'}. Single-check spikes are bonuses, retro pay or adjustments.`,
+      ix({ type: 'xy', height: 200, yfmt: yMoney2, series: [
+        { name: titleCase(payer), data: pays.map((e) => [mx(e.date), num(e.amount)]), kind: 'step', color: C.green },
+        { name: 'Other deposits', data: others.map((e) => [mx(e.date), num(e.amount)]), kind: 'dots', color: C.amber }],
+        extra: (x) => { const o = others.filter((e) => mx(e.date) === x); return o.map((e) => `<div class="r"><span>${h(titleCase(e.label))}</span><b>${money2(num(e.amount))}</b></div>`).join(''); } }), ''));
+  }
+  view.innerHTML = `<h1>Insights</h1>${subnav(INS_NAV, 'insights')}${cards.join('') || '<div class="card"><p class="empty">Not enough history yet.</p></div>'}`;
 };
 
-const PERIODS = [['mtd', 'This month'], ['prev', 'Last month'], ['90', 'Last 90 days'], ['ytd', 'Year to date'], ['365', 'Last 12 months']];
+// ---------- Insights › Spending: drill-down ----------
 function periodRange(k) { const t = new Date(), y = t.getFullYear(), mo = t.getMonth();
+  if (k && k.startsWith('m:')) { const a = d(k.slice(2)); return [iso(a), iso(new Date(a.getFullYear(), a.getMonth() + 1, 0))]; }
   if (k === 'mtd') return [iso(new Date(y, mo, 1)), today()]; if (k === 'prev') return [iso(new Date(y, mo - 1, 1)), iso(new Date(y, mo, 0))];
-  if (k === 'ytd') return [`${y}-01-01`, today()]; return [iso(new Date(Date.now() - Number(k) * 864e5)), today()]; }
+  if (k === 'ytd') return [`${y}-01-01`, today()]; return [iso(new Date(Date.now() - Number(k || 90) * 864e5)), today()]; }
+const PERIODS = [['mtd', 'This month'], ['prev', 'Last month'], ['90', 'Last 90 days'], ['ytd', 'Year to date'], ['365', 'Last 12 months']];
 VIEWS.spending = async (view) => {
-  const [cs, ms, wd] = await Promise.all([rpc('category_stats', { p_months: 12 }), rpc('merchant_stats', { p_days: 90 }), D.weekday()]);
-  const early = dayOfMonth < 5;
   let period = localStorage.getItem('sp_period') || '90';
-  const drawBreakdown = async () => {
-    const [from, to] = periodRange(period); const el = $('#sp-body'); el.innerHTML = '<p class="muted">Loading…</p>';
-    const [bg, bc, bm] = await Promise.all([rpc('spend_breakdown', { p_from: from, p_to: to, p_by: 'group' }), rpc('spend_breakdown', { p_from: from, p_to: to, p_by: 'category' }), rpc('spend_breakdown', { p_from: from, p_to: to, p_by: 'merchant' })]);
-    const tot = bc.reduce((s, r) => s + num(r.total), 0), prev = bc.reduce((s, r) => s + num(r.prev_total), 0);
-    const days = (d(to) - d(from)) / 864e5 + 1;
-    el.innerHTML = `
-      <div class="row wrap"><span class="stat"><span class="v">${money(tot)}</span><span class="l">${fmtDay(from)} – ${fmtDay(to)}</span></span><span style="width:16px"></span><span class="stat"><span class="v ${tot > prev ? 'warn' : 'up'}">${prev > 0 ? pct(100 * (tot - prev) / prev) : '—'}</span><span class="l">vs prior ${Math.round(days)} days (${money(prev)})</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money(tot / days * 30.44)}</span><span class="l">per 30 days</span></span></div>
-      <div class="grid2">
-        <div><h3>By group</h3>${pieChart(topN(bg.map((r) => ({ k: r.key, v: num(r.total) })), 12), { label: 'spending' })}</div>
-        <div><h3>By category</h3>${pieChart(topN(bc.map((r) => ({ k: r.key, v: num(r.total), go: '#activity/' + encodeURIComponent(r.key) })), 10), { label: 'spending' })}</div>
-      </div>
-      <h3>Categories</h3>
-      <div class="scroll"><table class="data"><thead><tr><th>Category</th><th>Group</th><th class="num">Total</th><th class="num">Share</th><th class="num">n</th><th class="num">Avg</th><th class="num">vs prior</th></tr></thead><tbody>
-        ${bc.map((r) => `<tr class="tap" data-go="#activity/${encodeURIComponent(r.key)}"><td>${h(r.key)}</td><td class="muted">${h(r.grp || '')}</td><td class="num">${money(num(r.total))}</td><td class="num">${fmtPct(r.pct)}</td><td class="num">${r.n}</td><td class="num">${money2(num(r.avg_amount))}</td><td class="num ${num(r.prev_total) > 0 && num(r.total) > num(r.prev_total) * 1.1 ? 'warn' : ''}">${num(r.prev_total) > 0 ? pct(100 * (num(r.total) - num(r.prev_total)) / num(r.prev_total)) : num(r.total) > 0 ? 'new' : '—'}</td></tr>`).join('')}
-      </tbody></table></div>
-      <h3>Merchants</h3>
-      <div class="grid2"><div>${pieChart(topN(bm.map((r) => ({ k: r.key, v: num(r.total) })), 9), { label: 'top merchants' })}</div>
-      <div class="list">${bm.slice(0, 12).map((r) => `<div class="item tap" data-go="#activity"><span class="t">${h(r.key)}</span><span class="a">${money(num(r.total))}<span class="s">${r.n}× · ${money2(num(r.avg_amount))} avg</span></span><span class="s">${h(r.grp || '')}${num(r.prev_total) > 0 ? ' · ' + pct(100 * (num(r.total) - num(r.prev_total)) / num(r.prev_total)) + ' vs prior' : ''}</span></div>`).join('')}</div></div>`;
+  const path = []; // [group] or [group, category]
+  const monthly = await rpc('spend_monthly', { p_months: 13 });
+  const months = [...new Set(monthly.map((r) => r.month))].sort();
+  const periodOpts = [...PERIODS, ...months.slice().reverse().map((m) => ['m:' + m, monLong(m)])];
+  view.innerHTML = `<h1>Insights</h1>${subnav(INS_NAV, 'spending')}
+    <div class="card"><div class="row between wrap"><div class="crumbs" id="sp-crumbs"></div><select id="sp-period" aria-label="Period">${periodOpts.map(([k, l]) => `<option value="${k}" ${k === period ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></div>
+      <div id="sp-head"></div><div class="grid2"><div id="sp-donut"></div><div id="sp-merch"></div></div></div>
+    <div class="card" id="sp-trend"></div>`;
+  let cur = [], prev = [];
+  const load = async () => {
+    const [a, b] = periodRange(period), days = Math.round((d(b) - d(a)) / 864e5) + 1;
+    const pa = iso(new Date(d(a).getTime() - days * 864e5)), pb = iso(new Date(d(a).getTime() - 864e5));
+    [cur, prev] = await Promise.all([rpc('spend_rows', { p_from: a, p_to: b }), rpc('spend_rows', { p_from: pa, p_to: pb })]);
+    draw();
   };
-  const flagged = early ? [] : cs.filter((c) => Math.abs(num(c.z)) >= 1.5 && num(c.mean_month) > 50);
-  const wmax = Math.max(1, ...wd.map((r) => num(r.per_day)));
-  view.innerHTML = `
-    <h1>Insights</h1>${subnav(INS_NAV, 'spending')}
-    <div class="card">
-      <div class="row between wrap"><h2>Spending</h2><select id="sp-period" aria-label="Period">${PERIODS.map(([k, l]) => `<option value="${k}" ${k === period ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div id="sp-body"></div>
-    </div>
-    ${flagged.length ? `<div class="card"><h2>Outside normal range, month to date</h2><div class="list">${flagged.map((c) => `<div class="item tap" data-go="#activity/${encodeURIComponent(c.category)}"><span class="t">${h(c.category)}</span><span class="a ${num(c.z) > 0 ? 'down' : 'up'}">${money(num(c.this_month_projected))} <span class="s">projected · mean ${money(num(c.mean_month))}</span></span><span class="s">z = ${num(c.z) > 0 ? '+' : '−'}${Math.abs(num(c.z)).toFixed(1)}</span></div>`).join('')}</div></div>` : ''}
-    <div class="card">
-      <h2>Category statistics, trailing 12 complete months</h2>
-      <p class="muted small">Mean ± SD of monthly spend. Projected = month to date scaled to a full month${early ? ' (insufficient days)' : ''}. Trend = OLS slope per month as % of mean.</p>
-      <div class="scroll"><table class="data"><thead><tr><th>Category</th><th class="num">Share</th><th class="num">Mean ± SD</th><th class="num">Projected</th><th class="num">Trend</th></tr></thead><tbody>
-        ${cs.filter((c) => num(c.last_12m) > 0).map((c) => `<tr class="tap" data-go="#activity/${encodeURIComponent(c.category)}"><td>${h(c.category)}</td><td class="num">${fmtPct(c.share_pct)}</td><td class="num">${money(num(c.mean_month))} <span class="muted">± ${money(num(c.sd_month))}</span></td><td class="num ${!early && num(c.z) >= 1.5 ? 'down' : ''}">${early ? '—' : money(num(c.this_month_projected))}</td><td class="num ${num(c.trend_pct_per_month) > 3 ? 'warn' : ''}">${c.trend_pct_per_month == null ? '—' : pct(num(c.trend_pct_per_month)) + '/mo'}</td></tr>`).join('')}
-      </tbody></table></div>
-    </div>
-    <div class="grid2">
-      <div class="card">
-        <h2>Spend by weekday</h2>
-        <p class="muted small">Mean spend per active day, trailing 6 months.</p>
-        <div class="list">${wd.map((r) => `<div class="item"><span class="t">${h(r.weekday)}</span><span class="a">${money(num(r.per_day))}</span><span class="s" style="grid-column:1/-1">${progress(num(r.per_day), wmax)}</span></div>`).join('')}</div>
-      </div>
-      <div class="card">
-        <h2>Ticket size, trailing 90 days</h2>
-        <div class="list">${ms.slice(0, 8).map((m) => `<div class="item"><span class="t">${h(m.merchant)}</span><span class="a">${money2(num(m.avg_amount))}<span class="s">per purchase · ${m.n}×</span></span><span class="s">${m.change_pct == null ? 'no prior-period spend' : (num(m.change_pct) >= 0 ? '<span class="warn">+' : '<span class="up">') + Math.abs(num(m.change_pct)).toFixed(0) + '%</span> total vs prior 90 days'}</span></div>`).join('')}</div>
-      </div>
-    </div>`;
-  bindGo(view);
-  $('#sp-period').onchange = (e) => { period = e.target.value; localStorage.setItem('sp_period', period); drawBreakdown(); };
-  await drawBreakdown();
+  const inSel = (r) => (!path[0] || r.grp === path[0]) && (!path[1] || r.category === path[1]);
+  const keyOf = (r) => !path[0] ? r.grp : !path[1] ? r.category : r.merchant;
+  const agg = (rows, kf) => { const o = {}; rows.forEach((r) => { const k = kf(r); o[k] = o[k] || { v: 0, n: 0 }; o[k].v += num(r.total); o[k].n += r.n; }); return o; };
+  const draw = () => {
+    const [a, b] = periodRange(period), days = Math.round((d(b) - d(a)) / 864e5) + 1;
+    const sel = cur.filter(inSel), selP = prev.filter(inSel), all = sum(cur.map((r) => num(r.total)));
+    const tot = sum(sel.map((r) => num(r.total))), totP = sum(selP.map((r) => num(r.total))), n = sum(sel.map((r) => r.n));
+    const label = path[path.length - 1] || 'All spending';
+    $('#sp-crumbs').innerHTML = [['All spending', 0], ...path.map((p0, i) => [p0, i + 1])].map(([l, i], j, arr) => j === arr.length - 1 ? `<b>${h(l)}</b>` : `<a href="#" data-up="${i}">${h(l)}</a> ›`).join(' ');
+    $$('#sp-crumbs [data-up]').forEach((x) => x.onclick = (e) => { e.preventDefault(); path.length = +x.dataset.up; draw(); });
+    $('#sp-head').innerHTML = `<h2 class="headline">${h(label)}: ${money(tot)} ${totP > 0 ? `<span class="${tot > totP ? 'warn' : 'up'}">${pct(100 * (tot - totP) / totP)}</span>` : ''}</h2>
+      <p class="muted small">${dShort(a)} – ${dShort(b)} · ${n} purchases · ${money(tot / days * 30.44)} per 30 days${path.length ? ` · ${fmtPct(100 * tot / all, 1)} of all spending` : ''}${totP > 0 ? ` · prior ${days} days ${money(totP)}` : ''}</p>`;
+    const kids = agg(sel, keyOf), kidsP = agg(selP, keyOf);
+    const items = Object.entries(kids).filter(([, v]) => v.v > 0).sort((x, y) => y[1].v - x[1].v);
+    const top = items.slice(0, 10), rest = items.slice(10);
+    const donutItems = [...top.map(([k, v]) => ({ k, v: v.v, sub: `${v.n} purchases · prior ${money((kidsP[k] || {}).v || 0)}` })), ...(rest.length ? [{ k: `Other (${rest.length})`, v: sum(rest.map(([, v]) => v.v)), color: '#b8bec8' }] : [])];
+    $('#sp-donut').innerHTML = `<h3>${path.length === 0 ? 'By group' : path.length === 1 ? 'By category' : 'By merchant'}</h3>` + ix({ type: 'donut', items: donutItems, label: label.length > 14 ? '' : label.toLowerCase(),
+      onClick: path.length < 2 ? (k) => { if (k.startsWith('Other (')) return; path.push(k); draw(); } : undefined });
+    const merch = agg(sel, (r) => r.merchant), merchP = agg(selP, (r) => r.merchant);
+    const mItems = Object.entries(merch).filter(([, v]) => v.v > 0).sort((x, y) => y[1].v - x[1].v).slice(0, 12)
+      .map(([k, v]) => ({ k, v: v.v, prev: (merchP[k] || {}).v || 0, sub: `${v.n} purchases · ${money2(v.v / Math.max(1, v.n))} average` }));
+    $('#sp-merch').innerHTML = `<h3>Top merchants</h3>` + ix({ type: 'hbar', items: mItems, onClick: (k) => { location.hash = '#activity'; setTimeout(() => { const s = $('#f-search'); if (s) { s.value = k; s.dispatchEvent(new Event('input')); } }, 400); } });
+    // 12-month trend for the selection
+    const full = months.filter((m) => m < iso(monthStart()));
+    const byM = full.map((m) => sum(monthly.filter((r) => r.month === m && inSel({ grp: r.grp, category: r.category })).map((r) => num(r.total))));
+    const nM = full.map((m) => sum(monthly.filter((r) => r.month === m && inSel({ grp: r.grp, category: r.category })).map((r) => r.n)));
+    const f = ols(byM), avg = mean(byM);
+    $('#sp-trend').innerHTML = `<h2>${h(label)} by month: ${money(avg)} average, trend ${signed(f.b)}/month</h2>
+      <p class="muted small">Complete months. Line is the fitted trend; dashed reference is the 12-month average. Click a month to open it.</p>` +
+      ix({ type: 'cbar', height: 200, yfmt: yMoney, cats: full.map(monLabel), tipCats: full.map(monLong), refs: [{ y: avg, label: 'average' }],
+        series: [{ name: label, vals: byM, color: C.blue }, { name: 'Trend', vals: byM.map((_, i) => f.a + f.b * i), kind: 'line', color: C.gray, dash: true }],
+        tip: (i) => `<div class="r"><span>Purchases</span><b>${nM[i]}</b></div>`, legend: false,
+        onClick: (i) => { period = 'm:' + full[i]; localStorage.setItem('sp_period', period); const s = $('#sp-period'); if (s) s.value = period; load(); } });
+  };
+  $('#sp-period').onchange = (e) => { period = e.target.value; localStorage.setItem('sp_period', period); load(); };
+  await load();
 };
 
+// ---------- Insights › Cash ----------
+VIEWS.cash = async (view) => {
+  const [fc, pc, cc, liq, ev, acc] = await Promise.all([rpc('cash_forecast', { p_days: 45 }), rpc('paycycle_profile').catch(() => []), rpc('cushion_curve').catch(() => []),
+    rpc('liquid_daily', { p_days: 365 }), rpc('money_events', { p_days: 400 }), D.accounts()]);
+  const cards = [];
+  if (fc.length) {
+    const low = fc.reduce((m0, r) => (num(r.balance) < num(m0.balance) ? r : m0), fc[0]);
+    const evDays = fc.filter((r) => r.events && r.events.length);
+    cards.push(finding(`Lowest projected cash in the next 45 days: ${money(num(low.balance))} on ${dShort(low.as_of)}`,
+      'Scheduled paychecks and recurring charges on their expected dates, card minimums on due dates, plus your trailing-90-day average daily discretionary spend.',
+      ix({ type: 'xy', height: 210, yfmt: yMoney, shadeBelow: 0, series: [{ name: 'Projected cash', data: fc.map((r) => [mx(r.as_of), num(r.balance)]), kind: 'area', color: C.blue }],
+        marks: evDays.map((r) => ({ x: mx(r.as_of), y: num(r.balance), color: num(r.inflow) > num(r.outflow) ? C.green : C.amber })),
+        extra: (x) => { const r = fc.find((q) => mx(q.as_of) === x); if (!r) return ''; return `<div class="r"><span>In</span><b>${money(num(r.inflow))}</b></div><div class="r"><span>Out</span><b>${money(num(r.outflow))}</b></div>${(r.events || []).map((e) => `<div class="r"><span>${h(e)}</span></div>`).join('')}`; } }),
+      'Green dots are expected deposits; amber dots are scheduled charges. Hover a dot for the line items.'));
+  }
+  if (pc.length) {
+    const minDay = pc.reduce((m0, r) => (num(r.median_balance) < num(m0.median_balance) ? r : m0), pc[0]);
+    const negDays = pc.filter((r) => num(r.pct_days_negative) > 0);
+    cards.push(finding(`Checking bottoms out ${minDay.day_in_cycle} days after payday, at a median ${money(num(minDay.median_balance))}`,
+      `${pc[0].cycle_days}-day pay cycle (${titleCase(pc[0].source)}). Band is the 10th–90th percentile of end-of-day balance; the red line (right axis) is the share of cycles in which the balance was negative on that day.`,
+      ix({ type: 'xy', x: 'num', height: 220, yfmt: yMoney, y2fmt: (v) => Math.round(v) + '%', shadeBelow: 0, xfmt: (x) => `Day ${x} after payday`, xtick: (x) => 'd' + x, xticks: pc.map((r) => r.day_in_cycle),
+        band: { lo: pc.map((r) => [r.day_in_cycle, num(r.p10_balance)]), hi: pc.map((r) => [r.day_in_cycle, num(r.p90_balance)]), name: '10th–90th percentile', color: C.blue },
+        series: [{ name: 'Median balance', data: pc.map((r) => [r.day_in_cycle, num(r.median_balance)]), color: C.blue },
+          { name: 'Share of days negative', data: pc.map((r) => [r.day_in_cycle, num(r.pct_days_negative)]), color: C.red, axis: 'right', kind: 'line', width: 1.5, fmt: (v) => v.toFixed(0) + '%' },
+          { name: 'Spend per day', data: pc.map((r) => [r.day_in_cycle, num(r.spend_per_day)]), color: C.amber, width: 1.2, hidden: true }] }),
+      negDays.length ? `Negative balances cluster on days ${negDays.map((r) => r.day_in_cycle).join(', ')}.` : ''));
+  }
+  if (cc.length) {
+    const p100 = cc.find((r) => num(r.prevented_pct) >= 100), p80 = cc.find((r) => num(r.prevented_pct) >= 80);
+    cards.push(finding(`A ${money(num((p100 || cc[cc.length - 1]).cushion))} standing balance would have prevented every overdraft`,
+      `Replays the last 12 months with a fixed amount held back in checking. ${p80 ? money(num(p80.cushion)) + ' prevents 80%.' : ''} ${cc[0].events} overdraft events in the period.`,
+      ix({ type: 'xy', x: 'num', height: 190, yfmt: (v) => Math.round(v) + '%', y2fmt: yMoney, yFix: [0, 100], xfmt: (x) => money(x) + ' held back', xtick: (x) => '$' + short(x),
+        series: [{ name: 'Overdrafts prevented', data: cc.map((r) => [num(r.cushion), num(r.prevented_pct)]), color: C.blue, fmt: (v) => v.toFixed(0) + '%' },
+          { name: 'Fees avoided', data: cc.map((r) => [num(r.cushion), num(r.fees_saved)]), color: C.green, axis: 'right', fmt: money }] }), ''));
+  }
+  const cardsAcc = acc.filter((a) => a.type === 'credit' && !a.hidden), limit = sum(cardsAcc.map((a) => num(a.credit_limit) || 0));
+  if (limit && liq.length) {
+    const u = liq.map((r) => Math.max(0, 100 * num(r.cards) / limit)), over30 = u.filter((v) => v > 30).length;
+    cards.push(finding(`Card balance averaged ${fmtPct(mean(u))} of the ${money(limit)} limit; over 30% on ${over30} of ${u.length} days`,
+      'Utilization is reported to the bureaus at each statement date. Above 30% lowers scores; under 10% scores best.',
+      ix({ type: 'xy', height: 190, zero: true, yfmt: (v) => Math.round(v) + '%', refs: [{ y: 30, label: '30%', color: C.amber }, { y: 10, label: '10%', color: C.green }],
+        series: [{ name: 'Utilization', data: liq.map((r, i) => [mx(r.as_of), u[i]]), color: C.red, kind: 'area', fmt: (v) => v.toFixed(0) + '%' },
+          { name: 'Balance', data: liq.map((r) => [mx(r.as_of), num(r.cards)]), color: C.gray, hidden: true, fmt: money, tip: true }] }),
+      limit <= 1500 ? `The limit is the constraint: ${money(mean(liq.map((r) => num(r.cards))))} average balance on ${money(limit)}. A limit of ${money(Math.ceil(mean(liq.map((r) => num(r.cards))) * 10 / 1000) * 1000)} puts the same spending at 10%.` : ''));
+  }
+  const fees = ev.filter((e) => e.kind === 'fee');
+  if (fees.length) {
+    const ms = []; for (let i = 11; i >= 0; i--) ms.push(iso(new Date(new Date().getFullYear(), new Date().getMonth() - i, 1)));
+    const charged = ms.map((m) => sum(fees.filter((e) => e.date.slice(0, 7) === m.slice(0, 7) && num(e.amount) < 0).map((e) => -num(e.amount))));
+    const waived = ms.map((m) => -sum(fees.filter((e) => e.date.slice(0, 7) === m.slice(0, 7) && num(e.amount) > 0).map((e) => num(e.amount))));
+    cards.push(finding(`Bank fees: ${money(sum(charged))} charged, ${money(-sum(waived))} waived, ${money(sum(charged) + sum(waived))} net in 12 months`, 'Overdraft, maintenance, foreign transaction and returned-payment fees. Waivers shown below zero.',
+      ix({ type: 'cbar', height: 170, yfmt: yMoney, cats: ms.map(monLabel), tipCats: ms.map(monLong), series: [{ name: 'Charged', vals: charged, color: C.red, stack: 'f' }, { name: 'Waived', vals: waived, color: C.green, stack: 'f' }],
+        tip: (i) => fees.filter((e) => e.date.slice(0, 7) === ms[i].slice(0, 7)).slice(0, 8).map((e) => `<div class="r"><span>${dShort(e.date)} ${h(e.label)}</span><b>${money(-num(e.amount))}</b></div>`).join('') }), ''));
+  }
+  view.innerHTML = `<h1>Insights</h1>${subnav(INS_NAV, 'cash')}${cards.join('')}`;
+};
+VIEWS.cycle = (v) => VIEWS.cash(v); VIEWS.fees = (v) => VIEWS.cash(v);
+
+// ---------- Insights › Habits ----------
+VIEWS.habits = async (view) => {
+  const [hw, wg, ts] = await Promise.all([rpc('habit_weekly', { p_weeks: 52 }), rpc('weekday_groups', { p_days: 182 }), rpc('ticket_sizes', { p_days: 182 })]);
+  const wk = hw.slice(0, -1), cards = [];
+  if (wk.length) {
+    const b = wk.slice(-8), D0 = wk.map((r) => num(r.delivery_n));
+    const perWk = mean(b.map((r) => num(r.delivery_n))), amtWk = mean(b.map((r) => num(r.delivery_amt)));
+    cards.push(finding(`Food delivery: ${perWk.toFixed(1)} orders and ${money(amtWk)} a week`, `Last 8 complete weeks. That is ${money(amtWk * 52)} a year. Bars are orders per week; line is spend per week.`,
+      ix({ type: 'xy', height: 210, yfmt: (v) => Math.round(v), y2fmt: yMoney, xfmt: (t) => 'Week of ' + dLong(iso(new Date(t))), series: [
+        { name: 'Orders', data: wk.map((r) => [mx(r.week), num(r.delivery_n)]), kind: 'bar', color: '#e7c38f' },
+        { name: '8-week average', data: wk.map((r, i) => [mx(r.week), movAvg(D0, 8)[i]]), color: C.amber, fmt: (v) => v.toFixed(1) },
+        { name: 'Spend', data: wk.map((r) => [mx(r.week), num(r.delivery_amt)]), color: C.red, axis: 'right', width: 1.2, fmt: money }] }), ''));
+    const A0 = wk.map((r) => num(r.amazon_n));
+    cards.push(finding(`Amazon: ${mean(b.map((r) => num(r.amazon_n))).toFixed(1)} orders and ${money(mean(b.map((r) => num(r.amazon_amt))))} a week`, 'Includes Amazon Fresh. Last 8 complete weeks.',
+      ix({ type: 'xy', height: 190, yfmt: (v) => Math.round(v), y2fmt: yMoney, xfmt: (t) => 'Week of ' + dLong(iso(new Date(t))), series: [
+        { name: 'Orders', data: wk.map((r) => [mx(r.week), num(r.amazon_n)]), kind: 'bar', color: '#9ad3d9' },
+        { name: '8-week average', data: wk.map((r, i) => [mx(r.week), movAvg(A0, 8)[i]]), color: C.teal, fmt: (v) => v.toFixed(1) },
+        { name: 'Spend', data: wk.map((r) => [mx(r.week), num(r.amazon_amt)]), color: C.red, axis: 'right', width: 1.2, fmt: money }] }), ''));
+  }
+  if (wg.length) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], groups = [...new Set(wg.map((r) => r.grp))];
+    const tot = groups.map((g) => sum(wg.filter((r) => r.grp === g).map((r) => num(r.per_day)))); const order = groups.map((g, i) => [g, tot[i]]).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+    const vals = order.map((g) => days.map((_, j) => num((wg.find((r) => r.grp === g && r.dow === j + 1) || {}).per_day)));
+    const dayTot = days.map((_, j) => sum(vals.map((row) => row[j]))); const jMax = dayTot.indexOf(Math.max(...dayTot)), jMin = dayTot.indexOf(Math.min(...dayTot));
+    cards.push(finding(`${days[jMax]} is the most expensive day (${money(dayTot[jMax])}); ${days[jMin]} the cheapest (${money(dayTot[jMin])})`, 'Average spend per calendar day over 26 weeks, by group. Excludes rent, utilities, fees and unlinked card payments.',
+      ix({ type: 'heat', rows: order, cols: days, vals, valueLabel: 'Per day', tip: (i, j) => `<div class="r"><span>Day total</span><b>${money(dayTot[j])}</b></div>` }), ''));
+  }
+  if (ts.length) {
+    const bins = [0, 10, 15, 20, 30, 40, 60, 100, Infinity], lab = ['<$10', '$10–15', '$15–20', '$20–30', '$30–40', '$40–60', '$60–100', '$100+'];
+    const groups = ['Delivery', 'Amazon', 'Restaurants', 'Groceries'], cols = [C.amber, C.teal, C.blue, C.green];
+    const hist = groups.map((g) => { const a = ts.filter((t) => t.label === g).map((t) => num(t.amount)); return lab.map((_, i) => a.filter((v) => v >= bins[i] && v < bins[i + 1]).length); });
+    const amz = ts.filter((t) => t.label === 'Amazon').map((t) => num(t.amount)), del = ts.filter((t) => t.label === 'Delivery').map((t) => num(t.amount));
+    cards.push(finding(`${fmtPct(100 * amz.filter((v) => v < 15).length / Math.max(1, amz.length))} of Amazon orders are under $15; median delivery order ${money2(quantile(del, 0.5))}`,
+      'Number of purchases by size, last 26 weeks. Many small orders usually means impulse or convenience buying rather than planned purchases.',
+      ix({ type: 'cbar', height: 200, yfmt: (v) => Math.round(v), cats: lab, series: groups.map((g, i) => ({ name: g, vals: hist[i], color: cols[i], fmt: (v) => v + ' orders' })) }), ''));
+  }
+  view.innerHTML = `<h1>Insights</h1>${subnav(INS_NAV, 'habits')}${cards.join('')}`;
+};
+VIEWS.trends = (v) => VIEWS.habits(v);
+
+// ---------- Insights › Income ----------
 VIEWS.income = async (view) => {
-  const [src, sum, ib] = await Promise.all([rpc('income_sources'), D.summary(), rpc('income_breakdown', { p_from: iso(new Date(Date.now() - 365 * 864e5)), p_to: today() }).catch(() => [])]);
-  const active = src.filter((s) => d(s.last_date) >= new Date(Date.now() - 75 * 864e5));
-  const monthly = active.reduce((s, r) => s + num(r.monthly_equiv), 0);
-  const done = sum.filter((r) => !r.partial).slice(-12);
-  view.innerHTML = `
-    <h1>Insights</h1>${subnav(INS_NAV, 'income')}
-    <div class="card">
-      <div class="row between wrap"><h2>Income sources</h2><span class="stat"><span class="v">${money(monthly)}</span><span class="l">monthly equivalent, active</span></span></div>
-      <div class="list">${src.map((s) => `<div class="item"><span class="t">${h(titleCase(s.source))}${d(s.last_date) < new Date(Date.now() - 75 * 864e5) ? ' <span class="pill">inactive</span>' : ''}</span><span class="a">${money2(num(s.typical_amount))}<span class="s">${h(s.cadence)}</span></span><span class="s">${s.occurrences}× · last ${fmtDay(s.last_date)}${s.next_expected && d(s.next_expected) >= d(today()) ? ' · next ' + fmtDay(s.next_expected) : ''}${s.trend_pct_per_month ? ' · ' + pct(num(s.trend_pct_per_month)) + '/mo trend' : ''}</span></div>`).join('') || '<p class="empty">No recurring deposits detected.</p>'}</div>
-      <p class="muted small">Grouped by payer; cadence from median interval. Internal transfers excluded.</p>
-    </div>
+  const [src, ev, ib] = await Promise.all([rpc('income_sources'), rpc('money_events', { p_days: 730 }), rpc('income_breakdown', { p_from: iso(new Date(Date.now() - 365 * 864e5)), p_to: today() }).catch(() => [])]);
+  const inc = ev.filter((e) => e.kind === 'income'), active = src.filter((s) => d(s.last_date) >= new Date(Date.now() - 75 * 864e5));
+  const monthly = sum(active.map((r) => num(r.monthly_equiv)));
+  const labels = [...new Set(inc.map((e) => e.label))], byTot = labels.map((l) => [l, sum(inc.filter((e) => e.label === l).map((e) => num(e.amount)))]).sort((a, b) => b[1] - a[1]);
+  const ms = []; for (let i = 12; i >= 1; i--) ms.push(iso(new Date(new Date().getFullYear(), new Date().getMonth() - i, 1)));
+  const topL = byTot.slice(0, 4).map(([l]) => l);
+  const mVals = (l) => ms.map((m) => sum(inc.filter((e) => e.date.slice(0, 7) === m.slice(0, 7) && (l ? e.label === l : !topL.includes(e.label))).map((e) => num(e.amount))));
+  view.innerHTML = `<h1>Insights</h1>${subnav(INS_NAV, 'income')}
+    ${finding(`Recurring income: ${money(monthly)}/month from ${active.length} source${active.length === 1 ? '' : 's'}`, active.map((s) => `${titleCase(s.source)} ${money2(num(s.typical_amount))} ${s.cadence}`).join(' · '),
+      ix({ type: 'xy', height: 220, yfmt: yMoney2, series: byTot.slice(0, 5).map(([l], i) => ({ name: titleCase(l), data: inc.filter((e) => e.label === l).map((e) => [mx(e.date), num(e.amount)]), kind: i === 0 ? 'step' : 'dots', color: [C.green, C.blue, C.amber, C.violet, C.teal][i] })) }),
+      'Each deposit over two years. Hover for amounts; drag to zoom into a period.')}
     <div class="grid2">
-      <div class="card"><h2>Income by source, 12 months</h2>${pieChart(topN(ib.map((r) => ({ k: titleCase(r.key), v: num(r.total) })), 8), { label: 'received' })}</div>
-      <div class="card"><h2>Income by month</h2>${barChart(done.map((r) => ({ month: r.month, income: num(r.income) })), ['income'])}</div>
+      <div class="card"><h2>By source, 12 months</h2>${ix({ type: 'donut', items: ib.slice(0, 8).map((r) => ({ k: titleCase(r.key), v: num(r.total), sub: `${r.n} deposits` })), label: 'received' })}</div>
+      <div class="card"><h2>By month</h2>${ix({ type: 'cbar', height: 200, yfmt: yMoney, stackTotal: true, cats: ms.map(monLabel), tipCats: ms.map(monLong),
+        series: [...topL.map((l, i) => ({ name: titleCase(l), vals: mVals(l), stack: 's', color: [C.green, C.blue, C.amber, C.violet][i] })), { name: 'Other', vals: mVals(null), stack: 's', color: '#b8bec8' }] })}</div>
     </div>`;
 };
 
@@ -775,23 +1233,6 @@ VIEWS.review = async (view) => {
   draw();
 };
 
-VIEWS.fees = async (view) => {
-  const [fa, fees, acc] = await Promise.all([rpc('fee_analysis'), D.fees(), D.accounts()]);
-  const f = fa[0] || {};
-  const cards = acc.filter((a) => a.type === 'credit' && !a.hidden);
-  const util = cards.reduce((s, a) => s + num(a.current_balance), 0), limit = cards.reduce((s, a) => s + (num(a.credit_limit) || 0), 0);
-  view.innerHTML = `
-    <h1>Insights</h1>${subnav(INS_NAV, 'fees')}
-    <div class="card">
-      <h2>Fees and interest, trailing 12 months</h2>
-      <div class="row wrap"><span class="stat"><span class="v ${num(f.fees_12m) ? 'down' : ''}">${money2(num(f.fees_12m))}</span><span class="l">${f.fee_count_12m || 0} fees</span></span><span style="width:16px"></span><span class="stat"><span class="v ${num(f.overdrafts_12m) ? 'down' : ''}">${money2(num(f.overdrafts_12m))}</span><span class="l">${f.overdraft_count_12m || 0} overdrafts</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money2(num(f.interest_12m))}</span><span class="l">card interest</span></span></div>
-      ${f.overdraft_count_12m ? `<p class="small">Median overdraft timing: <b>${f.median_days_before_payday} day${f.median_days_before_payday == 1 ? '' : 's'}</b> before payday. Peak month: ${h(f.worst_month)} (${money(num(f.worst_month_fees))}).</p>` : ''}
-      ${barChart(fees.map((r) => ({ month: r.month, fees: num(r.fees), interest_paid: num(r.interest_paid) })), ['fees', 'interest_paid'], 640, 140)}
-      <div class="legend"><span><i style="background:var(--bar2)"></i>Fees</span><span><i style="background:var(--bar)"></i>Interest</span></div>
-    </div>
-    ${limit ? `<div class="card"><h2>Credit utilization</h2><p class="small">${money(util)} of ${money(limit)} · <b class="${util / limit > 0.3 ? 'warn' : 'up'}">${(100 * util / limit).toFixed(0)}%</b> <span class="muted">(scoring thresholds 30%, 10%)</span></p>
-      <div class="list">${cards.map((a) => `<div class="item"><span class="t">${h(a.nickname || a.name)}</span><span class="a">${money(num(a.current_balance))}<span class="s">of ${money(num(a.credit_limit))}</span></span><span class="s" style="grid-column:1/-1">${progress(num(a.current_balance), num(a.credit_limit), num(a.current_balance) / num(a.credit_limit) > 0.3 ? 'over' : 'ok')}</span></div>`).join('')}</div></div>` : ''}`;
-};
 
 // ---------- Plan: debt & credit, future ----------
 VIEWS.debt = async (view) => {
@@ -1003,127 +1444,10 @@ VIEWS.allocation = async (view) => {
   };
 };
 
-// ---------- multi-series chart: lines, optional band, dashed fits, markers, bars ----------
-// series: [{pts:[{x,y}], cls:'line'|'line alt'|'fit', band:[{x,lo,hi}], marks:[{x,y,label}], bars:true}]
-function chart(series, o = {}) {
-  const W = o.W || 640, H = o.H || 170, m = { t: 12, r: 10, b: 24, l: 48 };
-  const all = series.flatMap((s) => [...(s.pts || []), ...((s.band || []).flatMap((b) => [{ x: b.x, y: b.lo }, { x: b.x, y: b.hi }]))]).filter((p) => p.y != null && !isNaN(p.y));
-  if (!all.length) return '<p class="empty">Nothing yet.</p>';
-  const xs = all.map((p) => +p.x); let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x1 === x0) x1 = x0 + 1;
-  let lo = Math.min(...all.map((p) => p.y)), hi = Math.max(...all.map((p) => p.y));
-  if (o.zero) lo = Math.min(0, lo); if (o.yMax != null) hi = Math.max(hi, o.yMax);
-  const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.1 || 10; lo -= o.zero && lo === 0 ? 0 : pad; hi += pad;
-  const iw = W - m.l - m.r, ih = H - m.t - m.b;
-  const X = (x) => m.l + (iw * (+x - x0)) / (x1 - x0), Y = (y) => m.t + ih - (ih * (y - lo)) / (hi - lo);
-  const fmtY = o.fmtY || short, fmtX = o.fmtX || ((x) => fmtDay(iso(new Date(+x))));
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">`;
-  for (let i = 0; i <= 3; i++) { const v = lo + ((hi - lo) * i) / 3; s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtY(v)}</text>`; }
-  if (lo < 0 && hi > 0) s += `<line class="axis" x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}"/>`;
-  for (const ref of o.refs || []) s += `<line class="ref" x1="${m.l}" x2="${W - m.r}" y1="${Y(ref.y)}" y2="${Y(ref.y)}" stroke-dasharray="4 4"/><text class="reflabel" x="${W - m.r}" y="${Y(ref.y) - 4}" text-anchor="end">${h(ref.label)}</text>`;
-  for (const sr of series) {
-    if (sr.band) { const b = sr.band.filter((p) => p.lo != null); s += `<path class="band" d="${b.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p.hi).toFixed(1)).join(' ')} ${[...b].reverse().map((p) => 'L' + X(p.x).toFixed(1) + ' ' + Y(p.lo).toFixed(1)).join(' ')} Z"/>`; }
-    if (sr.bars) { const bw = Math.max(2, (iw / sr.pts.length) * 0.6); for (const p of sr.pts) s += `<rect class="${sr.cls || 'out'}" x="${X(p.x) - bw / 2}" y="${Math.min(Y(p.y), Y(0))}" width="${bw}" height="${Math.abs(Y(p.y) - Y(0))}" rx="2"><title>${fmtX(p.x)}: ${fmtY(p.y)}</title></rect>`; continue; }
-    if (sr.pts && sr.pts.length) { const pts = sr.pts.filter((p) => p.y != null); s += `<path class="${sr.cls || 'line'}" d="${pts.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p.y).toFixed(1)).join(' ')}"/>`;
-      if (sr.label) { const l = pts[pts.length - 1]; s += `<text class="label" x="${Math.min(X(l.x), W - 70)}" y="${Y(l.y) - 6}" text-anchor="${X(l.x) > W - 80 ? 'end' : 'start'}">${h(sr.label)}</text>`; } }
-    for (const mk of sr.marks || []) s += `<circle class="mark" cx="${X(mk.x)}" cy="${Y(mk.y)}" r="3"><title>${h(mk.label || '')}</title></circle>`;
-  }
-  const n = Math.min(o.ticks || 5, all.length); const xt = o.xticks || Array.from({ length: n }, (_, i) => x0 + ((x1 - x0) * i) / Math.max(1, n - 1));
-  xt.forEach((x, i) => { s += `<text x="${X(x)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === xt.length - 1 ? 'end' : 'middle'}">${fmtX(x)}</text>`; });
-  return s + '</svg>';
-}
 function linfit(ys) { const n = ys.length; if (n < 2) return { a: ys[0] || 0, b: 0 }; const xm = (n - 1) / 2, ym = ys.reduce((s, y) => s + y, 0) / n; let sxy = 0, sxx = 0; ys.forEach((y, i) => { sxy += (i - xm) * (y - ym); sxx += (i - xm) ** 2; }); const b = sxx ? sxy / sxx : 0; return { a: ym - b * xm, b }; }
 const mx = (s) => +d(s);
 
-// ---------- Insights › Cycle ----------
-VIEWS.cycle = async (view) => {
-  const [pc, cc, db] = await Promise.all([rpc('paycycle_profile'), rpc('cushion_curve'), rpc('daily_balance', { p_days: 600, p_scope: 'checking' })]);
-  const n = pc.length ? pc[0].cycle_days : 14;
-  const worst = pc.reduce((m, r) => (num(r.pct_days_negative) > num(m.pct_days_negative) ? r : m), pc[0] || {});
-  const first = pc[0] || {}, last = pc[pc.length - 1] || {};
-  const spendEarly = pc.slice(0, Math.ceil(n / 2)).reduce((s, r) => s + num(r.spend_per_day), 0), spendLate = pc.slice(Math.ceil(n / 2)).reduce((s, r) => s + num(r.spend_per_day), 0);
-  const ev = cc[0]?.events || 0;
-  const c70 = cc.find((r) => num(r.prevented_pct) >= 70), c100 = cc.find((r) => num(r.prevented_pct) >= 100);
-  const od = db.filter((r) => r.overdraft);
-  const roll = db.map((r, i) => ({ x: mx(r.as_of), y: db.slice(Math.max(0, i - 29), i + 1).reduce((s, q) => s + num(q.balance), 0) / Math.min(i + 1, 30) }));
-  const byMonth = {}; db.forEach((r) => { const k = r.as_of.slice(0, 7); (byMonth[k] = byMonth[k] || []).push(num(r.balance)); });
-  const months = Object.keys(byMonth).sort();
-  const avgSeries = months.map((k) => ({ x: mx(k + '-15'), y: byMonth[k].reduce((s, v) => s + v, 0) / byMonth[k].length }));
-  const minSeries = months.map((k) => ({ x: mx(k + '-15'), y: Math.min(...byMonth[k]) }));
-  const peak = avgSeries.reduce((m, p) => (p.y > m.y ? p : m), avgSeries[0]), recent = avgSeries.slice(-3).reduce((s, p) => s + p.y, 0) / 3;
-  view.innerHTML = `
-    <h1>Insights</h1>${subnav(INS_NAV, 'cycle')}
-    <div class="card">
-      <h2>Checking balance by day of pay cycle (${n} days)</h2>
-      <p class="muted small">Day 0 = ${h(titleCase(first.source || 'main'))} deposit. Median with 10th–90th percentile band, trailing 20 months.</p>
-      ${chart([{ pts: pc.map((r) => ({ x: r.day_in_cycle, y: num(r.median_balance) })), band: pc.map((r) => ({ x: r.day_in_cycle, lo: num(r.p10_balance), hi: num(r.p90_balance) })), cls: 'line' }], { zero: true, fmtX: (x) => 'day ' + Math.round(x), xticks: pc.map((r) => r.day_in_cycle).filter((x) => x % 2 === 0), fmtY: short })}
-      <div class="row wrap"><span class="stat"><span class="v">${money(num(first.median_balance))}</span><span class="l">median, day 0</span></span><span style="width:16px"></span><span class="stat"><span class="v ${num(last.median_balance) < 200 ? 'down' : ''}">${money(num(last.median_balance))}</span><span class="l">median, day ${last.day_in_cycle}</span></span><span style="width:16px"></span><span class="stat"><span class="v down">${fmtPct(worst.pct_days_negative)}</span><span class="l">negative on day ${worst.day_in_cycle}</span></span></div>
-      <h3>Probability of negative balance by cycle day</h3>
-      ${chart([{ pts: pc.map((r) => ({ x: r.day_in_cycle, y: num(r.pct_days_negative) })), bars: true, cls: 'out' }], { zero: true, H: 120, fmtX: (x) => 'day ' + Math.round(x), xticks: pc.map((r) => r.day_in_cycle).filter((x) => x % 2 === 0), fmtY: (v) => v.toFixed(0) + '%' })}
-      <h3>Spend rate by cycle day</h3>
-      <p class="muted small">Mean daily spend, all accounts. First half ${money(spendEarly)}, second half ${money(spendLate)}.</p>
-      ${chart([{ pts: pc.map((r) => ({ x: r.day_in_cycle, y: num(r.spend_per_day) })), bars: true, cls: 'out' }], { zero: true, H: 120, fmtX: (x) => 'day ' + Math.round(x), xticks: pc.map((r) => r.day_in_cycle).filter((x) => x % 2 === 0), fmtY: short })}
-    </div>
-    <div class="grid2">
-      <div class="card">
-        <h2>Overdraft prevention by cash floor</h2>
-        <p class="muted small">Share of the ${ev} overdraft days (trailing 12 months) avoided by a standing checking floor, from observed overdraft depth.</p>
-        ${chart([{ pts: cc.map((r) => ({ x: num(r.cushion), y: num(r.prevented_pct) })), cls: 'line' }], { zero: true, yMax: 100, H: 150, fmtX: (x) => money(x), xticks: [0, 250, 500, 750, 1000], fmtY: (v) => v.toFixed(0) + '%' })}
-        ${c70 ? `<p class="small"><b>${money(num(c70.cushion))}</b> floor: ${fmtPct(c70.prevented_pct)} prevented, ${money(num(c70.fees_saved))} fees${c100 ? `. <b>${money(num(c100.cushion))}</b>: 100%, ${money(num(c100.fees_saved))}.` : '.'}</p>` : ''}
-      </div>
-      <div class="card">
-        <h2>Checking balance, trailing 20 months</h2>
-        <p class="muted small">Reconstructed from the ledger. Grey: daily; blue: 30-day mean; markers: overdraft fees.</p>
-        ${chart([{ pts: db.map((r) => ({ x: mx(r.as_of), y: num(r.balance) })), cls: 'line thin' }, { pts: roll, cls: 'line', marks: od.map((r) => ({ x: mx(r.as_of), y: num(r.balance), label: fmtDay(r.as_of) + ' ' + money2(num(r.fee)) })) }], { zero: true, H: 170 })}
-        <p class="small">Monthly mean peaked at <b>${money(peak.y)}</b> (${fmtMonth(iso(new Date(peak.x)))}); trailing 3-month mean <b>${money(recent)}</b>.</p>
-        ${chart([{ pts: avgSeries, cls: 'line', label: 'monthly mean' }, { pts: minSeries, cls: 'line alt', label: 'monthly minimum' }], { zero: true, H: 140 })}
-      </div>
-    </div>`;
-};
 
-// ---------- Insights › Trends ----------
-VIEWS.trends = async (view) => {
-  const [cat, mer, sum, counts, cards] = await Promise.all([rpc('trend_series', { p_kind: 'category', p_top: 6, p_months: 18 }), rpc('trend_series', { p_kind: 'merchant', p_top: 4, p_months: 18 }), D.summary(), D.counts(), rpc('card_history', { p_weeks: 78 })]);
-  const done = sum.filter((r) => !r.partial).slice(-18);
-  const inc = done.map((r) => num(r.income)), sp = done.map((r) => num(r.spending));
-  const fi = linfit(inc), fs = linfit(sp);
-  const r3 = (arr) => arr.map((_, i) => arr.slice(Math.max(0, i - 2), i + 1).reduce((s, v) => s + v, 0) / Math.min(i + 1, 3));
-  const gapNow = fi.a + fi.b * (inc.length - 1) - (fs.a + fs.b * (sp.length - 1)), gap6 = fi.a + fi.b * (inc.length + 5) - (fs.a + fs.b * (sp.length + 5));
-  let cum = 0; const cumPts = done.map((r) => ({ x: mx(r.month), y: (cum += num(r.net)) }));
-  const panel = (rows) => { const by = {}; rows.forEach((r) => (by[r.name] = by[r.name] || []).push(r)); return Object.entries(by).map(([name, rs]) => {
-    const slope = num(rs[0].slope_per_month), mean = rs.reduce((s, r) => s + num(r.spent), 0) / rs.length;
-    return `<div class="card"><div class="row between"><h3>${h(name)}</h3><span class="small ${slope > mean * 0.03 ? 'warn' : slope < -mean * 0.03 ? 'up' : 'muted'}">slope ${slope >= 0 ? '+' : '−'}${money(Math.abs(slope))}/mo</span></div>
-      ${chart([{ pts: rs.map((r) => ({ x: mx(r.month), y: num(r.spent) })), bars: true, cls: 'bar-muted' }, { pts: rs.map((r) => ({ x: mx(r.month), y: num(r.roll3) })), cls: 'line' }, { pts: rs.map((r) => ({ x: mx(r.month), y: num(r.fit) })), cls: 'fit' }], { zero: true, H: 130, fmtX: (x) => fmtMon(iso(new Date(+x))), ticks: 4 })}
-      <p class="muted small">mean ${money(mean)}/mo · last ${money(num(rs[rs.length - 1].spent))}</p></div>`; }).join(''); };
-  const cardBy = {}; cards.forEach((r) => (cardBy[r.name] = cardBy[r.name] || []).push(r));
-  view.innerHTML = `
-    <h1>Insights</h1>${subnav(INS_NAV, 'trends')}
-    <div class="card">
-      <h2>Income vs spending, trend</h2>
-      <p class="muted small">Solid: 3-month rolling mean. Dashed: OLS fit over ${done.length} months, extended 6. Fitted gap: <b class="${gapNow < 0 ? 'down' : 'up'}">${signed(gapNow)}</b> now, <b class="${gap6 < 0 ? 'down' : 'up'}">${signed(gap6)}</b> at +6 months.</p>
-      ${chart([
-        { pts: done.map((r, i) => ({ x: mx(r.month), y: r3(inc)[i] })), cls: 'line in', label: 'income' },
-        { pts: done.map((r, i) => ({ x: mx(r.month), y: r3(sp)[i] })), cls: 'line', label: 'spending' },
-        { pts: [...done.map((r, i) => ({ x: mx(r.month), y: fi.a + fi.b * i })), ...[1, 2, 3, 4, 5, 6].map((k) => ({ x: +new Date(d(done[done.length - 1].month).getFullYear(), d(done[done.length - 1].month).getMonth() + k, 1), y: fi.a + fi.b * (inc.length - 1 + k) }))], cls: 'fit in' },
-        { pts: [...done.map((r, i) => ({ x: mx(r.month), y: fs.a + fs.b * i })), ...[1, 2, 3, 4, 5, 6].map((k) => ({ x: +new Date(d(done[done.length - 1].month).getFullYear(), d(done[done.length - 1].month).getMonth() + k, 1), y: fs.a + fs.b * (sp.length - 1 + k) }))], cls: 'fit' }],
-        { zero: true, H: 180, fmtX: (x) => fmtMon(iso(new Date(+x))), ticks: 6 })}
-      <div class="legend"><span><i style="background:var(--up)"></i>Income</span><span><i style="background:var(--bar2)"></i>Spending</span><span><i style="background:var(--muted)"></i>Fitted line</span></div>
-    </div>
-    <div class="grid2">
-      <div class="card"><h2>Cumulative net cash flow</h2><p class="muted small">Σ (income − spending) since ${fmtMonth(done[0]?.month || today())}.</p>
-        ${chart([{ pts: cumPts, cls: 'line' }], { zero: true, H: 150, fmtX: (x) => fmtMon(iso(new Date(+x))) })}
-        <p class="small">Period total: <b class="${cum < 0 ? 'down' : 'up'}">${signed(cum)}</b></p></div>
-      <div class="card"><h2>Transaction count per month</h2><p class="muted small">Split at $20.</p>
-        ${chart([{ pts: counts.map((r) => ({ x: mx(r.month), y: r.small_n })), cls: 'line', label: 'under $20' }, { pts: counts.map((r) => ({ x: mx(r.month), y: r.large_n })), cls: 'line alt', label: '$20+' }], { zero: true, H: 140, fmtX: (x) => fmtMon(iso(new Date(+x))), fmtY: (v) => v.toFixed(0) })}
-        <p class="small">Last month: ${counts[counts.length - 1]?.small_n ?? 0} under $20 (${money(num(counts[counts.length - 1]?.small_total))}); mean ticket ${money2(num(counts[counts.length - 1]?.avg_ticket))}.</p></div>
-    </div>
-    <h2>Categories, 18 months</h2><p class="muted small">Bars: monthly. Line: 3-month rolling mean. Dashed: OLS fit; slope shown.</p>
-    <div class="grid2">${panel(cat)}</div>
-    <h2>Merchants, 18 months</h2>
-    <div class="grid2">${panel(mer)}</div>
-    ${Object.keys(cardBy).length ? `<h2>Card balance vs limit, weekly</h2><div class="grid2">${Object.entries(cardBy).map(([name, rs]) => { const lim = num(rs[0].credit_limit); const above = rs.filter((r) => lim && num(r.balance) / lim > 0.5).length; return `<div class="card"><h3>${h(name)}</h3>
-      ${chart([{ pts: rs.map((r) => ({ x: mx(r.week), y: Math.max(0, num(r.balance)) })), cls: 'line' }], { zero: true, H: 140, refs: lim ? [{ y: lim, label: 'limit ' + money(lim) }, { y: lim * 0.3, label: '30%' }] : [], fmtX: (x) => fmtMon(iso(new Date(+x))) })}
-      ${lim ? `<p class="small">Utilization above 50% in <b>${above} of ${rs.length}</b> weeks. Current ${fmtPct(num(rs[rs.length - 1].balance) / lim * 100)}.</p>` : ''}</div>`; }).join('')}</div>` : ''}`;
-};
 
 // ---------- household / ownership helpers ----------
 const VEHICLES = { cash: 'Cash', taxable: 'Taxable brokerage', hsa: 'HSA', employer: '403(b) / 401(k)', ira: 'IRA / Roth', trump: 'Trump account', '529': '529', custodial: 'UTMA / custodial' };
