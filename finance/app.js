@@ -354,6 +354,7 @@ VIEWS.accounts = async (view) => {
     <div class="form">
       <button class="primary" data-link="bank">Bank or credit card</button>
       <button class="primary" data-link="brokerage">Brokerage or retirement account</button>
+      <button class="primary" data-link="hsa">HSA (cash and investments)</button>
       <button class="primary" data-link="loan">Loan or mortgage</button>
       <p class="muted small">10 institution slots in total; removal does not release a slot.</p>
     </div>`);
