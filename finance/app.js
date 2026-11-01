@@ -153,7 +153,7 @@ function enter(me) {
   if (sessionStorage.getItem('justLinked')) { sessionStorage.removeItem('justLinked'); portal('finish').then(() => { invalidate(); route(); toast('Linked. Initial sync running.'); }).catch(() => {}); }
 }
 addEventListener('hashchange', route);
-const TABS = { home: 'home', activity: 'activity', insights: 'insights', cycle: 'insights', trends: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', more: 'plan' };
+const TABS = { home: 'home', activity: 'activity', insights: 'insights', cycle: 'insights', trends: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', contributions: 'invest', strategy: 'invest', home_purchase: 'plan', business: 'plan', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', more: 'plan' };
 function route() {
   if (screens.app.hidden) return;
   const r = (location.hash || '#home').slice(1).split('/')[0];
@@ -257,7 +257,7 @@ const catOptions = (sel) => CATEGORIES.map((c) => `<option ${c === sel ? 'select
 const VIEWS = {};
 
 VIEWS.home = async (view) => {
-  const [nw, nwh, cf, acc, rec, spend, ls, fc] = await Promise.all([D.nw(), D.nwh(), D.cashflow(), D.accounts(), D.recurring().catch(() => []), D.spend(), D.lastSync(), rpc('cash_forecast', { p_days: 30 }).catch(() => [])]);
+  const [nw, nwh, cf, acc, rec, spend, ls, fc, al] = await Promise.all([D.nw(), D.nwh(), D.cashflow(), D.accounts(), D.recurring().catch(() => []), D.spend(), D.lastSync(), rpc('cash_forecast', { p_days: 30 }).catch(() => []), rpc('alerts').catch(() => [])]);
   const low = fc.length ? fc.reduce((m, r) => (num(r.balance) < num(m.balance) ? r : m), fc[0]) : null;
   const n = nw[0] || {};
   const first = nwh[0], last = nwh[nwh.length - 1];
@@ -275,7 +275,8 @@ VIEWS.home = async (view) => {
       <span class="big">${money(num(n.net_worth))}</span>
       <span class="muted small">${change == null ? 'first snapshot ' + (last ? fmtDay(last.as_of) : '') : `<span class="${change >= 0 ? 'up' : 'down'}">${signed(change)}</span> since ${fmtDay(first.as_of)}`}</span>
     </section>
-    ${needs.length ? `<div class="card"><div class="row between"><span><span class="pill bad">reconnect</span> ${h(needs[0].institution_name)}${needs.length > 1 ? ' +' + (needs.length - 1) : ''}</span><a class="link" href="#accounts">Accounts</a></div></div>` : ''}
+    ${al.length ? `<div class="card"><div class="list">${al.map((x) => `<a class="item tap" href="${h(x.link)}"><span class="t"><span class="pill ${x.severity === 'bad' ? 'bad' : x.severity === 'warn' ? 'warn' : ''}">${x.severity === 'bad' ? 'action' : x.severity === 'warn' ? 'watch' : 'note'}</span> ${h(x.text)}</span><span class="a muted">›</span></a>`).join('')}</div></div>` : ''}
+    ${needs.length && !al.length ? `<div class="card"><div class="row between"><span><span class="pill bad">reconnect</span> ${h(needs[0].institution_name)}${needs.length > 1 ? ' +' + (needs.length - 1) : ''}</span><a class="link" href="#accounts">Accounts</a></div></div>` : ''}
     <div class="grid2">
       <div class="card"><div class="row between"><h2>Assets</h2><span class="stat"><span class="v">${money(num(n.assets))}</span></span></div>
         <div class="row between"><h2>Liabilities</h2><span class="stat"><span class="v">${money(num(n.liabilities))}</span></span></div>
@@ -323,7 +324,7 @@ VIEWS.accounts = async (view) => {
           <div class="item tap" data-acct="${h(a.account_id)}">
             <span class="t">${h(a.nickname || a.name)} ${a.mask ? '<span class="muted">···' + h(a.mask) + '</span>' : ''} ${a.hidden ? '<span class="pill">hidden</span>' : ''}</span>
             <span class="a">${money2(num(a.current_balance))}${a.credit_limit ? `<span class="s muted">of ${money(num(a.credit_limit))}</span>` : ''}</span>
-            <span class="s">${h(a.subtype || a.type)}${a.interest_rate != null ? ' · ' + Number(a.interest_rate).toFixed(2) + '% APR' : ''}${a.next_payment_due_date ? ' · due ' + fmtDay(a.next_payment_due_date) : ''}</span>
+            <span class="s">${h(a.subtype || a.type)}${a.owner ? ' · ' + h(a.owner) : ''}${a.vehicle && !['cash','taxable'].includes(a.vehicle) ? ' · ' + h(VEHICLES[a.vehicle] || a.vehicle) : ''}${a.interest_rate != null ? ' · ' + Number(a.interest_rate).toFixed(2) + '% APR' : ''}${a.next_payment_due_date ? ' · due ' + fmtDay(a.next_payment_due_date) : ''}</span>
           </div>`).join('')}</div>
       </div>`).join('') || '<div class="card"><p class="empty">No institutions linked.</p></div>'}`;
   $('#btn-add').onclick = () => openSheet(`
@@ -347,15 +348,17 @@ VIEWS.accounts = async (view) => {
     else if (rm) openSheet(`<h2>Remove ${h(rm.dataset.name)}?</h2><p class="muted">Its accounts and transaction history will be deleted. The institution slot is not released.</p><div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary danger" data-confirm>Remove</button></div>`),
       $('#sheet-body').onclick = async (ev) => { if (ev.target.closest('[data-cancel]')) closeSheet(); if (ev.target.closest('[data-confirm]')) { try { await portal('remove', { item_id: rm.dataset.remove }); closeSheet(); invalidate(); route(); toast('Removed.'); } catch (err) { toast(err.message); } } };
     else if (ac) {
-      const a = acc.find((x) => x.account_id === ac.dataset.acct);
+      const a = acc.find((x) => x.account_id === ac.dataset.acct); const ppl = await people();
       openSheet(`<h2>${h(a.name)}</h2><div class="form">
         <label class="field">Nickname <input id="f-nick" type="text" value="${h(a.nickname || '')}" size="20" placeholder="${h(a.name)}"></label>
+        <label class="field">Owner <select id="f-owner" style="width:auto"><option value="">—</option>${ppl.map((x) => `<option ${a.owner === x.name ? 'selected' : ''}>${h(x.name)}</option>`).join('')}<option ${a.owner === 'joint' ? 'selected' : ''}>joint</option></select></label>
+        <label class="field">Vehicle <select id="f-veh" style="width:auto"><option value="">—</option>${Object.entries(VEHICLES).map(([k, v]) => `<option value="${k}" ${a.vehicle === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <label class="check"><input id="f-hidden" type="checkbox" ${a.hidden ? 'checked' : ''}> Exclude from totals</label>
         <p class="muted small">${h(a.official_name || '')}${a.available_balance != null ? ' · available ' + money2(num(a.available_balance)) : ''}</p>
         <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
       $('#sheet-body').onclick = async (ev) => {
         if (ev.target.closest('[data-cancel]')) closeSheet();
-        if (ev.target.closest('[data-save]')) { try { await rpc('set_account', { p_account_id: a.account_id, p_nickname: $('#f-nick').value.trim() || null, p_hidden: $('#f-hidden').checked }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
+        if (ev.target.closest('[data-save]')) { try { await rpc('set_account', { p_account_id: a.account_id, p_nickname: $('#f-nick').value.trim() || null, p_hidden: $('#f-hidden').checked, p_owner: $('#f-owner').value || null, p_vehicle: $('#f-veh').value || null }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
       };
     }
   };
@@ -373,6 +376,7 @@ VIEWS.activity = async (view) => {
       <select id="f-account" aria-label="Account"><option value="">All accounts</option>${acc.map((a) => `<option value="${h(a.account_id)}">${h(a.nickname || a.name)}</option>`).join('')}</select>
       <select id="f-cat" aria-label="Category"><option value="">All categories</option>${CATEGORIES.map((c) => `<option ${c === preset ? 'selected' : ''}>${h(c)}</option>`).join('')}</select>
       <select id="f-range" aria-label="Range"><option value="90">Last 90 days</option><option value="30">Last 30 days</option><option value="365">Last year</option><option value="">All</option></select>
+      <button class="quiet small" id="f-export">CSV</button>
     </div>
     <div class="card"><div class="list" id="tx-list"></div></div>`;
   let timer;
@@ -385,7 +389,7 @@ VIEWS.activity = async (view) => {
       if (t.date !== day) { day = t.date; out += `<div class="day">${fmtDayLong(day)}</div>`; }
       const amt = num(t.amount);
       out += `<div class="item tap" data-tx="${h(t.transaction_id)}">
-        <span class="t">${h(t.merchant_name || t.name)}${t.pending ? ' <span class="pill">pending</span>' : ''}${t.excluded ? ' <span class="pill">excluded</span>' : ''}</span>
+        <span class="t">${h(t.merchant_name || t.name)}${t.pending ? ' <span class="pill">pending</span>' : ''}${t.excluded ? ' <span class="pill">excluded</span>' : ''}${t.business ? ' <span class="pill">LLC</span>' : ''}</span>
         <span class="a ${amt < 0 ? 'up' : ''}">${amt < 0 ? '+' : ''}${money2(Math.abs(amt))}</span>
         <span class="s">${h(t.category || 'Uncategorized')}${t.is_transfer && t.category !== 'Transfer' ? ' · transfer' : ''} · ${h(accName[t.account_id] || '')}${t.notes ? ' · ' + h(t.notes) : ''}</span>
       </div>`;
@@ -397,6 +401,7 @@ VIEWS.activity = async (view) => {
   $('#f-account').onchange = (e) => { f.account = e.target.value; load(); };
   $('#f-cat').onchange = (e) => { f.category = e.target.value; load(); };
   $('#f-range').onchange = (e) => { f.from = e.target.value ? iso(new Date(Date.now() - Number(e.target.value) * 864e5)) : ''; load(); };
+  $('#f-export').onclick = async () => { const rows = await D.tx({ search: f.search, account: f.account, category: f.category, from: f.from, limit: 5000 }); if (!rows.length) return toast('No rows.'); csvDownload('transactions.csv', rows.map((t) => ({ date: t.date, merchant: t.merchant_name || t.name, description: t.name, amount: t.amount, category: t.category, account: accName[t.account_id] || t.account_id, transfer: t.is_transfer, business: t.business, notes: t.notes || '' }))); };
   await load();
 };
 
@@ -407,6 +412,7 @@ function editTx(t, after) {
       <label class="field">Category <select id="e-cat">${catOptions(t.category || 'Uncategorized')}</select></label>
       <label class="check"><input id="e-transfer" type="checkbox" ${t.is_transfer ? 'checked' : ''}> Transfer between own accounts</label>
       <label class="check"><input id="e-excl" type="checkbox" ${t.excluded ? 'checked' : ''}> Exclude from spending</label>
+      <label class="check"><input id="e-biz" type="checkbox" ${t.business ? 'checked' : ''}> Business (LLC)</label>
       <label class="field">Note <input id="e-notes" type="text" value="${h(t.notes || '')}" size="24"></label>
       <label class="check"><input id="e-rule" type="checkbox"> Apply this category to all <b>${h(t.merchant_name || t.name)}</b> transactions</label>
       <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div>
@@ -416,8 +422,8 @@ function editTx(t, after) {
     if (e.target.closest('[data-save]')) {
       try {
         const cat = $('#e-cat').value, tr = $('#e-transfer').checked, ex = $('#e-excl').checked;
-        await rpc('set_transaction', { p_id: t.transaction_id, p_category: cat, p_is_transfer: tr, p_excluded: ex, p_notes: $('#e-notes').value });
-        if ($('#e-rule').checked) await rpc('add_rule', { p_match: t.merchant_name || t.name, p_category: cat, p_is_transfer: tr, p_excluded: ex });
+        await rpc('set_transaction', { p_id: t.transaction_id, p_category: cat, p_is_transfer: tr, p_excluded: ex, p_notes: $('#e-notes').value, p_business: $('#e-biz').checked });
+        if ($('#e-rule').checked) await rpc('add_rule', { p_match: t.merchant_name || t.name, p_category: cat, p_is_transfer: tr, p_excluded: ex, p_business: $('#e-biz').checked });
         closeSheet(); invalidate(); after(); toast('Saved.');
       } catch (err) { toast(err.message); }
     }
@@ -427,7 +433,7 @@ function editTx(t, after) {
 VIEWS.plan = async (view) => { location.hash = '#budget'; };
 
 function subnav(items, on) { return `<div class="sub">${items.map(([k, l]) => `<a href="#${k}" class="${k === on ? 'on' : ''}">${l}</a>`).join('')}</div>`; }
-const PLAN_NAV = [['budget', 'Budget'], ['recurring', 'Recurring'], ['goals', 'Goals'], ['debt', 'Debt'], ['future', 'Future']];
+const PLAN_NAV = [['budget', 'Budget'], ['recurring', 'Recurring'], ['goals', 'Goals'], ['debt', 'Debt'], ['future', 'Future'], ['home_purchase', 'Home'], ['business', 'LLC']];
 
 VIEWS.budget = async (view) => {
   const [status, budgets, spend] = await Promise.all([D.budget(), D.budgets(), D.spend()]);
@@ -485,10 +491,20 @@ VIEWS.recurring = async (view) => {
 };
 
 VIEWS.goals = async (view) => {
-  const [goals, acc] = await Promise.all([D.goals(), D.accounts()]);
+  const [goals, acc, cc, sum] = await Promise.all([D.goals(), D.accounts(), rpc('cushion_curve').catch(() => []), D.summary()]);
+  const spend12 = sum.filter((r) => !r.partial).slice(-12).reduce((s, r, _, a) => s + num(r.spending) / a.length, 0);
+  const cashIds = acc.filter((a) => a.type === 'depository' && !a.hidden).map((a) => a.account_id);
+  const floor = Math.max(500, num((cc.find((r) => num(r.prevented_pct) >= 100) || {}).cushion) || 0);
+  const has = (k) => goals.some((g) => g.name.toLowerCase().includes(k));
+  const suggest = [
+    !has('floor') && { name: 'Checking floor', kind: 'savings', target_amount: Math.round(floor / 50) * 50, account_ids: acc.filter((a) => a.subtype === 'checking').map((a) => a.account_id), target_date: iso(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 1)), why: 'prevents 100% of observed overdrafts' },
+    !has('reserve') && spend12 > 0 && { name: '6-month reserve', kind: 'savings', target_amount: Math.round(6 * spend12 / 100) * 100, account_ids: cashIds, target_date: '2028-07-01', why: '6 × mean monthly spending' },
+    !has('down payment') && { name: 'Down payment', kind: 'savings', target_amount: 130000, account_ids: cashIds, target_date: '2028-09-01', why: '20% on $650,000; adjust under Plan › Home' },
+  ].filter(Boolean);
   view.innerHTML = `
     <h1>Plan</h1>${subnav(PLAN_NAV, 'goals')}
     <div class="row between"><h2>Goals</h2><button class="primary" id="btn-goal">Add goal</button></div>
+    ${suggest.length ? `<div class="card"><h3>Suggested</h3><div class="list">${suggest.map((s, i) => `<div class="item"><span class="t">${h(s.name)}</span><span class="a"><button class="quiet small" data-sug="${i}">Add</button></span><span class="s">${money(s.target_amount)} · ${h(s.why)}</span></div>`).join('')}</div></div>` : ''}
     <div class="grid2">${goals.map((g) => {
       const cur = num(g.current_amount), tgt = num(g.target_amount);
       const isCap = g.kind === 'spending_cap', isDebt = g.kind === 'debt_payoff';
@@ -527,6 +543,7 @@ VIEWS.goals = async (view) => {
     };
   };
   $('#btn-goal').onclick = () => edit(null);
+  view.addEventListener('click', async (e) => { const b = e.target.closest('[data-sug]'); if (!b) return; const s = suggest[Number(b.dataset.sug)]; try { await rpc('upsert_goal', { p: { name: s.name, kind: s.kind, target_amount: s.target_amount, target_date: s.target_date, account_ids: s.account_ids, status: 'active' } }); invalidate(); route(); } catch (err) { toast(err.message); } });
   for (const g of goals.filter((x) => x.kind !== 'spending_cap' && x.target_date && x.status !== 'paused')) {
     rpc('goal_odds', { p_goal_id: g.id }).then((o) => { const r = o && o[0]; const el = $(`[data-goal="${g.id}"]`); if (!r || !el) return;
       el.insertAdjacentHTML('beforeend', `<p class="small"><b class="${num(r.p_hit) >= 70 ? 'up' : num(r.p_hit) >= 40 ? 'warn' : 'down'}">${Number(r.p_hit).toFixed(0)}% probability</b> by target date (bootstrap on trailing 12 months) · required ${money(num(r.needed_per_month))}/mo vs median net cash flow ${money(num(r.median_saving))}/mo · 10th–90th percentile outcome ${money(num(r.p10_end))}–${money(num(r.p90_end))}</p>`); }).catch(() => {});
@@ -535,7 +552,7 @@ VIEWS.goals = async (view) => {
 };
 
 VIEWS.settings = async (view) => {
-  const [{ data: pk }, rules, ls] = await Promise.all([sb.auth.passkey.list().catch(() => ({ data: [] })), D.rules(), D.lastSync()]);
+  const [{ data: pk }, rules, ls, ppl] = await Promise.all([sb.auth.passkey.list().catch(() => ({ data: [] })), D.rules(), D.lastSync(), people()]);
   const keys = (pk && (pk.passkeys || pk)) || [];
   view.innerHTML = `
     <h1>Settings</h1>
@@ -549,9 +566,19 @@ VIEWS.settings = async (view) => {
       <p id="approve-msg" class="small up" hidden></p>
       <div class="list">${(Array.isArray(keys) ? keys : []).map((k) => `<div class="item"><span class="t">${h(k.friendly_name || k.friendlyName || 'Passkey')}</span><span class="a"><button class="quiet small danger" data-delkey="${h(k.id)}">Remove</button></span><span class="s">added ${k.created_at ? fmtDay(k.created_at) : ''}${k.last_used_at ? ' · last used ' + fmtDay(k.last_used_at) : ''}</span></div>`).join('') || '<p class="empty">No passkeys.</p>'}</div>
     </div>
+    <div class="card"><div class="row between"><h2>Household</h2><button class="quiet small" id="btn-people">Edit</button></div>
+      <p class="muted small">${ppl.map((x) => h(x.name) + (x.child ? ' (child)' : '')).join(' · ')}</p></div>
     <div class="card"><h2>Category rules</h2><p class="muted small">Applied where the description contains the match text.</p>
       <div class="list">${rules.map((r) => `<div class="item"><span class="t">“${h(r.match)}” → ${h(r.category)}${r.is_transfer ? ' (transfer)' : ''}${r.excluded ? ' (excluded)' : ''}</span><span class="a"><button class="quiet small danger" data-delrule="${r.id}">Remove</button></span></div>`).join('') || '<p class="empty">No rules.</p>'}</div>
     </div>`;
+  $('#btn-people').onclick = () => {
+    openSheet(`<h2>Household</h2><p class="muted small">One per line; append (child) for a child.</p><div class="form"><textarea id="hh" rows="5" style="width:100%">${ppl.map((x) => h(x.name) + (x.child ? ' (child)' : '')).join('\n')}</textarea>
+      <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
+    $('#sheet-body').onclick = async (e) => {
+      if (e.target.closest('[data-cancel]')) closeSheet();
+      if (e.target.closest('[data-save]')) { const list = $('#hh').value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => ({ name: l.replace(/\s*\(child\)\s*$/i, ''), child: /\(child\)\s*$/i.test(l) })); try { await rpc('set_setting', { p_key: 'household', p_value: { people: list } }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
+    };
+  };
   $('#btn-sync').onclick = async (e) => { e.target.disabled = true; try { await portal('sync'); toast('Sync started.'); setTimeout(() => { invalidate(); route(); }, 45000); } catch (err) { toast(err.message); e.target.disabled = false; } };
   $('#btn-signout').onclick = async () => { await sb.auth.signOut({ scope: 'local' }); state.cache = {}; gate(); };
   $('#btn-signout-all').onclick = async () => { await sb.auth.signOut({ scope: 'global' }); state.cache = {}; gate('All sessions ended.'); };
@@ -698,7 +725,7 @@ VIEWS.debt = async (view) => {
   view.innerHTML = `
     <h1>Plan</h1>${subnav(PLAN_NAV, 'debt')}
     <div class="card">
-      <div class="row between wrap"><h2>Amortization</h2><label class="field" style="display:flex;align-items:center;gap:8px">Additional payment / mo <input id="debt-extra" class="short" type="number" inputmode="numeric" min="0" step="25" value="${extra}" style="width:8ch"></label></div>
+      <div class="row between wrap"><h2>Amortization</h2><label class="field" style="display:flex;align-items:center;gap:8px">Additional payment / mo <input id="debt-extra" class="short" type="number" inputmode="numeric" min="0" step="25" value="${extra}" style="width:11ch"></label></div>
       <div id="debt-body"><p class="muted">Calculating…</p></div>
       ${unl.length ? `<p class="muted small">Excluded, not linked: ${unl.map(h).join(', ')}.</p>` : ''}
     </div>
@@ -730,14 +757,18 @@ VIEWS.future = async (view) => {
   const sum = await D.summary();
   const lastDone = sum.filter((r) => !r.partial).slice(-1)[0] || {};
   const draw = async () => {
-    const rows = await rpc('projection', { p });
+    const active = { ...p, extra_debts: p.extra_debts.filter((x) => x.include !== false) };
+    const rows = await rpc('projection', { p: active });
+    const excluded = p.extra_debts.filter((x) => x.include === false);
+    const alt = excluded.length ? await rpc('projection', { p: { ...p, extra_debts: p.extra_debts } }) : null;
     const cross = rows.find((r) => num(r.net_worth) >= 1000000);
     $('#proj-body').innerHTML = `
       ${lineChart(rows.map((r) => ({ t: r.year_end, v: num(r.net_worth) })), 640, 170, money, true)}
       <p class="small">Basis: current balances; trailing-12-month mean income ${money(num(lastDone.income_12m_avg))} and spending ${money(num(lastDone.spending_12m_avg))} until ${fmtDay(p.attending_start)} ${d(p.attending_start).getFullYear()}, then the figures above. Surplus to highest-APR debt first, then invested at ${p.return_pct}%/yr.${cross ? ` $1M crossed <b>${d(cross.year_end).getFullYear()}</b>.` : ''}</p>
       <div class="scroll"><table class="data"><thead><tr><th>Year</th><th class="num">Net worth</th><th class="num">Assets</th><th class="num">Debt</th><th class="num">Net saved</th></tr></thead><tbody>
         ${rows.map((r) => `<tr><td>${d(r.year_end).getFullYear()} <span class="muted">${h(r.age_note)}</span></td><td class="num">${money(num(r.net_worth))}</td><td class="num">${money(num(r.cash_and_invest))}</td><td class="num">${money(num(r.debt))}</td><td class="num">${signed(num(r.saved_year))}</td></tr>`).join('')}
-      </tbody></table></div>`;
+      </tbody></table></div>
+      ${alt ? `<h3>Scenario: ${excluded.map((x) => h(x.name)).join(', ')} included</h3><div class="scroll"><table class="data"><thead><tr><th>Year</th><th class="num">Net worth, excluded</th><th class="num">Net worth, included</th><th class="num">Difference</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${d(r.year_end).getFullYear()}</td><td class="num">${money(num(r.net_worth))}</td><td class="num">${money(num(alt[i]?.net_worth))}</td><td class="num down">${signed(num(alt[i]?.net_worth) - num(r.net_worth))}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
   };
   view.innerHTML = `
     <h1>Plan</h1>${subnav(PLAN_NAV, 'future')}
@@ -745,13 +776,13 @@ VIEWS.future = async (view) => {
       <h2>Long-range projection</h2>
       <div class="row wrap" style="gap:14px">
         <label class="field">Income step-up month <input id="pj-start" type="month" value="${p.attending_start.slice(0, 7)}" style="width:auto"></label>
-        <label class="field">Net income / mo after <input id="pj-inc" class="short" type="number" inputmode="numeric" step="500" value="${p.attending_net_monthly}" style="width:9ch"></label>
-        <label class="field">Spending / mo after <input id="pj-sp" class="short" type="number" inputmode="numeric" step="500" value="${p.spending_after}" style="width:9ch"></label>
-        <label class="field">Return % / yr <input id="pj-ret" class="short" type="number" inputmode="decimal" step="0.5" value="${p.return_pct}" style="width:6ch"></label>
-        <label class="field">Years <input id="pj-yrs" class="short" type="number" inputmode="numeric" min="2" max="40" value="${p.years}" style="width:7ch"></label>
+        <label class="field">Net income / mo after <input id="pj-inc" class="short" type="number" inputmode="numeric" step="500" value="${p.attending_net_monthly}" style="width:12ch"></label>
+        <label class="field">Spending / mo after <input id="pj-sp" class="short" type="number" inputmode="numeric" step="500" value="${p.spending_after}" style="width:12ch"></label>
+        <label class="field">Return % / yr <input id="pj-ret" class="short" type="number" inputmode="decimal" step="0.5" value="${p.return_pct}" style="width:9ch"></label>
+        <label class="field">Years <input id="pj-yrs" class="short" type="number" inputmode="numeric" min="2" max="40" value="${p.years}" style="width:10ch"></label>
       </div>
       <div class="row between wrap"><span class="muted small">Unlinked debts can be added.</span><span class="row"><button class="quiet small" id="pj-adddebt">Add a debt</button><button class="primary" id="pj-save">Recalculate</button></span></div>
-      ${p.extra_debts.length ? `<div class="list">${p.extra_debts.map((x, i) => `<div class="item"><span class="t">${h(x.name)}</span><span class="a">${money(num(x.bal))}<span class="s">${fmtPct(x.apr, 2)} · ${money(num(x.pay))}/mo</span></span><span class="s"><button class="link small" data-deldebt="${i}">remove</button></span></div>`).join('')}</div>` : ''}
+      ${p.extra_debts.length ? `<div class="list">${p.extra_debts.map((x, i) => `<div class="item"><span class="t">${h(x.name)}</span><span class="a">${money(num(x.bal))}<span class="s">${fmtPct(x.apr, 2)} · ${money(num(x.pay))}/mo</span></span><span class="s"><label class="check" style="display:inline-flex;font-size:13px"><input type="checkbox" data-incdebt="${i}" ${x.include === false ? '' : 'checked'}> include</label> · <button class="link small" data-deldebt="${i}">remove</button></span></div>`).join('')}</div>` : ''}
       <div id="proj-body"><p class="muted">Calculating…</p></div>
     </div>`;
   await draw();
@@ -761,9 +792,9 @@ VIEWS.future = async (view) => {
   $('#pj-adddebt').onclick = () => {
     openSheet(`<h2>Add a debt</h2><div class="form">
       <label class="field">Name <input id="xd-name" type="text" size="20" placeholder="Student loans"></label>
-      <label class="field">Balance <input id="xd-bal" class="short" type="number" inputmode="numeric" style="width:10ch"></label>
-      <label class="field">Interest rate % <input id="xd-apr" class="short" type="number" inputmode="decimal" step="0.01" style="width:7ch"></label>
-      <label class="field">Payment per month <input id="xd-pay" class="short" type="number" inputmode="numeric" style="width:8ch"></label>
+      <label class="field">Balance <input id="xd-bal" class="short" type="number" inputmode="numeric" style="width:13ch"></label>
+      <label class="field">Interest rate % <input id="xd-apr" class="short" type="number" inputmode="decimal" step="0.01" style="width:10ch"></label>
+      <label class="field">Payment per month <input id="xd-pay" class="short" type="number" inputmode="numeric" style="width:11ch"></label>
       <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Add</button></div></div>`);
     $('#sheet-body').onclick = async (e) => {
       if (e.target.closest('[data-cancel]')) closeSheet();
@@ -771,10 +802,11 @@ VIEWS.future = async (view) => {
     };
   };
   view.onclick = async (e) => { const b = e.target.closest('[data-deldebt]'); if (b) { p.extra_debts.splice(Number(b.dataset.deldebt), 1); await save(); route(); } };
+  view.onchange = async (e) => { const c = e.target.closest('[data-incdebt]'); if (c) { p.extra_debts[Number(c.dataset.incdebt)].include = c.checked; await save(); } };
 };
 
 // ---------- Invest ----------
-const INV_NAV = [['invest', 'Overview'], ['holdings', 'Holdings'], ['allocation', 'Allocation']];
+const INV_NAV = [['invest', 'Overview'], ['holdings', 'Holdings'], ['allocation', 'Allocation'], ['contributions', 'Contributions'], ['strategy', 'Strategy']];
 const TYPE_NAME = { equity: 'Stocks', etf: 'ETFs', mutual_fund: 'Mutual funds', fixed_income: 'Bonds', cash: 'Cash', derivative: 'Options', cryptocurrency: 'Crypto', other: 'Other' };
 const COLORS = ['var(--bar2)', 'var(--up)', 'var(--warn)', 'var(--down)', 'var(--muted)', 'var(--bar)'];
 
@@ -798,16 +830,20 @@ VIEWS.invest = async (view) => {
 };
 
 VIEWS.holdings = async (view) => {
-  const [hold, conc] = await Promise.all([D.holdings(), D.concentration()]);
+  const [hold, conc, px] = await Promise.all([D.holdings(), D.concentration(), rpc('price_returns').catch(() => [])]);
   const c = conc[0] || {};
+  const pxBy = Object.fromEntries(px.map((r) => [r.symbol, r]));
+  const bench = px.filter((r) => !hold.some((x) => (x.ticker || '').toUpperCase() === r.symbol));
   view.innerHTML = `
     <h1>Invest</h1>${subnav(INV_NAV, 'holdings')}
     <div class="card">
       ${c.positions ? `<div class="row wrap"><span class="stat"><span class="v">${c.positions}</span><span class="l">positions</span></span><span style="width:16px"></span><span class="stat"><span class="v ${num(c.top_pct) > 25 ? 'warn' : ''}">${fmtPct(c.top_pct)}</span><span class="l">largest: ${h(c.top_ticker || '—')}</span></span><span style="width:16px"></span><span class="stat"><span class="v">${fmtPct(c.top5_pct)}</span><span class="l">top 5</span></span></div>` : ''}
-      <div class="scroll"><table class="data"><thead><tr><th>Security</th><th class="num">Value</th><th class="num">Gain</th><th class="num">Qty</th></tr></thead><tbody>
-        ${hold.map((x) => { const g = x.cost_basis != null ? num(x.institution_value) - num(x.cost_basis) : null; return `<tr><td>${h(x.ticker || x.security_name || '')}<br><span class="muted small">${h(x.ticker ? x.security_name : x.account_name)}</span></td><td class="num">${money(num(x.institution_value))}</td><td class="num ${g == null ? '' : g >= 0 ? 'up' : 'down'}">${g == null ? '—' : signed(g)}</td><td class="num">${Number(x.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}</td></tr>`; }).join('') || '<tr><td colspan="4" class="empty">No holdings.</td></tr>'}
+      <div class="scroll"><table class="data"><thead><tr><th>Security</th><th class="num">Value</th><th class="num">Unrealized</th><th class="num">Qty</th><th class="num">1 mo</th><th class="num">3 mo</th><th class="num">12 mo</th></tr></thead><tbody>
+        ${hold.map((x) => { const g = x.cost_basis != null ? num(x.institution_value) - num(x.cost_basis) : null; const r = pxBy[(x.ticker || '').toUpperCase()] || {}; const rc = (v) => v == null ? '—' : `<span class="${num(v) >= 0 ? 'up' : 'down'}">${pct(num(v))}</span>`; return `<tr><td>${h(x.ticker || x.security_name || '')}<br><span class="muted small">${h(x.ticker ? x.security_name : x.account_name)}</span></td><td class="num">${money(num(x.institution_value))}</td><td class="num ${g == null ? '' : g >= 0 ? 'up' : 'down'}">${g == null ? '—' : signed(g)}</td><td class="num">${Number(x.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}</td><td class="num">${rc(r.r_1m)}</td><td class="num">${rc(r.r_3m)}</td><td class="num">${rc(r.r_12m)}</td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No holdings.</td></tr>'}
       </tbody></table></div>
-    </div>`;
+    </div>
+    ${bench.length ? `<div class="card"><h2>Benchmarks</h2><p class="muted small">Daily closes, adjusted. ${bench[0].as_of ? 'As of ' + fmtDay(bench[0].as_of) + '.' : ''}</p>
+      <div class="scroll"><table class="data"><thead><tr><th>Symbol</th><th class="num">Close</th><th class="num">1 mo</th><th class="num">3 mo</th><th class="num">YTD</th><th class="num">12 mo</th></tr></thead><tbody>${bench.map((r) => { const rc = (v) => v == null ? '—' : `<span class="${num(v) >= 0 ? 'up' : 'down'}">${pct(num(v))}</span>`; return `<tr><td>${h(r.symbol)}</td><td class="num">${money2(num(r.last_close))}</td><td class="num">${rc(r.r_1m)}</td><td class="num">${rc(r.r_3m)}</td><td class="num">${rc(r.r_ytd)}</td><td class="num">${rc(r.r_12m)}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}`;
 };
 
 VIEWS.allocation = async (view) => {
@@ -824,7 +860,7 @@ VIEWS.allocation = async (view) => {
     </div>`;
   $('#btn-target').onclick = () => {
     const keys = Object.keys(TYPE_NAME);
-    openSheet(`<h2>Target allocation</h2><p class="muted small">Percent of portfolio; must total 100.</p><div class="form">${keys.map((k) => `<label class="field" style="display:flex;align-items:center;justify-content:space-between">${TYPE_NAME[k]} <input data-tk="${k}" class="short" type="number" inputmode="numeric" min="0" max="100" value="${target[k] ?? ''}" style="width:6ch"></label>`).join('')}
+    openSheet(`<h2>Target allocation</h2><p class="muted small">Percent of portfolio; must total 100.</p><div class="form">${keys.map((k) => `<label class="field" style="display:flex;align-items:center;justify-content:space-between">${TYPE_NAME[k]} <input data-tk="${k}" class="short" type="number" inputmode="numeric" min="0" max="100" value="${target[k] ?? ''}" style="width:9ch"></label>`).join('')}
       <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
     $('#sheet-body').onclick = async (e) => {
       if (e.target.closest('[data-cancel]')) closeSheet();
@@ -954,6 +990,203 @@ VIEWS.trends = async (view) => {
     ${Object.keys(cardBy).length ? `<h2>Card balance vs limit, weekly</h2><div class="grid2">${Object.entries(cardBy).map(([name, rs]) => { const lim = num(rs[0].credit_limit); const above = rs.filter((r) => lim && num(r.balance) / lim > 0.5).length; return `<div class="card"><h3>${h(name)}</h3>
       ${chart([{ pts: rs.map((r) => ({ x: mx(r.week), y: Math.max(0, num(r.balance)) })), cls: 'line' }], { zero: true, H: 140, refs: lim ? [{ y: lim, label: 'limit ' + money(lim) }, { y: lim * 0.3, label: '30%' }] : [], fmtX: (x) => fmtMon(iso(new Date(+x))) })}
       ${lim ? `<p class="small">Utilization above 50% in <b>${above} of ${rs.length}</b> weeks. Current ${fmtPct(num(rs[rs.length - 1].balance) / lim * 100)}.</p>` : ''}</div>`; }).join('')}</div>` : ''}`;
+};
+
+// ---------- household / ownership helpers ----------
+const VEHICLES = { cash: 'Cash', taxable: 'Taxable brokerage', hsa: 'HSA', employer: '403(b) / 401(k)', ira: 'IRA / Roth', trump: 'Trump account', '529': '529', custodial: 'UTMA / custodial' };
+async function people() { const s = await D.settings(); return (s.household && s.household.people) || [{ name: 'John' }, { name: 'Begum' }, { name: 'Euphemia', child: true }]; }
+function csvDownload(name, rows) {
+  const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const head = Object.keys(rows[0] || {}); const body = [head.join(','), ...rows.map((r) => head.map((k) => esc(r[k])).join(','))].join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([body], { type: 'text/csv' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function randn() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+function quantile(arr, q) { const s = [...arr].sort((a, b) => a - b); const i = (s.length - 1) * q, lo = Math.floor(i); return s[lo] + (s[Math.min(lo + 1, s.length - 1)] - s[lo]) * (i - lo); }
+function pmt(principal, annualRate, years) { const r = annualRate / 12, n = years * 12; return r ? (principal * r) / (1 - Math.pow(1 + r, -n)) : principal / n; }
+
+// ---------- Invest › Contributions ----------
+VIEWS.contributions = async (view) => {
+  const [room, settings, acc] = await Promise.all([rpc('contribution_room'), D.settings(), D.accounts()]);
+  const lim = Object.assign({ hsa: 8750, employer: 24500, ira: 7500, trump: 5000 }, settings.limits || {});
+  const untagged = acc.filter((a) => a.type === 'investment' && !a.hidden && (!a.vehicle || a.vehicle === 'taxable'));
+  view.innerHTML = `
+    <h1>Invest</h1>${subnav(INV_NAV, 'contributions')}
+    <div class="card">
+      <div class="row between wrap"><h2>Contribution room, ${new Date().getFullYear()}</h2><button class="quiet small" id="btn-limits">Limits</button></div>
+      <p class="muted small">Year-to-date inflows into each tax-advantaged account against the annual limit. Pace = limit × (months elapsed / 12).</p>
+      ${room.length ? `<div class="scroll"><table class="data"><thead><tr><th>Vehicle</th><th>Owner</th><th class="num">Limit</th><th class="num">YTD</th><th class="num">Remaining</th><th class="num">Required / mo</th></tr></thead><tbody>
+        ${room.map((r) => `<tr><td>${h(VEHICLES[r.vehicle] || r.vehicle)}<br><span class="muted small">${h(r.account_names)}</span></td><td>${h(r.owner)}</td><td class="num">${r.annual_limit == null ? '—' : money(num(r.annual_limit))}</td><td class="num">${money(num(r.ytd))}</td><td class="num ${r.remaining != null && num(r.remaining) <= 0 ? 'up' : ''}">${r.remaining == null ? '—' : money(Math.max(0, num(r.remaining)))}</td><td class="num ${r.annual_limit != null && !r.on_pace ? 'warn' : ''}">${r.annual_limit == null ? '—' : money(Math.max(0, num(r.required_monthly)))}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="empty">No tax-advantaged accounts tagged. Set the vehicle on each account from Accounts.</p>'}
+      <p class="muted small">Limits: HSA ${money(lim.hsa)} (family) · 403(b)/401(k) ${money(lim.employer)} · IRA ${money(lim.ira)} · Trump account ${money(lim.trump)} per child. 529 and custodial accounts have no federal annual limit.</p>
+      ${untagged.length ? `<p class="small warn">Untagged investment accounts: ${untagged.map((a) => h(a.nickname || a.name)).join(', ')}.</p>` : ''}
+    </div>`;
+  $('#btn-limits').onclick = () => {
+    openSheet(`<h2>Annual limits</h2><div class="form">${['hsa', 'employer', 'ira', 'trump'].map((k) => `<label class="field" style="display:flex;align-items:center;justify-content:space-between">${VEHICLES[k]} <input data-lim="${k}" class="short" type="number" inputmode="numeric" value="${lim[k]}" style="width:12ch"></label>`).join('')}
+      <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
+    $('#sheet-body').onclick = async (e) => {
+      if (e.target.closest('[data-cancel]')) closeSheet();
+      if (e.target.closest('[data-save]')) { const v = {}; $$('[data-lim]').forEach((i) => v[i.dataset.lim] = Number(i.value) || 0); try { await rpc('set_setting', { p_key: 'limits', p_value: v }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
+    };
+  };
+};
+
+// ---------- Invest › Strategy ----------
+VIEWS.strategy = async (view) => {
+  const [room, cc, acc, debts, drift, sum, settings] = await Promise.all([rpc('contribution_room'), rpc('cushion_curve'), D.accounts(), rpc('debt_plan', { p_extra: 0 }), D.drift(), D.summary(), D.settings()]);
+  const inv = Object.assign({ hurdle_apr: 8, match_monthly: 0, marginal_tax: 28, mu: 6, sigma: 15, contribution: null, years: 20 }, settings.invest || {});
+  const cash = acc.filter((a) => a.type === 'depository' && !a.hidden).reduce((s, a) => s + num(a.available_balance ?? a.current_balance), 0);
+  const checking = acc.filter((a) => a.subtype === 'checking' && !a.hidden).reduce((s, a) => s + num(a.available_balance ?? a.current_balance), 0);
+  const floor = Math.max(500, num((cc.find((r) => num(r.prevented_pct) >= 100) || cc[cc.length - 1] || {}).cushion) || 0);
+  const done = sum.filter((r) => !r.partial).slice(-12);
+  const spend12 = done.reduce((s, r) => s + num(r.spending), 0) / Math.max(1, done.length);
+  const net12 = done.reduce((s, r) => s + num(r.net), 0) / Math.max(1, done.length);
+  const reserve6 = 6 * spend12;
+  const investable = acc.filter((a) => a.type === 'investment' && !a.hidden).reduce((s, a) => s + num(a.current_balance), 0);
+  const roomOf = (v) => room.filter((r) => r.vehicle === v && r.annual_limit != null);
+  const highApr = debts.filter((d) => num(d.apr) >= inv.hurdle_apr);
+  const t = inv.marginal_tax / 100;
+  const steps = [
+    { n: 'Checking floor', why: `floor that prevents 100% of observed overdrafts`, need: Math.max(0, floor - checking), ok: checking >= floor, detail: `${money(checking)} of ${money(floor)}` },
+    { n: 'Employer match', why: 'contributions required to capture the full match', need: inv.match_monthly, ok: inv.match_monthly === 0 || roomOf('employer').some((r) => r.on_pace), detail: inv.match_monthly ? money(inv.match_monthly) + '/mo' : 'not set', monthly: true },
+    { n: `Debt above ${inv.hurdle_apr}% APR`, why: 'guaranteed after-tax return equal to the APR', need: highApr.reduce((s, d) => s + num(d.balance), 0), ok: !highApr.length, detail: highApr.map((d) => `${h(d.name)} ${fmtPct(d.apr, 2)}`).join(', ') || 'none' },
+    { n: 'HSA', why: `pre-tax in, tax-free growth and withdrawal; ${money(1)} costs ${money2(1 - t)} after tax`, need: roomOf('hsa').reduce((s, r) => s + Math.max(0, num(r.remaining)), 0), ok: roomOf('hsa').length > 0 && roomOf('hsa').every((r) => num(r.remaining) <= 0), detail: roomOf('hsa').length ? `${money(roomOf('hsa').reduce((s, r) => s + Math.max(0, num(r.remaining)), 0))} room` : 'no HSA account tagged' },
+    { n: '6-month reserve', why: 'liquid cash equal to six months of mean spending', need: Math.max(0, reserve6 - cash), ok: cash >= reserve6, detail: `${money(cash)} of ${money(reserve6)}` },
+    { n: 'IRA / Roth', why: 'tax-free growth; Roth preferred at residency-level marginal rates', need: roomOf('ira').reduce((s, r) => s + Math.max(0, num(r.remaining)), 0), ok: roomOf('ira').length > 0 && roomOf('ira').every((r) => num(r.remaining) <= 0), detail: roomOf('ira').length ? `${money(roomOf('ira').reduce((s, r) => s + Math.max(0, num(r.remaining)), 0))} room` : 'no IRA tagged' },
+    { n: 'Children’s accounts', why: 'Trump account limit per child, 529 unlimited', need: roomOf('trump').reduce((s, r) => s + Math.max(0, num(r.remaining)), 0), ok: roomOf('trump').length > 0 && roomOf('trump').every((r) => num(r.remaining) <= 0), detail: roomOf('trump').length ? roomOf('trump').map((r) => `${h(r.owner)} ${money(Math.max(0, num(r.remaining)))}`).join(' · ') : 'none tagged' },
+    { n: '403(b) beyond match', why: `pre-tax; ${money(1)} costs ${money2(1 - t)} after tax`, need: roomOf('employer').reduce((s, r) => s + Math.max(0, num(r.remaining)), 0), ok: roomOf('employer').length > 0 && roomOf('employer').every((r) => num(r.remaining) <= 0), detail: roomOf('employer').length ? `${money(roomOf('employer').reduce((s, r) => s + Math.max(0, num(r.remaining)), 0))} room` : 'none tagged' },
+    { n: 'Taxable brokerage', why: 'after all tax-advantaged room is used', need: null, ok: false, detail: money(investable) + ' invested' },
+  ];
+  const first = steps.find((s) => !s.ok);
+  // contribution-based rebalancing
+  const tot = drift.reduce((s, r) => s + num(r.value), 0);
+  const hasTarget = drift.some((r) => r.target_pct != null);
+  // Monte Carlo
+  const contrib = inv.contribution ?? Math.max(0, net12);
+  const mc = (() => {
+    const N = 1500, M = inv.years * 12, mu = inv.mu / 100, sg = inv.sigma / 100; const paths = [];
+    for (let p = 0; p < N; p++) { let v = investable; const row = []; for (let m = 1; m <= M; m++) { v = v * Math.exp((mu - sg * sg / 2) / 12 + (sg / Math.sqrt(12)) * randn()) + contrib; if (m % 12 === 0) row.push(v); } paths.push(row); }
+    const yrs = Array.from({ length: inv.years }, (_, i) => i + 1);
+    return yrs.map((y) => { const col = paths.map((r) => r[y - 1]); return { y, p10: quantile(col, 0.1), p50: quantile(col, 0.5), p90: quantile(col, 0.9) }; });
+  })();
+  const fiTarget = 25 * 12 * spend12;
+  const fiYear = mc.find((r) => r.p50 >= fiTarget);
+  const yr0 = new Date().getFullYear();
+  view.innerHTML = `
+    <h1>Invest</h1>${subnav(INV_NAV, 'strategy')}
+    <div class="card">
+      <div class="row between wrap"><h2>Priority of the next dollar</h2><button class="quiet small" id="btn-inv">Assumptions</button></div>
+      <p class="muted small">Evaluated against current balances, contribution room and linked debts. Marginal tax ${inv.marginal_tax}%; debt hurdle ${inv.hurdle_apr}% APR.</p>
+      <div class="list">${steps.map((s, i) => `<div class="item"><span class="t">${i + 1}. ${h(s.n)} ${s === first ? '<span class="pill warn">next</span>' : s.ok ? '<span class="pill ok">met</span>' : ''}</span><span class="a">${s.need == null ? '' : s.monthly ? money(s.need) + '/mo' : money(s.need)}</span><span class="s">${s.detail} · ${s.why}</span></div>`).join('')}</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Contribution-based rebalancing</h2>
+        ${hasTarget ? `<label class="field" style="display:flex;align-items:center;gap:8px">Contribution <input id="rb-amt" class="short" type="number" inputmode="numeric" step="100" value="${Math.round(contrib)}" style="width:12ch"></label>
+        <div id="rb-out"></div>` : '<p class="empty">Set a target allocation under Allocation.</p>'}
+      </div>
+      <div class="card">
+        <h2>Financial independence ratio</h2>
+        <div class="row wrap"><span class="stat"><span class="v">${spend12 > 0 ? (investable / (12 * spend12)).toFixed(2) + '×' : '—'}</span><span class="l">investable ÷ annual spending</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money(fiTarget)}</span><span class="l">25× annual spending</span></span></div>
+        <p class="small">${fiYear ? `Median path reaches 25× in <b>${yr0 + fiYear.y}</b>.` : `Median path does not reach 25× within ${inv.years} years at current inputs.`}</p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Portfolio projection, Monte Carlo</h2>
+      <p class="muted small">1,500 lognormal paths; μ ${inv.mu}%, σ ${inv.sigma}% annual; ${money(contrib)}/mo contributed; from ${money(investable)} invested. Band: 10th–90th percentile; line: median.</p>
+      ${chart([{ pts: mc.map((r) => ({ x: r.y, y: r.p50 })), band: mc.map((r) => ({ x: r.y, lo: r.p10, hi: r.p90 })), cls: 'line' }], { zero: true, H: 180, fmtX: (x) => String(yr0 + Math.round(x)), xticks: [1, 5, 10, 15, 20].filter((x) => x <= inv.years), refs: fiTarget < (mc[mc.length - 1]?.p90 || 0) ? [{ y: fiTarget, label: '25×' }] : [] })}
+      <div class="scroll"><table class="data"><thead><tr><th>Year</th><th class="num">10th</th><th class="num">Median</th><th class="num">90th</th></tr></thead><tbody>
+        ${mc.filter((r) => [5, 10, 15, 20].includes(r.y) || r.y === inv.years).map((r) => `<tr><td>${yr0 + r.y}</td><td class="num">${money(r.p10)}</td><td class="num">${money(r.p50)}</td><td class="num">${money(r.p90)}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`;
+  const rb = () => { const amt = Number($('#rb-amt')?.value) || 0; if (!hasTarget) return;
+    const rows = drift.filter((r) => r.target_pct != null).map((r) => ({ k: r.asset_type, v: num(r.value), tp: num(r.target_pct) / 100 }));
+    const T = tot + amt; const def = rows.map((r) => ({ ...r, d: Math.max(0, r.tp * T - r.v) })); const sd = def.reduce((s, r) => s + r.d, 0);
+    const alloc = def.map((r) => ({ ...r, buy: sd > 0 ? (amt * r.d) / sd : amt * r.tp }));
+    $('#rb-out').innerHTML = `<div class="scroll"><table class="data"><thead><tr><th>Class</th><th class="num">Now</th><th class="num">Target</th><th class="num">Buy</th><th class="num">After</th></tr></thead><tbody>${alloc.map((r) => `<tr><td>${h(TYPE_NAME[r.k] || r.k)}</td><td class="num">${fmtPct(tot ? 100 * r.v / tot : 0)}</td><td class="num">${fmtPct(100 * r.tp)}</td><td class="num"><b>${money(r.buy)}</b></td><td class="num">${fmtPct(T ? 100 * (r.v + r.buy) / T : 0)}</td></tr>`).join('')}</tbody></table></div><p class="muted small">No sales; the contribution is split in proportion to each class's shortfall from target.</p>`; };
+  rb(); if ($('#rb-amt')) $('#rb-amt').oninput = rb;
+  $('#btn-inv').onclick = () => {
+    openSheet(`<h2>Assumptions</h2><div class="form">
+      <label class="field">Marginal tax rate % (federal + state) <input id="iv-tax" class="short" type="number" inputmode="decimal" value="${inv.marginal_tax}" style="width:9ch"></label>
+      <label class="field">Debt hurdle APR % <input id="iv-h" class="short" type="number" inputmode="decimal" value="${inv.hurdle_apr}" style="width:9ch"></label>
+      <label class="field">Contribution needed for full employer match, $/mo <input id="iv-m" class="short" type="number" inputmode="numeric" value="${inv.match_monthly}" style="width:11ch"></label>
+      <label class="field">Monthly contribution for projection (blank = mean net cash flow) <input id="iv-c" class="short" type="number" inputmode="numeric" value="${inv.contribution ?? ''}" style="width:12ch"></label>
+      <label class="field">Expected return μ % <input id="iv-mu" class="short" type="number" inputmode="decimal" step="0.5" value="${inv.mu}" style="width:9ch"></label>
+      <label class="field">Volatility σ % <input id="iv-sg" class="short" type="number" inputmode="decimal" step="0.5" value="${inv.sigma}" style="width:9ch"></label>
+      <label class="field">Years <input id="iv-y" class="short" type="number" inputmode="numeric" min="5" max="40" value="${inv.years}" style="width:9ch"></label>
+      <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
+    $('#sheet-body').onclick = async (e) => {
+      if (e.target.closest('[data-cancel]')) closeSheet();
+      if (e.target.closest('[data-save]')) { const v = { ...inv, marginal_tax: Number($('#iv-tax').value) || 0, hurdle_apr: Number($('#iv-h').value) || 0, match_monthly: Number($('#iv-m').value) || 0, contribution: $('#iv-c').value === '' ? null : Number($('#iv-c').value), mu: Number($('#iv-mu').value) || 0, sigma: Number($('#iv-sg').value) || 0, years: Math.min(40, Math.max(5, Number($('#iv-y').value) || 20)) };
+        try { await rpc('set_setting', { p_key: 'invest', p_value: v }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
+    };
+  };
+};
+
+// ---------- Plan › Home ----------
+VIEWS.home_purchase = async (view) => {
+  const settings = await D.settings();
+  const proj = Object.assign({ attending_net_monthly: 20000 }, settings.projection || {});
+  const p = Object.assign({ gross_annual: Math.round(proj.attending_net_monthly * 12 / 0.68), other_debt_monthly: 0, price: 650000, down_pct: 20, rate: 6.5, term: 30, tax_pct: 1.1, insurance: 2400, hoa: 0, maint_pct: 1, appreciation: 3.5, alt_return: 6, rent: 3200, rent_growth: 3, buy_cost_pct: 2, sell_cost_pct: 6, horizon: 7 }, settings.home || {});
+  const calc = () => {
+    const gm = p.gross_annual / 12, loan = p.price * (1 - p.down_pct / 100), pi = pmt(loan, p.rate / 100, p.term);
+    const piti = pi + (p.price * p.tax_pct / 100) / 12 + p.insurance / 12 + p.hoa;
+    const maxFront = 0.28 * gm, maxBack = 0.36 * gm - p.other_debt_monthly;
+    const cap = Math.min(maxFront, maxBack);
+    // max price such that PITI = cap (iterate)
+    let lo = 0, hi = 5e6; for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; const l = mid * (1 - p.down_pct / 100); const m = pmt(l, p.rate / 100, p.term) + (mid * p.tax_pct / 100) / 12 + p.insurance / 12 + p.hoa; if (m > cap) hi = mid; else lo = mid; }
+    // rent vs buy over horizon (monthly)
+    let bal = loan, home = p.price, rent = p.rent, buyerOut = p.price * p.down_pct / 100 + p.price * p.buy_cost_pct / 100, renterPort = buyerOut;
+    const r = p.rate / 100 / 12, ar = p.alt_return / 100 / 12, ap = Math.pow(1 + p.appreciation / 100, 1 / 12), rg = Math.pow(1 + p.rent_growth / 100, 1 / 12);
+    let cumOwner = 0, cumRent = 0;
+    for (let m = 1; m <= p.horizon * 12; m++) {
+      const interest = bal * r, princ = pi - interest; bal -= princ; home *= ap;
+      const ownerCost = pi + (home * p.tax_pct / 100) / 12 + p.insurance / 12 + p.hoa + (home * p.maint_pct / 100) / 12;
+      renterPort = renterPort * (1 + ar) + (ownerCost - rent); cumOwner += ownerCost; cumRent += rent; rent *= rg;
+    }
+    const equity = home - bal - home * p.sell_cost_pct / 100;
+    return { pi, piti, gm, cap, maxPrice: lo, frontRatio: piti / gm, backRatio: (piti + p.other_debt_monthly) / gm, equity, renterPort, cumOwner, cumRent, home, bal };
+  };
+  const draw = () => { const c = calc(); $('#hp-out').innerHTML = `
+    <div class="row wrap"><span class="stat"><span class="v">${money(c.piti)}</span><span class="l">PITI + HOA / mo</span></span><span style="width:16px"></span><span class="stat"><span class="v ${c.frontRatio > 0.28 ? 'warn' : ''}">${fmtPct(100 * c.frontRatio)}</span><span class="l">front-end ratio (28%)</span></span><span style="width:16px"></span><span class="stat"><span class="v ${c.backRatio > 0.36 ? 'warn' : ''}">${fmtPct(100 * c.backRatio)}</span><span class="l">back-end ratio (36%)</span></span></div>
+    <p class="small">Maximum price at 28/36 with ${p.down_pct}% down, ${p.rate}% / ${p.term} yr: <b>${money(c.maxPrice)}</b> (payment cap ${money(c.cap)}/mo on ${money(c.gm)} gross).</p>
+    <h3>Buy vs rent, ${p.horizon} years</h3>
+    <div class="scroll"><table class="data"><thead><tr><th></th><th class="num">Buy</th><th class="num">Rent</th></tr></thead><tbody>
+      <tr><td>Cash out over period</td><td class="num">${money(c.cumOwner)}</td><td class="num">${money(c.cumRent)}</td></tr>
+      <tr><td>Position at end</td><td class="num">${money(c.equity)}<br><span class="muted small">equity after ${p.sell_cost_pct}% selling cost</span></td><td class="num">${money(c.renterPort)}<br><span class="muted small">down payment + monthly difference invested at ${p.alt_return}%</span></td></tr>
+      <tr><td><b>Advantage</b></td><td class="num ${c.equity >= c.renterPort ? 'up' : ''}">${c.equity >= c.renterPort ? '<b>' + signed(c.equity - c.renterPort) + '</b>' : ''}</td><td class="num ${c.renterPort > c.equity ? 'up' : ''}">${c.renterPort > c.equity ? '<b>' + signed(c.renterPort - c.equity) + '</b>' : ''}</td></tr>
+    </tbody></table></div>
+    <p class="muted small">Home value ${money(c.home)} at ${p.appreciation}%/yr; loan balance ${money(c.bal)}. Maintenance ${p.maint_pct}% of value per year. Mortgage interest deduction not applied.</p>`; };
+  const F = [['gross_annual', 'Gross household income / yr', 11], ['other_debt_monthly', 'Other debt payments / mo', 8], ['price', 'Price', 10], ['down_pct', 'Down %', 5], ['rate', 'Rate %', 6], ['term', 'Term yrs', 5], ['tax_pct', 'Property tax %', 6], ['insurance', 'Insurance / yr', 8], ['hoa', 'HOA / mo', 7], ['maint_pct', 'Maintenance % / yr', 5], ['appreciation', 'Appreciation % / yr', 5], ['alt_return', 'Alternative return %', 5], ['rent', 'Comparable rent / mo', 8], ['rent_growth', 'Rent growth % / yr', 5], ['buy_cost_pct', 'Buying cost %', 5], ['sell_cost_pct', 'Selling cost %', 5], ['horizon', 'Horizon yrs', 5]];
+  view.innerHTML = `
+    <h1>Plan</h1>${subnav(PLAN_NAV, 'home_purchase')}
+    <div class="card">
+      <div class="row between wrap"><h2>Home purchase</h2><button class="primary" id="hp-save">Save inputs</button></div>
+      <div class="row wrap" style="gap:12px">${F.map(([k, l, w]) => `<label class="field">${l} <input data-hp="${k}" class="short" type="number" inputmode="decimal" value="${p[k]}" style="width:${w + 4}ch"></label>`).join('')}</div>
+      <div id="hp-out"></div>
+    </div>`;
+  draw();
+  $$('[data-hp]').forEach((i) => i.oninput = () => { p[i.dataset.hp] = Number(i.value) || 0; draw(); });
+  $('#hp-save').onclick = async () => { try { await rpc('set_setting', { p_key: 'home', p_value: p }); toast('Saved.'); invalidate(); } catch (e) { toast(e.message); } };
+};
+
+// ---------- Plan › Business ----------
+VIEWS.business = async (view) => {
+  const rows = await q('v_business', (s) => s.order('month', { ascending: false }));
+  const y0 = new Date().getFullYear();
+  const ytd = rows.filter((r) => r.month.startsWith(String(y0)));
+  const byCat = {}; ytd.forEach((r) => { const c = byCat[r.category] = byCat[r.category] || { expense: 0, revenue: 0, n: 0 }; c.expense += num(r.expense) || 0; c.revenue += num(r.revenue) || 0; c.n += r.n; });
+  const months = {}; rows.forEach((r) => { const m = months[r.month] = months[r.month] || { expense: 0, revenue: 0 }; m.expense += num(r.expense) || 0; m.revenue += num(r.revenue) || 0; });
+  const exp = Object.values(byCat).reduce((s, c) => s + c.expense, 0), rev = Object.values(byCat).reduce((s, c) => s + c.revenue, 0);
+  view.innerHTML = `
+    <h1>Plan</h1>${subnav(PLAN_NAV, 'business')}
+    <div class="card">
+      <div class="row between wrap"><h2>LLC ledger, ${y0}</h2><button class="quiet small" id="biz-export">Export CSV</button></div>
+      <p class="muted small">Transactions flagged as business (edit any transaction, or a rule with the business flag). Schedule C categories are the transaction categories.</p>
+      <div class="row wrap"><span class="stat"><span class="v">${money2(rev)}</span><span class="l">revenue</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money2(exp)}</span><span class="l">expenses</span></span><span style="width:16px"></span><span class="stat"><span class="v ${rev - exp < 0 ? 'down' : 'up'}">${signed(rev - exp, 2)}</span><span class="l">net</span></span></div>
+      ${Object.keys(byCat).length ? `<div class="scroll"><table class="data"><thead><tr><th>Category</th><th class="num">Expense</th><th class="num">Revenue</th><th class="num">n</th></tr></thead><tbody>${Object.entries(byCat).sort((a, b) => b[1].expense - a[1].expense).map(([c, v]) => `<tr><td>${h(c)}</td><td class="num">${money2(v.expense)}</td><td class="num">${money2(v.revenue)}</td><td class="num">${v.n}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No business transactions flagged.</p>'}
+    </div>
+    ${Object.keys(months).length ? `<div class="card"><h2>By month</h2>${barChart(Object.entries(months).sort().slice(-12).map(([m, v]) => ({ month: m, income: v.revenue, spending: v.expense })), ['income', 'spending'], 640, 150)}<div class="legend"><span><i style="background:var(--up)"></i>Revenue</span><span><i style="background:var(--bar2)"></i>Expenses</span></div></div>` : ''}`;
+  $('#biz-export').onclick = async () => { const tx = await q('transactions', (s) => s.eq('business', true).gte('date', y0 + '-01-01').order('date')); if (!tx.length) return toast('No rows.'); csvDownload(`llc-${y0}.csv`, tx.map((t) => ({ date: t.date, merchant: t.merchant_name || t.name, description: t.name, amount: t.amount, category: t.category, account: t.account_id, notes: t.notes || '' }))); };
 };
 
 function stdev(xs) { if (xs.length < 2) return 0; const m = xs.reduce((s, x) => s + x, 0) / xs.length; return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1)); }
