@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src https://noytzrdrvaztjeytdwma.supabase.co; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1318" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Finances">
+<title>Finances</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- Sign in -->
+<section id="gate" class="screen" hidden>
+  <div class="gate-box">
+    <div class="gate-mark"><span></span><span></span><span></span></div>
+    <h1>Solomon household</h1>
+    <p id="gate-msg" class="muted">Private. Two people have access.</p>
+    <button id="btn-signin" class="primary big">Sign in with Face ID</button>
+    <p id="gate-err" class="err" hidden></p>
+    <button id="btn-firsttime" class="link small">First time on this device?</button>
+    <div id="firsttime" class="form" hidden>
+      <p class="muted small">A one-time link goes to your email. Open it on this device, then create its passkey.</p>
+      <div class="row" style="justify-content:center"><input id="ft-email" type="email" placeholder="email" size="22" autocomplete="email"><button id="btn-sendlink" class="quiet">Send link</button></div>
+      <p id="ft-msg" class="muted small"></p>
+    </div>
+  </div>
+</section>
+
+<!-- First-time passkey setup (after the invite link) -->
+<section id="setup" class="screen" hidden>
+  <div class="gate-box">
+    <h1>Set up Face ID</h1>
+    <p class="muted">This device will be the key. No password exists for this account.</p>
+    <label class="field">Name this device <input id="setup-name" type="text" placeholder="John's iPhone" size="16" autocomplete="off"></label>
+    <button id="btn-register" class="primary big">Create passkey</button>
+    <p id="setup-err" class="err" hidden></p>
+  </div>
+</section>
+
+<!-- App -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <span class="brand">Finances</span>
+      <span id="synced" class="muted small"></span>
+      <button id="btn-lock" class="quiet small" title="Lock now">Lock</button>
+    </div>
+  </header>
+
+  <main id="view" class="view"></main>
+
+  <nav class="tabs" aria-label="Sections">
+    <a href="#home" data-tab="home">Home</a>
+    <a href="#accounts" data-tab="accounts">Accounts</a>
+    <a href="#activity" data-tab="activity">Activity</a>
+    <a href="#plan" data-tab="plan">Plan</a>
+    <a href="#more" data-tab="more">More</a>
+  </nav>
+</div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true">
+    <div id="sheet-body"></div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.0/dist/umd/supabase.js" integrity="sha384-3lSoufGjgosjqp3JDr/NReX3PjMd3SlC8wJ23CWFjB6DSFNf71I0DhcRTUm9MwgO" crossorigin="anonymous"></script>
+<script src="app.js"></script>
+</body>
+</html>
