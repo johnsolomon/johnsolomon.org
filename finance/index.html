@@ -20,29 +20,28 @@
 </head>
 <body>
 
-<!-- Sign in -->
+<!-- Sign-in -->
 <section id="gate" class="screen" hidden>
   <div class="gate-box">
     <div class="gate-mark"><span></span><span></span><span></span></div>
-    <h1>Solomon household</h1>
-    <p id="gate-msg" class="muted">Private. Two people have access.</p>
-    <button id="btn-signin" class="primary big">Sign in with Face ID</button>
+    <h1>Finances</h1>
+    <p id="gate-msg" class="muted"></p>
+    <button id="btn-signin" class="primary big">Sign in with passkey</button>
     <p id="gate-err" class="err" hidden></p>
-    <button id="btn-firsttime" class="link small">First time on this device?</button>
+    <button id="btn-firsttime" class="link small">Register a new device</button>
     <div id="firsttime" class="form" hidden>
-      <p class="muted small">A one-time link goes to your email. Open it on this device, then create its passkey.</p>
+      <p class="muted small">A sign-in link is sent by email. Open it on this device to register its passkey.</p>
       <div class="row" style="justify-content:center"><input id="ft-email" type="email" placeholder="email" size="22" autocomplete="email"><button id="btn-sendlink" class="quiet">Send link</button></div>
       <p id="ft-msg" class="muted small"></p>
     </div>
   </div>
 </section>
 
-<!-- First-time passkey setup (after the invite link) -->
+<!-- Passkey registration (after the sign-in link) -->
 <section id="setup" class="screen" hidden>
   <div class="gate-box">
-    <h1>Set up Face ID</h1>
-    <p class="muted">This device will be the key. No password exists for this account.</p>
-    <label class="field">Name this device <input id="setup-name" type="text" placeholder="John's iPhone" size="16" autocomplete="off"></label>
+    <h1>Register device</h1>
+    <label class="field">Name this device <input id="setup-name" type="text" placeholder="iPhone" size="16" autocomplete="off"></label>
     <button id="btn-register" class="primary big">Create passkey</button>
     <p id="setup-err" class="err" hidden></p>
   </div>
