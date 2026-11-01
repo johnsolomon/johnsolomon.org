@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 Disallow: /stream/
+Disallow: /finance/
 Sitemap: https://johnsolomon.org/sitemap.xml
