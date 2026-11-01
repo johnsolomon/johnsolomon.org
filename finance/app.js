@@ -153,7 +153,7 @@ function enter(me) {
   if (sessionStorage.getItem('justLinked')) { sessionStorage.removeItem('justLinked'); portal('finish').then(() => { invalidate(); route(); toast('Account linked. First sync running.'); }).catch(() => {}); }
 }
 addEventListener('hashchange', route);
-const TABS = { home: 'home', activity: 'activity', insights: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', more: 'plan' };
+const TABS = { home: 'home', activity: 'activity', insights: 'insights', cycle: 'insights', trends: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', more: 'plan' };
 function route() {
   if (screens.app.hidden) return;
   const r = (location.hash || '#home').slice(1).split('/')[0];
@@ -189,6 +189,7 @@ const D = {
   weekday: () => cached('weekday', () => q('v_weekday_spend', (s) => s.order('dow'))),
   concentration: () => cached('concentration', () => q('v_concentration')),
   drift: () => cached('drift', () => q('v_allocation_drift')),
+  counts: () => cached('counts', () => q('v_monthly_counts', (s) => s.order('month'))),
   settings: () => cached('settings', async () => Object.fromEntries((await q('app_settings')).map((r) => [r.key, r.value]))),
   lastSync: () => cached('lastSync', () => q('sync_runs', (s) => s.order('id', { ascending: false }).limit(1))),
   tx: (opts) => q('transactions', (s) => {
@@ -564,7 +565,7 @@ VIEWS.settings = async (view) => {
 };
 
 // ---------- Insights ----------
-const INS_NAV = [['insights', 'Cash'], ['spending', 'Spending'], ['income', 'Income'], ['fees', 'Fees']];
+const INS_NAV = [['insights', 'Cash'], ['cycle', 'Pay cycle'], ['trends', 'Trends'], ['spending', 'Spending'], ['income', 'Income'], ['fees', 'Fees']];
 const fmtPct = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toFixed(d) + '%';
 const dayOfMonth = new Date().getDate();
 
@@ -831,6 +832,128 @@ VIEWS.allocation = async (view) => {
         try { await rpc('set_setting', { p_key: 'target_allocation', p_value: t }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
     };
   };
+};
+
+// ---------- multi-series chart: lines, optional band, dashed fits, markers, bars ----------
+// series: [{pts:[{x,y}], cls:'line'|'line alt'|'fit', band:[{x,lo,hi}], marks:[{x,y,label}], bars:true}]
+function chart(series, o = {}) {
+  const W = o.W || 640, H = o.H || 170, m = { t: 12, r: 10, b: 24, l: 48 };
+  const all = series.flatMap((s) => [...(s.pts || []), ...((s.band || []).flatMap((b) => [{ x: b.x, y: b.lo }, { x: b.x, y: b.hi }]))]).filter((p) => p.y != null && !isNaN(p.y));
+  if (!all.length) return '<p class="empty">Nothing yet.</p>';
+  const xs = all.map((p) => +p.x); let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x1 === x0) x1 = x0 + 1;
+  let lo = Math.min(...all.map((p) => p.y)), hi = Math.max(...all.map((p) => p.y));
+  if (o.zero) lo = Math.min(0, lo); if (o.yMax != null) hi = Math.max(hi, o.yMax);
+  const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.1 || 10; lo -= o.zero && lo === 0 ? 0 : pad; hi += pad;
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const X = (x) => m.l + (iw * (+x - x0)) / (x1 - x0), Y = (y) => m.t + ih - (ih * (y - lo)) / (hi - lo);
+  const fmtY = o.fmtY || short, fmtX = o.fmtX || ((x) => fmtDay(iso(new Date(+x))));
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let i = 0; i <= 3; i++) { const v = lo + ((hi - lo) * i) / 3; s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtY(v)}</text>`; }
+  if (lo < 0 && hi > 0) s += `<line class="axis" x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+  for (const ref of o.refs || []) s += `<line class="ref" x1="${m.l}" x2="${W - m.r}" y1="${Y(ref.y)}" y2="${Y(ref.y)}" stroke-dasharray="4 4"/><text class="reflabel" x="${W - m.r}" y="${Y(ref.y) - 4}" text-anchor="end">${h(ref.label)}</text>`;
+  for (const sr of series) {
+    if (sr.band) { const b = sr.band.filter((p) => p.lo != null); s += `<path class="band" d="${b.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p.hi).toFixed(1)).join(' ')} ${[...b].reverse().map((p) => 'L' + X(p.x).toFixed(1) + ' ' + Y(p.lo).toFixed(1)).join(' ')} Z"/>`; }
+    if (sr.bars) { const bw = Math.max(2, (iw / sr.pts.length) * 0.6); for (const p of sr.pts) s += `<rect class="${sr.cls || 'out'}" x="${X(p.x) - bw / 2}" y="${Math.min(Y(p.y), Y(0))}" width="${bw}" height="${Math.abs(Y(p.y) - Y(0))}" rx="2"><title>${fmtX(p.x)}: ${fmtY(p.y)}</title></rect>`; continue; }
+    if (sr.pts && sr.pts.length) { const pts = sr.pts.filter((p) => p.y != null); s += `<path class="${sr.cls || 'line'}" d="${pts.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p.y).toFixed(1)).join(' ')}"/>`;
+      if (sr.label) { const l = pts[pts.length - 1]; s += `<text class="label" x="${Math.min(X(l.x), W - 70)}" y="${Y(l.y) - 6}" text-anchor="${X(l.x) > W - 80 ? 'end' : 'start'}">${h(sr.label)}</text>`; } }
+    for (const mk of sr.marks || []) s += `<circle class="mark" cx="${X(mk.x)}" cy="${Y(mk.y)}" r="3"><title>${h(mk.label || '')}</title></circle>`;
+  }
+  const n = Math.min(o.ticks || 5, all.length); const xt = o.xticks || Array.from({ length: n }, (_, i) => x0 + ((x1 - x0) * i) / Math.max(1, n - 1));
+  xt.forEach((x, i) => { s += `<text x="${X(x)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === xt.length - 1 ? 'end' : 'middle'}">${fmtX(x)}</text>`; });
+  return s + '</svg>';
+}
+function linfit(ys) { const n = ys.length; if (n < 2) return { a: ys[0] || 0, b: 0 }; const xm = (n - 1) / 2, ym = ys.reduce((s, y) => s + y, 0) / n; let sxy = 0, sxx = 0; ys.forEach((y, i) => { sxy += (i - xm) * (y - ym); sxx += (i - xm) ** 2; }); const b = sxx ? sxy / sxx : 0; return { a: ym - b * xm, b }; }
+const mx = (s) => +d(s);
+
+// ---------- Insights › Cycle ----------
+VIEWS.cycle = async (view) => {
+  const [pc, cc, db] = await Promise.all([rpc('paycycle_profile'), rpc('cushion_curve'), rpc('daily_balance', { p_days: 600, p_scope: 'checking' })]);
+  const n = pc.length ? pc[0].cycle_days : 14;
+  const worst = pc.reduce((m, r) => (num(r.pct_days_negative) > num(m.pct_days_negative) ? r : m), pc[0] || {});
+  const first = pc[0] || {}, last = pc[pc.length - 1] || {};
+  const spendEarly = pc.slice(0, Math.ceil(n / 2)).reduce((s, r) => s + num(r.spend_per_day), 0), spendLate = pc.slice(Math.ceil(n / 2)).reduce((s, r) => s + num(r.spend_per_day), 0);
+  const ev = cc[0]?.events || 0;
+  const c70 = cc.find((r) => num(r.prevented_pct) >= 70), c100 = cc.find((r) => num(r.prevented_pct) >= 100);
+  const od = db.filter((r) => r.overdraft);
+  const roll = db.map((r, i) => ({ x: mx(r.as_of), y: db.slice(Math.max(0, i - 29), i + 1).reduce((s, q) => s + num(q.balance), 0) / Math.min(i + 1, 30) }));
+  const byMonth = {}; db.forEach((r) => { const k = r.as_of.slice(0, 7); (byMonth[k] = byMonth[k] || []).push(num(r.balance)); });
+  const months = Object.keys(byMonth).sort();
+  const avgSeries = months.map((k) => ({ x: mx(k + '-15'), y: byMonth[k].reduce((s, v) => s + v, 0) / byMonth[k].length }));
+  const minSeries = months.map((k) => ({ x: mx(k + '-15'), y: Math.min(...byMonth[k]) }));
+  const peak = avgSeries.reduce((m, p) => (p.y > m.y ? p : m), avgSeries[0]), recent = avgSeries.slice(-3).reduce((s, p) => s + p.y, 0) / 3;
+  view.innerHTML = `
+    <h1>Insights</h1>${subnav(INS_NAV, 'cycle')}
+    <div class="card">
+      <h2>Checking balance across the ${n}-day pay cycle</h2>
+      <p class="muted small">Day 0 is the ${h(titleCase(first.source || 'main'))} payday. Line: median balance on that day of the cycle; band: 10th–90th percentile; over the last 20 months.</p>
+      ${chart([{ pts: pc.map((r) => ({ x: r.day_in_cycle, y: num(r.median_balance) })), band: pc.map((r) => ({ x: r.day_in_cycle, lo: num(r.p10_balance), hi: num(r.p90_balance) })), cls: 'line' }], { zero: true, fmtX: (x) => 'day ' + Math.round(x), xticks: pc.map((r) => r.day_in_cycle).filter((x) => x % 2 === 0), fmtY: short })}
+      <div class="row wrap"><span class="stat"><span class="v">${money(num(first.median_balance))}</span><span class="l">median on payday</span></span><span style="width:16px"></span><span class="stat"><span class="v ${num(last.median_balance) < 200 ? 'down' : ''}">${money(num(last.median_balance))}</span><span class="l">median on day ${last.day_in_cycle}</span></span><span style="width:16px"></span><span class="stat"><span class="v down">${fmtPct(worst.pct_days_negative)}</span><span class="l">of day-${worst.day_in_cycle}s were below zero</span></span></div>
+      <h3>Share of days below zero</h3>
+      ${chart([{ pts: pc.map((r) => ({ x: r.day_in_cycle, y: num(r.pct_days_negative) })), bars: true, cls: 'out' }], { zero: true, H: 120, fmtX: (x) => 'day ' + Math.round(x), xticks: pc.map((r) => r.day_in_cycle).filter((x) => x % 2 === 0), fmtY: (v) => v.toFixed(0) + '%' })}
+      <h3>Spending rate by day of the cycle</h3>
+      <p class="muted small">Average spent per day, all accounts. First half of the cycle: ${money(spendEarly)}; second half: ${money(spendLate)} — ${spendEarly > spendLate ? 'spending is front-loaded after payday' : 'spending is back-loaded'}.</p>
+      ${chart([{ pts: pc.map((r) => ({ x: r.day_in_cycle, y: num(r.spend_per_day) })), bars: true, cls: 'out' }], { zero: true, H: 120, fmtX: (x) => 'day ' + Math.round(x), xticks: pc.map((r) => r.day_in_cycle).filter((x) => x % 2 === 0), fmtY: short })}
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>What a cushion would have prevented</h2>
+        <p class="muted small">Of the ${ev} overdraft days in the last 12 months, the share that a standing balance of X in checking would have avoided, from how deep each one went.</p>
+        ${chart([{ pts: cc.map((r) => ({ x: num(r.cushion), y: num(r.prevented_pct) })), cls: 'line' }], { zero: true, yMax: 100, H: 150, fmtX: (x) => money(x), xticks: [0, 250, 500, 750, 1000], fmtY: (v) => v.toFixed(0) + '%' })}
+        ${c70 ? `<p class="small">A <b>${money(num(c70.cushion))}</b> floor prevents ${fmtPct(c70.prevented_pct)} (${money(num(c70.fees_saved))} in fees)${c100 ? `; <b>${money(num(c100.cushion))}</b> prevents all of them (${money(num(c100.fees_saved))}).` : '.'}</p>` : ''}
+      </div>
+      <div class="card">
+        <h2>Checking balance, 20 months</h2>
+        <p class="muted small">Rebuilt day by day from the transaction ledger. Grey: daily; blue: 30-day average; dots: overdraft fees.</p>
+        ${chart([{ pts: db.map((r) => ({ x: mx(r.as_of), y: num(r.balance) })), cls: 'line thin' }, { pts: roll, cls: 'line', marks: od.map((r) => ({ x: mx(r.as_of), y: num(r.balance), label: fmtDay(r.as_of) + ' ' + money2(num(r.fee)) })) }], { zero: true, H: 170 })}
+        <p class="small">Monthly average peaked at <b>${money(peak.y)}</b> (${fmtMonth(iso(new Date(peak.x)))}); the last 3 months average <b>${money(recent)}</b>.</p>
+        ${chart([{ pts: avgSeries, cls: 'line', label: 'monthly avg' }, { pts: minSeries, cls: 'line alt', label: 'monthly low' }], { zero: true, H: 140 })}
+      </div>
+    </div>`;
+};
+
+// ---------- Insights › Trends ----------
+VIEWS.trends = async (view) => {
+  const [cat, mer, sum, counts, cards] = await Promise.all([rpc('trend_series', { p_kind: 'category', p_top: 6, p_months: 18 }), rpc('trend_series', { p_kind: 'merchant', p_top: 4, p_months: 18 }), D.summary(), D.counts(), rpc('card_history', { p_weeks: 78 })]);
+  const done = sum.filter((r) => !r.partial).slice(-18);
+  const inc = done.map((r) => num(r.income)), sp = done.map((r) => num(r.spending));
+  const fi = linfit(inc), fs = linfit(sp);
+  const r3 = (arr) => arr.map((_, i) => arr.slice(Math.max(0, i - 2), i + 1).reduce((s, v) => s + v, 0) / Math.min(i + 1, 3));
+  const gapNow = fi.a + fi.b * (inc.length - 1) - (fs.a + fs.b * (sp.length - 1)), gap6 = fi.a + fi.b * (inc.length + 5) - (fs.a + fs.b * (sp.length + 5));
+  let cum = 0; const cumPts = done.map((r) => ({ x: mx(r.month), y: (cum += num(r.net)) }));
+  const panel = (rows) => { const by = {}; rows.forEach((r) => (by[r.name] = by[r.name] || []).push(r)); return Object.entries(by).map(([name, rs]) => {
+    const slope = num(rs[0].slope_per_month), mean = rs.reduce((s, r) => s + num(r.spent), 0) / rs.length;
+    return `<div class="card"><div class="row between"><h3>${h(name)}</h3><span class="small ${slope > mean * 0.03 ? 'warn' : slope < -mean * 0.03 ? 'up' : 'muted'}">${slope >= 0 ? '+' : '−'}${money(Math.abs(slope))}/mo per month</span></div>
+      ${chart([{ pts: rs.map((r) => ({ x: mx(r.month), y: num(r.spent) })), bars: true, cls: 'bar-muted' }, { pts: rs.map((r) => ({ x: mx(r.month), y: num(r.roll3) })), cls: 'line' }, { pts: rs.map((r) => ({ x: mx(r.month), y: num(r.fit) })), cls: 'fit' }], { zero: true, H: 130, fmtX: (x) => fmtMon(iso(new Date(+x))), ticks: 4 })}
+      <p class="muted small">avg ${money(mean)}/mo · last ${money(num(rs[rs.length - 1].spent))}</p></div>`; }).join(''); };
+  const cardBy = {}; cards.forEach((r) => (cardBy[r.name] = cardBy[r.name] || []).push(r));
+  view.innerHTML = `
+    <h1>Insights</h1>${subnav(INS_NAV, 'trends')}
+    <div class="card">
+      <h2>Income vs spending, with the direction each is heading</h2>
+      <p class="muted small">Solid: 3-month rolling average. Dashed: straight line fitted to the last ${done.length} months and extended 6 months. Monthly gap at the fitted lines: <b class="${gapNow < 0 ? 'down' : 'up'}">${signed(gapNow)}</b> now, <b class="${gap6 < 0 ? 'down' : 'up'}">${signed(gap6)}</b> in 6 months if nothing changes.</p>
+      ${chart([
+        { pts: done.map((r, i) => ({ x: mx(r.month), y: r3(inc)[i] })), cls: 'line in', label: 'income' },
+        { pts: done.map((r, i) => ({ x: mx(r.month), y: r3(sp)[i] })), cls: 'line', label: 'spending' },
+        { pts: [...done.map((r, i) => ({ x: mx(r.month), y: fi.a + fi.b * i })), ...[1, 2, 3, 4, 5, 6].map((k) => ({ x: +new Date(d(done[done.length - 1].month).getFullYear(), d(done[done.length - 1].month).getMonth() + k, 1), y: fi.a + fi.b * (inc.length - 1 + k) }))], cls: 'fit in' },
+        { pts: [...done.map((r, i) => ({ x: mx(r.month), y: fs.a + fs.b * i })), ...[1, 2, 3, 4, 5, 6].map((k) => ({ x: +new Date(d(done[done.length - 1].month).getFullYear(), d(done[done.length - 1].month).getMonth() + k, 1), y: fs.a + fs.b * (sp.length - 1 + k) }))], cls: 'fit' }],
+        { zero: true, H: 180, fmtX: (x) => fmtMon(iso(new Date(+x))), ticks: 6 })}
+      <div class="legend"><span><i style="background:var(--up)"></i>Income</span><span><i style="background:var(--bar2)"></i>Spending</span><span><i style="background:var(--muted)"></i>Fitted line</span></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h2>Money kept, running total</h2><p class="muted small">Each month's income minus spending, added up since ${fmtMonth(done[0]?.month || today())}. Flat means living exactly at income; falling means the gap is covered by cards or savings.</p>
+        ${chart([{ pts: cumPts, cls: 'line' }], { zero: true, H: 150, fmtX: (x) => fmtMon(iso(new Date(+x))) })}
+        <p class="small">Net over the period: <b class="${cum < 0 ? 'down' : 'up'}">${signed(cum)}</b></p></div>
+      <div class="card"><h2>Number of purchases per month</h2><p class="muted small">Under $20 vs $20 and over. Frequency creep shows up here long before totals move.</p>
+        ${chart([{ pts: counts.map((r) => ({ x: mx(r.month), y: r.small_n })), cls: 'line', label: 'under $20' }, { pts: counts.map((r) => ({ x: mx(r.month), y: r.large_n })), cls: 'line alt', label: '$20+' }], { zero: true, H: 140, fmtX: (x) => fmtMon(iso(new Date(+x))), fmtY: (v) => v.toFixed(0) })}
+        <p class="small">Last month: ${counts[counts.length - 1]?.small_n ?? 0} small purchases totalling ${money(num(counts[counts.length - 1]?.small_total))}; average ticket ${money2(num(counts[counts.length - 1]?.avg_ticket))}.</p></div>
+    </div>
+    <h2>Categories, 18 months</h2><p class="muted small">Bars: the month. Line: 3-month rolling average. Dashed: fitted trend, with its slope.</p>
+    <div class="grid2">${panel(cat)}</div>
+    <h2>Merchants, 18 months</h2>
+    <div class="grid2">${panel(mer)}</div>
+    ${Object.keys(cardBy).length ? `<h2>Card balance vs limit, weekly</h2><div class="grid2">${Object.entries(cardBy).map(([name, rs]) => { const lim = num(rs[0].credit_limit); const above = rs.filter((r) => lim && num(r.balance) / lim > 0.5).length; return `<div class="card"><h3>${h(name)}</h3>
+      ${chart([{ pts: rs.map((r) => ({ x: mx(r.week), y: Math.max(0, num(r.balance)) })), cls: 'line' }], { zero: true, H: 140, refs: lim ? [{ y: lim, label: 'limit ' + money(lim) }, { y: lim * 0.3, label: '30%' }] : [], fmtX: (x) => fmtMon(iso(new Date(+x))) })}
+      ${lim ? `<p class="small">Above half the limit in <b>${above} of ${rs.length}</b> weeks. A balance carried at ${fmtPct(num(rs[rs.length - 1].balance) / lim * 100)} of the limit is what the score sees at statement time.</p>` : ''}</div>`; }).join('')}</div>` : ''}`;
 };
 
 function stdev(xs) { if (xs.length < 2) return 0; const m = xs.reduce((s, x) => s + x, 0) / xs.length; return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1)); }
