@@ -109,10 +109,10 @@ $('#btn-register').addEventListener('click', async () => {
   try {
     const friendlyName = $('#setup-name').value.trim() || 'My device';
     const { data: reg, error } = await sb.auth.registerPasskey();
-    if (error) throw error;
+    if (error) throw new Error(/approval|database error/i.test(error.message) ? 'This account already has a passkey. On a device that is signed in, open More → Settings → Add this device, then try again here within 10 minutes.' : error.message);
     await nameKey(reg, friendlyName);
-    // The invite session isn't a passkey session; sign in again with the new passkey so data unlocks.
-    await sb.auth.signOut({ scope: 'local' });
+    // The email session isn't a passkey session; end it everywhere and sign in with the new passkey so data unlocks.
+    await sb.auth.signOut({ scope: 'global' });
     const { error: e2 } = await sb.auth.signInWithPasskey();
     if (e2) throw e2;
     const me = await whoami();
@@ -617,11 +617,12 @@ VIEWS.settings = async (view) => {
     <h1>Settings</h1>${subnav(MORE_NAV, 'settings')}
     <div class="card"><h2>Signed in as ${h(state.me.display_name || '')}</h2>
       <p class="muted small">Locks itself after 5 minutes without a touch, or when the app has been in the background 5 minutes. Face ID to come back.</p>
-      <div class="row wrap"><button class="quiet" id="btn-sync">Refresh from banks now</button><button class="quiet" id="btn-signout">Sign out</button></div>
+      <div class="row wrap"><button class="quiet" id="btn-sync">Refresh from banks now</button><button class="quiet" id="btn-signout">Sign out</button><button class="quiet" id="btn-signout-all">Sign out everywhere</button></div>
       <p class="muted small">${ls[0] ? `Last refresh ${relTime(ls[0].finished_at || ls[0].started_at)} (${h(ls[0].status)}, ${ls[0].tx_added} new). Automatic refresh runs every morning.` : ''}</p>
     </div>
-    <div class="card"><div class="row between"><h2>Passkeys</h2><button class="quiet" id="btn-addkey">Add this device</button></div>
-      <p class="muted small">Each device you sign in from keeps its own passkey. Remove any you don’t recognize.</p>
+    <div class="card"><div class="row between wrap"><h2>Passkeys</h2><span class="row"><button class="quiet" id="btn-addkey">Add this device</button><button class="quiet" id="btn-approve">Approve another device</button></span></div>
+      <p class="muted small">Each device keeps its own passkey. A new one is only accepted for 10 minutes after you approve it from here. Remove any you don’t recognize.</p>
+      <p id="approve-msg" class="small up" hidden></p>
       <div class="list">${(Array.isArray(keys) ? keys : []).map((k) => `<div class="item"><span class="t">${h(k.friendly_name || k.friendlyName || 'Passkey')}</span><span class="a"><button class="quiet small danger" data-delkey="${h(k.id)}">Remove</button></span><span class="s">added ${k.created_at ? fmtDay(k.created_at) : ''}${k.last_used_at ? ' · last used ' + fmtDay(k.last_used_at) : ''}</span></div>`).join('') || '<p class="empty">No passkeys listed.</p>'}</div>
     </div>
     <div class="card"><h2>Category rules</h2><p class="muted small">Applied to every new transaction whose description contains the text.</p>
@@ -629,7 +630,9 @@ VIEWS.settings = async (view) => {
     </div>`;
   $('#btn-sync').onclick = async (e) => { e.target.disabled = true; try { await portal('sync'); toast('Refreshing… numbers update in a minute.'); setTimeout(() => { invalidate(); route(); }, 45000); } catch (err) { toast(err.message); e.target.disabled = false; } };
   $('#btn-signout').onclick = async () => { await sb.auth.signOut({ scope: 'local' }); state.cache = {}; gate(); };
-  $('#btn-addkey').onclick = async (e) => { e.target.disabled = true; try { const { data: reg, error } = await sb.auth.registerPasskey(); if (error) throw error; await nameKey(reg, prompt('Name this device', 'New device') || 'New device'); toast('Passkey added'); route(); } catch (err) { toast(err.message); e.target.disabled = false; } };
+  $('#btn-signout-all').onclick = async () => { await sb.auth.signOut({ scope: 'global' }); state.cache = {}; gate('Signed out on every device.'); };
+  $('#btn-approve').onclick = async (e) => { e.target.disabled = true; try { await rpc('open_passkey_window'); const m = $('#approve-msg'); m.textContent = 'Approved. On the other device, use “First time on this device?” and create its passkey within 10 minutes.'; m.hidden = false; } catch (err) { toast(err.message); } finally { e.target.disabled = false; } };
+  $('#btn-addkey').onclick = async (e) => { e.target.disabled = true; try { await rpc('open_passkey_window'); const { data: reg, error } = await sb.auth.registerPasskey(); if (error) throw error; await nameKey(reg, prompt('Name this device', 'New device') || 'New device'); toast('Passkey added'); route(); } catch (err) { toast(err.message); e.target.disabled = false; } };
   view.onclick = async (e) => {
     const dk = e.target.closest('[data-delkey]'), dr = e.target.closest('[data-delrule]');
     if (dk) { if (keys.length <= 1) return toast('Keep at least one passkey'); try { const { error } = await sb.auth.passkey.delete({ passkeyId: dk.dataset.delkey }); if (error) throw error; route(); } catch (err) { toast(err.message); } }
