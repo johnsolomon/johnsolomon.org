@@ -31,9 +31,9 @@ const monthStart = (dt = new Date()) => new Date(dt.getFullYear(), dt.getMonth()
 const iso = (dt) => dt.toISOString().slice(0, 10);
 const today = () => iso(new Date(Date.now() - new Date().getTimezoneOffset() * 60000));
 const toast = (msg, ms = 2200) => { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, ms); };
-const CATEGORIES = ['Groceries', 'Restaurants', 'Coffee', 'Food & drink', 'Shopping', 'Online shopping', 'Kids', 'Rent', 'Rent & utilities', 'Home',
-  'Transportation', 'Transit', 'Rideshare', 'Gas', 'Travel', 'Medical', 'Pharmacy', 'Personal care', 'Entertainment', 'Streaming', 'Services',
-  'Education', 'Gifts', 'Government & charity', 'Fees', 'Loan payment', 'Student loan', 'Credit card payment', 'Income', 'Transfer', 'Uncategorized'];
+let CATS = [];  // {name, grp, kind} from the categories table, loaded with the first view
+const catKind = (name) => (CATS.find((c) => c.name === name) || {}).kind || 'spend';
+const catGroup = (name) => (CATS.find((c) => c.name === name) || {}).grp || 'Other';
 
 async function q(view, build) {
   let s = sb.from(view).select('*');
@@ -153,7 +153,7 @@ function enter(me) {
   if (sessionStorage.getItem('justLinked')) { sessionStorage.removeItem('justLinked'); portal('finish').then(() => { invalidate(); route(); toast('Linked. Initial sync running.'); }).catch(() => {}); }
 }
 addEventListener('hashchange', route);
-const TABS = { home: 'home', activity: 'activity', insights: 'insights', cycle: 'insights', trends: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', contributions: 'invest', strategy: 'invest', home_purchase: 'plan', business: 'plan', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', more: 'plan' };
+const TABS = { home: 'home', activity: 'activity', insights: 'insights', cycle: 'insights', trends: 'insights', spending: 'insights', income: 'insights', fees: 'insights', plan: 'plan', budget: 'plan', recurring: 'plan', goals: 'plan', debt: 'plan', future: 'plan', invest: 'invest', holdings: 'invest', allocation: 'invest', contributions: 'invest', strategy: 'invest', home_purchase: 'plan', business: 'plan', accounts: 'top', settings: 'top', cashflow: 'insights', credit: 'plan', review: 'insights', more: 'plan' };
 function route() {
   if (screens.app.hidden) return;
   const r = (location.hash || '#home').slice(1).split('/')[0];
@@ -161,8 +161,8 @@ function route() {
   $$('.tabs a, .topbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === TABS[state.route] || a.dataset.tab === state.route));
   const view = $('#view');
   view.innerHTML = '<p class="muted">Loading…</p>';
-  if (state.route === 'cashflow') state.route = 'insights'; if (state.route === 'credit') state.route = 'debt'; if (state.route === 'more') state.route = 'budget';
-  (VIEWS[state.route] || VIEWS.home)(view).catch((e) => { view.innerHTML = '<p class="err">' + h(e.message) + '</p>'; });
+  if (state.route === 'cashflow') state.route = 'insights'; if (state.route === 'more') state.route = 'budget';
+  (CATS.length ? Promise.resolve() : D.cats().catch(() => [])).then(() => (VIEWS[state.route] || VIEWS.home)(view)).catch((e) => { view.innerHTML = '<p class="err">' + h(e.message) + '</p>'; });
   window.scrollTo(0, 0);
 }
 function invalidate() { state.cache = {}; }
@@ -191,6 +191,7 @@ const D = {
   drift: () => cached('drift', () => q('v_allocation_drift')),
   counts: () => cached('counts', () => q('v_monthly_counts', (s) => s.order('month'))),
   settings: () => cached('settings', async () => Object.fromEntries((await q('app_settings')).map((r) => [r.key, r.value]))),
+  cats: () => cached('cats', async () => { CATS = await q('categories', (s) => s.order('sort')); return CATS; }),
   lastSync: () => cached('lastSync', () => q('sync_runs', (s) => s.order('id', { ascending: false }).limit(1))),
   tx: (opts) => q('transactions', (s) => {
     s = s.order('date', { ascending: false }).order('amount', { ascending: false }).limit(opts.limit || 200);
@@ -242,6 +243,19 @@ function lineChart(pts, W = 640, H = 160, fmt = money, yMin0 = false) {
   const n = Math.min(5, pts.length); for (let i = 0; i < n; i++) { const p = pts[Math.round((i * (pts.length - 1)) / Math.max(1, n - 1))]; s += `<text x="${X(d(p.t).getTime())}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}">${fmtDay(p.t)}</text>`; }
   return s + '</svg>';
 }
+const PIE = ['#1f5cf0', '#1e8e5a', '#b26a12', '#c8382e', '#7c3aed', '#0e9aa7', '#d9488b', '#6b7480', '#8ab4f8', '#a3b18a', '#e0a458', '#5b8dff'];
+function topN(items, n = 9) { const xs = items.filter((i) => i.v > 0).sort((a, b) => b.v - a.v); if (xs.length <= n) return xs; const rest = xs.slice(n - 1); return [...xs.slice(0, n - 1), { k: `Other (${rest.length})`, v: rest.reduce((s, i) => s + i.v, 0) }]; }
+function pieChart(items, o = {}) {
+  const tot = items.reduce((s, i) => s + Math.max(0, i.v), 0); if (!tot) return '<p class="empty">Nothing in range.</p>';
+  const R = 62, r = 38, c = 70; let a0 = -Math.PI / 2, paths = '';
+  const P = (a, rad) => `${(c + rad * Math.cos(a)).toFixed(2)} ${(c + rad * Math.sin(a)).toFixed(2)}`;
+  items.forEach((it, i) => { const f = Math.max(0, it.v) / tot; if (!f) return; const a1 = a0 + f * 2 * Math.PI, big = f > 0.5 ? 1 : 0;
+    const dd = f > 0.9999 ? `M${P(a0, R)} A${R} ${R} 0 1 1 ${P(a0 + Math.PI, R)} A${R} ${R} 0 1 1 ${P(a0, R)} M${P(a0, r)} A${r} ${r} 0 1 0 ${P(a0 + Math.PI, r)} A${r} ${r} 0 1 0 ${P(a0, r)}`
+      : `M${P(a0, R)} A${R} ${R} 0 ${big} 1 ${P(a1, R)} L${P(a1, r)} A${r} ${r} 0 ${big} 0 ${P(a0, r)} Z`;
+    paths += `<path d="${dd}" fill="${PIE[i % PIE.length]}" fill-rule="evenodd"><title>${h(it.k)}: ${money(it.v)} (${(100 * f).toFixed(1)}%)</title></path>`; a0 = a1; });
+  const legend = items.map((it, i) => `<div class="pie-row${it.go ? ' tap' : ''}"${it.go ? ` data-go="${h(it.go)}"` : ''}><i style="background:${PIE[i % PIE.length]}"></i><span class="k">${h(it.k)}</span><span class="v">${money(it.v)}</span><span class="p">${(100 * Math.max(0, it.v) / tot).toFixed(0)}%</span></div>`).join('');
+  return `<div class="pie"><svg viewBox="0 0 140 140" class="pie-svg" role="img">${paths}<text x="70" y="67" text-anchor="middle" class="pie-c">${h(o.center || money(tot))}</text><text x="70" y="82" text-anchor="middle" class="pie-l">${h(o.label || '')}</text></svg><div class="pie-legend">${legend}</div></div>`;
+}
 function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); const f = v / p; const n = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10; return n * p; }
 function short(v) { const a = Math.abs(v); return (v < 0 ? '−' : '') + (a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(a >= 1e4 ? 0 : 1) + 'k' : a.toFixed(0)); }
 function progress(v, max, cls = '') { const p = max > 0 ? Math.min(100, (100 * v) / max) : 0; return `<div class="bar"><i class="${cls}" style="width:${p.toFixed(1)}%"></i></div>`; }
@@ -251,13 +265,17 @@ function openSheet(html) { $('#sheet-body').innerHTML = html; $('#sheet').hidden
 function closeSheet() { $('#sheet').hidden = true; $('#sheet-body').innerHTML = ''; }
 $('#sheet').addEventListener('click', (e) => { if (e.target === $('#sheet')) closeSheet(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
-const catOptions = (sel) => CATEGORIES.map((c) => `<option ${c === sel ? 'selected' : ''}>${h(c)}</option>`).join('');
+const catOptions = (sel) => { const groups = []; for (const c of CATS) { let g = groups.find((x) => x.g === c.grp); if (!g) groups.push(g = { g: c.grp, items: [] }); g.items.push(c.name); }
+  return groups.map((g) => `<optgroup label="${h(g.g)}">${g.items.map((c) => `<option ${c === sel ? 'selected' : ''}>${h(c)}</option>`).join('')}</optgroup>`).join(''); };
 
 // ---------- views ----------
 const VIEWS = {};
 
 VIEWS.home = async (view) => {
-  const [nw, nwh, cf, acc, rec, spend, ls, fc, al] = await Promise.all([D.nw(), D.nwh(), D.cashflow(), D.accounts(), D.recurring().catch(() => []), D.spend(), D.lastSync(), rpc('cash_forecast', { p_days: 30 }).catch(() => []), rpc('alerts').catch(() => [])]);
+  const [nw, nwh, cf, acc, rec, spend, ls, fc, al, vg, sum] = await Promise.all([D.nw(), D.nwh(), D.cashflow(), D.accounts(), D.recurring().catch(() => []), D.spend(), D.lastSync(), rpc('cash_forecast', { p_days: 30 }).catch(() => []), rpc('alerts').catch(() => []), rpc('visibility_gap', { p_months: 12 }).catch(() => []), D.summary().catch(() => [])]);
+  const vgRows = vg.filter((r) => r.bucket && r.bucket !== 'Amazon (not itemized)'); const vgOut = vgRows.reduce((s, r) => s + Math.max(0, num(r.net)), 0);
+  const out12 = sum.filter((r) => !r.partial).slice(-12).reduce((s, r) => s + num(r.spending), 0) + vgRows.filter((r) => catKind(r.category) === 'transfer').reduce((s, r) => s + Math.max(0, num(r.net)), 0);
+  const byBucket = {}; vgRows.forEach((r) => { byBucket[r.bucket] = (byBucket[r.bucket] || 0) + num(r.net); });
   const low = fc.length ? fc.reduce((m, r) => (num(r.balance) < num(m.balance) ? r : m), fc[0]) : null;
   const n = nw[0] || {};
   const first = nwh[0], last = nwh[nwh.length - 1];
@@ -296,7 +314,10 @@ VIEWS.home = async (view) => {
         ${soon.map((r) => `<div class="item"><span class="t">${h(r.merchant)}</span><span class="a">${money2(num(r.typical_amount))}</span><span class="s">expected ${fmtDayLong(r.next_expected)} · ${h(r.cadence)}</span></div>`).join('')}
         ${!due.length && !soon.length ? '<p class="empty">Nothing due within 14 days.</p>' : ''}
       </div>
-    </div>`;
+    </div>
+    ${vgOut > 0 ? `<div class="card"><div class="row between wrap"><h2>Left linked accounts, not itemized</h2><span class="stat"><span class="v">${money(vgOut)}</span><span class="l">12 months${out12 > 0 ? ' · ' + fmtPct(100 * vgOut / out12) + ' of outflows' : ''}</span></span></div>
+      <div class="list">${Object.entries(byBucket).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([k, v]) => { const parts = vgRows.filter((r) => r.bucket === k); return `<div class="item"><span class="t">${h(k)}</span><span class="a">${money(v)}</span>${parts.length > 1 ? `<span class="s">${parts.map((r) => `${h(r.category)} ${money(num(r.net))}`).join(' · ')}</span>` : ''}</div>`; }).join('')}</div>
+      <p class="muted small">Net of money that came back. Link the card or account to see what it bought.</p></div>` : ''}`;
   bindGo(view);
 };
 
@@ -374,7 +395,7 @@ VIEWS.activity = async (view) => {
     <div class="toolbar">
       <input type="search" id="f-search" placeholder="Search" aria-label="Search">
       <select id="f-account" aria-label="Account"><option value="">All accounts</option>${acc.map((a) => `<option value="${h(a.account_id)}">${h(a.nickname || a.name)}</option>`).join('')}</select>
-      <select id="f-cat" aria-label="Category"><option value="">All categories</option>${CATEGORIES.map((c) => `<option ${c === preset ? 'selected' : ''}>${h(c)}</option>`).join('')}</select>
+      <select id="f-cat" aria-label="Category"><option value="">All categories</option>${catOptions(preset)}</select>
       <select id="f-range" aria-label="Range"><option value="90">Last 90 days</option><option value="30">Last 30 days</option><option value="365">Last year</option><option value="">All</option></select>
       <button class="quiet small" id="f-export">CSV</button>
     </div>
@@ -391,7 +412,7 @@ VIEWS.activity = async (view) => {
       out += `<div class="item tap" data-tx="${h(t.transaction_id)}">
         <span class="t">${h(t.merchant_name || t.name)}${t.pending ? ' <span class="pill">pending</span>' : ''}${t.excluded ? ' <span class="pill">excluded</span>' : ''}${t.business ? ' <span class="pill">LLC</span>' : ''}</span>
         <span class="a ${amt < 0 ? 'up' : ''}">${amt < 0 ? '+' : ''}${money2(Math.abs(amt))}</span>
-        <span class="s">${h(t.category || 'Uncategorized')}${t.is_transfer && t.category !== 'Transfer' ? ' · transfer' : ''} · ${h(accName[t.account_id] || '')}${t.notes ? ' · ' + h(t.notes) : ''}</span>
+        <span class="s">${h(t.category || 'Uncategorized')}${t.is_transfer && catKind(t.category) !== 'transfer' ? ' · transfer' : ''} · ${h(accName[t.account_id] || '')}${t.notes ? ' · ' + h(t.notes) : ''}${t.category_source === 'plaid' ? ' · <span class="warn">unverified</span>' : ''}</span>
       </div>`;
     }
     list.innerHTML = out;
@@ -423,7 +444,7 @@ function editTx(t, after) {
       try {
         const cat = $('#e-cat').value, tr = $('#e-transfer').checked, ex = $('#e-excl').checked;
         await rpc('set_transaction', { p_id: t.transaction_id, p_category: cat, p_is_transfer: tr, p_excluded: ex, p_notes: $('#e-notes').value, p_business: $('#e-biz').checked });
-        if ($('#e-rule').checked) await rpc('add_rule', { p_match: t.merchant_name || t.name, p_category: cat, p_is_transfer: tr, p_excluded: ex, p_business: $('#e-biz').checked });
+        if ($('#e-rule').checked) await rpc('add_rule', { p_match: (t.raw && t.raw.merchant_name) || t.merchant_name || t.name, p_category: cat, p_is_transfer: tr, p_excluded: ex, p_business: $('#e-biz').checked });
         closeSheet(); invalidate(); after(); toast('Saved.');
       } catch (err) { toast(err.message); }
     }
@@ -592,7 +613,7 @@ VIEWS.settings = async (view) => {
 };
 
 // ---------- Insights ----------
-const INS_NAV = [['insights', 'Cash'], ['cycle', 'Pay cycle'], ['trends', 'Trends'], ['spending', 'Spending'], ['income', 'Income'], ['fees', 'Fees']];
+const INS_NAV = [['insights', 'Cash'], ['cycle', 'Pay cycle'], ['trends', 'Trends'], ['spending', 'Spending'], ['income', 'Income'], ['fees', 'Fees'], ['review', 'Review']];
 const fmtPct = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toFixed(d) + '%';
 const dayOfMonth = new Date().getDate();
 
@@ -643,13 +664,41 @@ VIEWS.insights = async (view) => {
       <p class="muted small">From daily balance snapshots.</p></div>` : ''}`;
 };
 
+const PERIODS = [['mtd', 'This month'], ['prev', 'Last month'], ['90', 'Last 90 days'], ['ytd', 'Year to date'], ['365', 'Last 12 months']];
+function periodRange(k) { const t = new Date(), y = t.getFullYear(), mo = t.getMonth();
+  if (k === 'mtd') return [iso(new Date(y, mo, 1)), today()]; if (k === 'prev') return [iso(new Date(y, mo - 1, 1)), iso(new Date(y, mo, 0))];
+  if (k === 'ytd') return [`${y}-01-01`, today()]; return [iso(new Date(Date.now() - Number(k) * 864e5)), today()]; }
 VIEWS.spending = async (view) => {
   const [cs, ms, wd] = await Promise.all([rpc('category_stats', { p_months: 12 }), rpc('merchant_stats', { p_days: 90 }), D.weekday()]);
   const early = dayOfMonth < 5;
+  let period = localStorage.getItem('sp_period') || '90';
+  const drawBreakdown = async () => {
+    const [from, to] = periodRange(period); const el = $('#sp-body'); el.innerHTML = '<p class="muted">Loading…</p>';
+    const [bg, bc, bm] = await Promise.all([rpc('spend_breakdown', { p_from: from, p_to: to, p_by: 'group' }), rpc('spend_breakdown', { p_from: from, p_to: to, p_by: 'category' }), rpc('spend_breakdown', { p_from: from, p_to: to, p_by: 'merchant' })]);
+    const tot = bc.reduce((s, r) => s + num(r.total), 0), prev = bc.reduce((s, r) => s + num(r.prev_total), 0);
+    const days = (d(to) - d(from)) / 864e5 + 1;
+    el.innerHTML = `
+      <div class="row wrap"><span class="stat"><span class="v">${money(tot)}</span><span class="l">${fmtDay(from)} – ${fmtDay(to)}</span></span><span style="width:16px"></span><span class="stat"><span class="v ${tot > prev ? 'warn' : 'up'}">${prev > 0 ? pct(100 * (tot - prev) / prev) : '—'}</span><span class="l">vs prior ${Math.round(days)} days (${money(prev)})</span></span><span style="width:16px"></span><span class="stat"><span class="v">${money(tot / days * 30.44)}</span><span class="l">per 30 days</span></span></div>
+      <div class="grid2">
+        <div><h3>By group</h3>${pieChart(topN(bg.map((r) => ({ k: r.key, v: num(r.total) })), 12), { label: 'spending' })}</div>
+        <div><h3>By category</h3>${pieChart(topN(bc.map((r) => ({ k: r.key, v: num(r.total), go: '#activity/' + encodeURIComponent(r.key) })), 10), { label: 'spending' })}</div>
+      </div>
+      <h3>Categories</h3>
+      <div class="scroll"><table class="data"><thead><tr><th>Category</th><th>Group</th><th class="num">Total</th><th class="num">Share</th><th class="num">n</th><th class="num">Avg</th><th class="num">vs prior</th></tr></thead><tbody>
+        ${bc.map((r) => `<tr class="tap" data-go="#activity/${encodeURIComponent(r.key)}"><td>${h(r.key)}</td><td class="muted">${h(r.grp || '')}</td><td class="num">${money(num(r.total))}</td><td class="num">${fmtPct(r.pct)}</td><td class="num">${r.n}</td><td class="num">${money2(num(r.avg_amount))}</td><td class="num ${num(r.prev_total) > 0 && num(r.total) > num(r.prev_total) * 1.1 ? 'warn' : ''}">${num(r.prev_total) > 0 ? pct(100 * (num(r.total) - num(r.prev_total)) / num(r.prev_total)) : num(r.total) > 0 ? 'new' : '—'}</td></tr>`).join('')}
+      </tbody></table></div>
+      <h3>Merchants</h3>
+      <div class="grid2"><div>${pieChart(topN(bm.map((r) => ({ k: r.key, v: num(r.total) })), 9), { label: 'top merchants' })}</div>
+      <div class="list">${bm.slice(0, 12).map((r) => `<div class="item tap" data-go="#activity"><span class="t">${h(r.key)}</span><span class="a">${money(num(r.total))}<span class="s">${r.n}× · ${money2(num(r.avg_amount))} avg</span></span><span class="s">${h(r.grp || '')}${num(r.prev_total) > 0 ? ' · ' + pct(100 * (num(r.total) - num(r.prev_total)) / num(r.prev_total)) + ' vs prior' : ''}</span></div>`).join('')}</div></div>`;
+  };
   const flagged = early ? [] : cs.filter((c) => Math.abs(num(c.z)) >= 1.5 && num(c.mean_month) > 50);
   const wmax = Math.max(1, ...wd.map((r) => num(r.per_day)));
   view.innerHTML = `
     <h1>Insights</h1>${subnav(INS_NAV, 'spending')}
+    <div class="card">
+      <div class="row between wrap"><h2>Spending</h2><select id="sp-period" aria-label="Period">${PERIODS.map(([k, l]) => `<option value="${k}" ${k === period ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div id="sp-body"></div>
+    </div>
     ${flagged.length ? `<div class="card"><h2>Outside normal range, month to date</h2><div class="list">${flagged.map((c) => `<div class="item tap" data-go="#activity/${encodeURIComponent(c.category)}"><span class="t">${h(c.category)}</span><span class="a ${num(c.z) > 0 ? 'down' : 'up'}">${money(num(c.this_month_projected))} <span class="s">projected · mean ${money(num(c.mean_month))}</span></span><span class="s">z = ${num(c.z) > 0 ? '+' : '−'}${Math.abs(num(c.z)).toFixed(1)}</span></div>`).join('')}</div></div>` : ''}
     <div class="card">
       <h2>Category statistics, trailing 12 complete months</h2>
@@ -660,20 +709,22 @@ VIEWS.spending = async (view) => {
     </div>
     <div class="grid2">
       <div class="card">
-        <h2>Merchants, trailing 90 days</h2>
-        <div class="list">${ms.slice(0, 15).map((m) => `<div class="item"><span class="t">${h(m.merchant)}</span><span class="a">${money(num(m.total))}<span class="s">${fmtPct(m.share_pct)} · ${m.n}×</span></span><span class="s">${m.change_pct == null ? 'no prior-period spend' : (num(m.change_pct) >= 0 ? '<span class="warn">+' : '<span class="up">') + Math.abs(num(m.change_pct)).toFixed(0) + '%</span> vs prior 90 days'}</span></div>`).join('')}</div>
-      </div>
-      <div class="card">
         <h2>Spend by weekday</h2>
         <p class="muted small">Mean spend per active day, trailing 6 months.</p>
         <div class="list">${wd.map((r) => `<div class="item"><span class="t">${h(r.weekday)}</span><span class="a">${money(num(r.per_day))}</span><span class="s" style="grid-column:1/-1">${progress(num(r.per_day), wmax)}</span></div>`).join('')}</div>
       </div>
+      <div class="card">
+        <h2>Ticket size, trailing 90 days</h2>
+        <div class="list">${ms.slice(0, 8).map((m) => `<div class="item"><span class="t">${h(m.merchant)}</span><span class="a">${money2(num(m.avg_amount))}<span class="s">per purchase · ${m.n}×</span></span><span class="s">${m.change_pct == null ? 'no prior-period spend' : (num(m.change_pct) >= 0 ? '<span class="warn">+' : '<span class="up">') + Math.abs(num(m.change_pct)).toFixed(0) + '%</span> total vs prior 90 days'}</span></div>`).join('')}</div>
+      </div>
     </div>`;
   bindGo(view);
+  $('#sp-period').onchange = (e) => { period = e.target.value; localStorage.setItem('sp_period', period); drawBreakdown(); };
+  await drawBreakdown();
 };
 
 VIEWS.income = async (view) => {
-  const [src, sum] = await Promise.all([rpc('income_sources'), D.summary()]);
+  const [src, sum, ib] = await Promise.all([rpc('income_sources'), D.summary(), rpc('income_breakdown', { p_from: iso(new Date(Date.now() - 365 * 864e5)), p_to: today() }).catch(() => [])]);
   const active = src.filter((s) => d(s.last_date) >= new Date(Date.now() - 75 * 864e5));
   const monthly = active.reduce((s, r) => s + num(r.monthly_equiv), 0);
   const done = sum.filter((r) => !r.partial).slice(-12);
@@ -684,7 +735,43 @@ VIEWS.income = async (view) => {
       <div class="list">${src.map((s) => `<div class="item"><span class="t">${h(titleCase(s.source))}${d(s.last_date) < new Date(Date.now() - 75 * 864e5) ? ' <span class="pill">inactive</span>' : ''}</span><span class="a">${money2(num(s.typical_amount))}<span class="s">${h(s.cadence)}</span></span><span class="s">${s.occurrences}× · last ${fmtDay(s.last_date)}${s.next_expected && d(s.next_expected) >= d(today()) ? ' · next ' + fmtDay(s.next_expected) : ''}${s.trend_pct_per_month ? ' · ' + pct(num(s.trend_pct_per_month)) + '/mo trend' : ''}</span></div>`).join('') || '<p class="empty">No recurring deposits detected.</p>'}</div>
       <p class="muted small">Grouped by payer; cadence from median interval. Internal transfers excluded.</p>
     </div>
-    <div class="card"><h2>Income by month</h2>${barChart(done.map((r) => ({ month: r.month, income: num(r.income) })), ['income'])}</div>`;
+    <div class="grid2">
+      <div class="card"><h2>Income by source, 12 months</h2>${pieChart(topN(ib.map((r) => ({ k: titleCase(r.key), v: num(r.total) })), 8), { label: 'received' })}</div>
+      <div class="card"><h2>Income by month</h2>${barChart(done.map((r) => ({ month: r.month, income: num(r.income) })), ['income'])}</div>
+    </div>`;
+};
+
+VIEWS.review = async (view) => {
+  const rows = await rpc('merchant_audit', { p_days: 730 });
+  const f = { q: '', only: 'all' };
+  const n = { rule: 0, plaid: 0, user: 0 }; rows.forEach((r) => { n[r.source] = (n[r.source] || 0) + r.n; });
+  view.innerHTML = `
+    <h1>Insights</h1>${subnav(INS_NAV, 'review')}
+    <div class="card">
+      <div class="row between wrap"><h2>Classification audit</h2><span class="stat"><span class="v">${rows.length}</span><span class="l">merchants, 24 months</span></span></div>
+      <p class="muted small">${n.rule + n.user} transactions assigned by a rule, ${n.user} by you, ${n.plaid} by Plaid's guess only. Changing a category here writes a rule for that merchant and reassigns every past and future transaction.</p>
+      <div class="toolbar">
+        <input type="search" id="rv-q" placeholder="Search" aria-label="Search">
+        <select id="rv-only" aria-label="Filter"><option value="all">All</option><option value="plaid">Plaid guess only</option><option value="user">Your rules</option><option value="spend">Spending</option><option value="transfer">Transfers</option><option value="income">Income</option></select>
+      </div>
+      <div class="scroll"><table class="data" id="rv-table"></table></div>
+    </div>`;
+  const draw = () => {
+    const ql = f.q.toLowerCase();
+    const xs = rows.filter((r) => (!ql || (r.merchant + ' ' + r.example + ' ' + r.category).toLowerCase().includes(ql)) && (f.only === 'all' || f.only === r.source || f.only === catKind(r.category)));
+    $('#rv-table').innerHTML = `<thead><tr><th>Merchant</th><th>Category</th><th>By</th><th class="num">n</th><th class="num">Total</th><th class="num">Last</th></tr></thead><tbody>
+      ${xs.slice(0, 400).map((r, i) => `<tr><td><b>${h(r.merchant)}</b><br><span class="muted small">${h(r.example)}${r.accounts ? ' · ' + h(r.accounts) : ''}</span></td>
+        <td><select data-i="${i}" class="small">${catOptions(r.category)}</select></td>
+        <td><span class="pill ${r.source === 'plaid' ? 'warn' : ''}" title="${h(r.rule || r.plaid || '')}">${r.source === 'plaid' ? 'Plaid' : r.source === 'user' ? 'you' : 'rule'}</span></td>
+        <td class="num">${r.n}</td><td class="num ${num(r.total) < 0 ? 'up' : ''}">${num(r.total) < 0 ? '+' : ''}${money(Math.abs(num(r.total)))}</td><td class="num">${fmtDay(r.last_date)}</td></tr>`).join('')}
+      ${xs.length > 400 ? `<tr><td colspan="6" class="muted">${xs.length - 400} more; narrow the search.</td></tr>` : ''}</tbody>`;
+    $$('#rv-table select').forEach((sel) => sel.onchange = async () => { const r = xs[Number(sel.dataset.i)]; const cat = sel.value;
+      try { await rpc('add_rule', { p_match: r.raw_merchant || r.merchant, p_category: cat, p_is_transfer: catKind(cat) === 'transfer', p_excluded: false, p_business: catGroup(cat) === 'Business' });
+        r.category = cat; r.source = 'user'; invalidate(); toast(`Rule saved: ${r.merchant} → ${cat}`); draw(); } catch (e) { toast(e.message); } });
+  };
+  let t; $('#rv-q').oninput = (e) => { f.q = e.target.value.trim(); clearTimeout(t); t = setTimeout(draw, 200); };
+  $('#rv-only').onchange = (e) => { f.only = e.target.value; draw(); };
+  draw();
 };
 
 VIEWS.fees = async (view) => {
@@ -707,9 +794,8 @@ VIEWS.fees = async (view) => {
 
 // ---------- Plan: debt & credit, future ----------
 VIEWS.debt = async (view) => {
-  const [credit, acc] = await Promise.all([D.credit(), D.accounts()]);
-  const last = credit[credit.length - 1], prev = credit[credit.length - 2];
-  const unl = (await D.rules()).filter((r) => r.category === 'Card payment (not linked)').map((r) => r.match);
+  const acc = await D.accounts();
+  const unl = CATS.filter((c) => c.grp === 'Unlinked accounts').map((c) => c.name);
   let extra = Number(localStorage.getItem('debt_extra') || 100);
   const draw = async () => {
     const plan = await rpc('debt_plan', { p_extra: extra });
@@ -729,24 +815,70 @@ VIEWS.debt = async (view) => {
       <div id="debt-body"><p class="muted">Calculating…</p></div>
       ${unl.length ? `<p class="muted small">Excluded, not linked: ${unl.map(h).join(', ')}.</p>` : ''}
     </div>
-    <div class="card">
-      <div class="row between wrap"><div class="hero"><span class="label">Credit score</span><span class="big">${last ? last.score : '—'}</span><span class="muted small">${last ? `${h(last.bureau || '')} ${fmtDay(last.as_of)}${prev ? ` · <span class="${last.score - prev.score >= 0 ? 'up' : 'down'}">${last.score - prev.score >= 0 ? '+' : ''}${last.score - prev.score}</span> since ${fmtDay(prev.as_of)}` : ''}` : 'No score logged'}</span></div><button class="primary" id="btn-score">Log score</button></div>
-      ${credit.length > 1 ? lineChart(credit.map((c) => ({ t: c.as_of, v: c.score })), 640, 150, (v) => String(Math.round(v))) : ''}
-    </div>`;
+    `;
   await draw();
   let t; $('#debt-extra').oninput = (e) => { extra = Math.max(0, Number(e.target.value) || 0); localStorage.setItem('debt_extra', String(extra)); clearTimeout(t); t = setTimeout(draw, 350); };
+};
+
+VIEWS.credit = async (view) => {
+  const ppl = await people(); const adults = ppl.filter((x) => !x.child).map((x) => x.name);
+  let owner = localStorage.getItem('credit_owner') || adults[0] || 'John';
+  const [scores, cs, accts, inq, items, acc] = await Promise.all([q('credit_scores', (s) => s.order('as_of')), rpc('credit_summary', { p_owner: owner }).catch(() => []), q('credit_accounts', (s) => s.eq('owner', owner).order('balance', { ascending: false })), q('credit_inquiries', (s) => s.eq('owner', owner).order('inquired', { ascending: false })), q('credit_items', (s) => s.eq('owner', owner)), D.accounts()]);
+  const mine = scores.filter((s) => (s.owner || 'John') === owner);
+  const bureaus = ['Equifax', 'Experian', 'TransUnion'];
+  const latest = (b) => mine.filter((s) => s.bureau === b).slice(-1)[0];
+  const prevOf = (b) => { const xs = mine.filter((s) => s.bureau === b); return xs.length > 1 ? xs[xs.length - 2] : null; };
+  const fmtMY = (x) => new Date(+x).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+  const fmtDMY = (x) => x ? d(x).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  const lineCls = ['line', 'line alt', 'line in'];
+  const series = bureaus.map((b, i) => ({ pts: mine.filter((s) => s.bureau === b).map((s) => ({ x: mx(s.as_of), y: s.score })), cls: lineCls[i], b })).filter((s) => s.pts.length);
+  const latestRep = cs.reduce((m, r) => (!m || r.as_of > m.as_of ? r : m), null);
+  const repAccts = latestRep ? accts.filter((a) => a.bureau === latestRep.bureau && a.as_of === latestRep.as_of) : [];
+  const cards = acc.filter((a) => a.type === 'credit' && !a.hidden);
+  const liveUtil = cards.reduce((s, a) => s + num(a.current_balance), 0), liveLimit = cards.reduce((s, a) => s + (num(a.credit_limit) || 0), 0);
+  const band = (v) => v >= 800 ? 'exceptional' : v >= 740 ? 'very good' : v >= 670 ? 'good' : v >= 580 ? 'fair' : 'poor';
+  view.innerHTML = `
+    <h1>Plan</h1>${subnav(PLAN_NAV, 'credit')}
+    <div class="card">
+      <div class="row between wrap"><h2>Scores</h2><div class="row" style="gap:8px">${adults.length > 1 ? `<select id="cr-owner" aria-label="Person">${adults.map((a) => `<option ${a === owner ? 'selected' : ''}>${h(a)}</option>`).join('')}</select>` : ''}<button class="primary" id="btn-score">Log score</button></div></div>
+      <div class="row wrap" style="gap:24px">${bureaus.map((b) => { const l = latest(b), p = prevOf(b); return `<span class="stat"><span class="v">${l ? l.score : '—'}</span><span class="l">${b}${l ? ` · ${h(l.model || '')} · ${fmtDay(l.as_of)}` : ''}${l && p ? ` · <span class="${l.score - p.score >= 0 ? 'up' : 'down'}">${l.score - p.score >= 0 ? '+' : ''}${l.score - p.score}</span>` : ''}</span></span>`; }).join('')}</div>
+      ${series.length ? chart(series, { H: 160, fmtY: (v) => String(Math.round(v)), fmtX: fmtMY }) + `<div class="legend">${series.map((sr, i) => `<span><i style="background:${['var(--bar2)', 'var(--warn)', 'var(--up)'][i]}"></i>${sr.b}</span>`).join('')}</div>` : '<p class="empty">No scores logged.</p>'}
+      ${mine.length ? `<p class="muted small">${bureaus.filter(latest).map((b) => `${b}: ${band(latest(b).score)}`).join(' · ')}. Bands: 800+ exceptional, 740–799 very good, 670–739 good, 580–669 fair.</p>` : ''}
+    </div>
+    ${latestRep ? `<div class="card">
+      <h2>Score factors, ${h(latestRep.bureau)} report of ${fmtDMY(latestRep.as_of)}</h2>
+      <div class="scroll"><table class="data"><thead><tr><th>Factor</th><th>Value</th><th class="num">Weight</th><th>Read</th></tr></thead><tbody>
+        <tr><td>Revolving utilization</td><td>${fmtPct(latestRep.utilization_pct)} <span class="muted">(${money(num(latestRep.revolving_balance))} / ${money(num(latestRep.revolving_limit))})</span></td><td class="num">30%</td><td class="${num(latestRep.utilization_pct) > 30 ? 'down' : num(latestRep.utilization_pct) > 10 ? 'warn' : 'up'}">${num(latestRep.utilization_pct) > 30 ? 'above 30%: largest drag' : num(latestRep.utilization_pct) > 10 ? 'under 30%; under 10% scores best' : 'under 10%'}</td></tr>
+        <tr><td>Late payments on file</td><td>${latestRep.late_payments}</td><td class="num">35%</td><td class="${latestRep.late_payments ? 'down' : 'up'}">${latestRep.late_payments ? 'each 30-day late stays 7 years' : 'clean'}</td></tr>
+        <tr><td>Derogatory / collections</td><td>${latestRep.derogatory} / ${latestRep.collections}</td><td class="num">35%</td><td class="${latestRep.derogatory || latestRep.collections ? 'down' : 'up'}">${latestRep.derogatory || latestRep.collections ? 'dispute or pay-for-delete' : 'none'}</td></tr>
+        <tr><td>Average account age</td><td>${latestRep.avg_age_months == null ? '—' : (num(latestRep.avg_age_months) / 12).toFixed(1) + ' yr'}</td><td class="num">15%</td><td>${latestRep.oldest_account ? 'oldest ' + fmtDMY(latestRep.oldest_account) : ''}</td></tr>
+        <tr><td>Hard inquiries, 12 months</td><td>${latestRep.inquiries_12m}</td><td class="num">10%</td><td class="${latestRep.inquiries_12m > 2 ? 'warn' : 'up'}">${latestRep.inquiries_12m > 2 ? 'several; each fades after 12 months' : 'low'}</td></tr>
+        <tr><td>Open accounts</td><td>${latestRep.open_accounts}</td><td class="num">10%</td><td>${latestRep.installment_balance != null ? 'installment ' + money(num(latestRep.installment_balance)) : ''}</td></tr>
+      </tbody></table></div>
+      ${liveLimit ? `<p class="small">Linked cards right now: ${money(liveUtil)} of ${money(liveLimit)} · <b class="${liveUtil / liveLimit > 0.3 ? 'warn' : 'up'}">${fmtPct(100 * liveUtil / liveLimit)}</b>. Pay before the statement closes to lower what the bureaus see.</p>` : ''}
+    </div>
+    <div class="card">
+      <h2>Accounts on report</h2>
+      <div class="scroll"><table class="data"><thead><tr><th>Creditor</th><th>Type</th><th class="num">Opened</th><th class="num">Limit</th><th class="num">Balance</th><th class="num">Payment</th><th style="padding-left:12px">Status</th><th class="num">30/60/90</th></tr></thead><tbody>
+        ${repAccts.map((a) => `<tr><td>${h(a.creditor)}${a.responsibility && a.responsibility !== 'individual' ? ` <span class="pill">${h(a.responsibility)}</span>` : ''}</td><td class="muted">${h(a.account_type || '')}</td><td class="num">${fmtDMY(a.opened)}</td><td class="num">${a.credit_limit != null ? money(num(a.credit_limit)) : '—'}</td><td class="num">${a.balance != null ? money(num(a.balance)) : '—'}</td><td class="num">${a.monthly_payment != null ? money(num(a.monthly_payment)) : '—'}</td><td class="${['charge-off', 'collection'].includes(a.status) || (a.payment_status && !['current', 'ok'].includes(a.payment_status)) ? 'down' : ''}">${h(a.status || '')}${a.payment_status && a.payment_status !== 'current' ? ' · ' + h(a.payment_status) : ''}</td><td class="num ${a.late_30 + a.late_60 + a.late_90 ? 'down' : ''}">${a.late_30 || 0}/${a.late_60 || 0}/${a.late_90 || 0}</td></tr>`).join('')}
+      </tbody></table></div>
+      ${inq.length ? `<h3>Inquiries</h3><div class="list">${inq.slice(0, 12).map((i) => `<div class="item"><span class="t">${h(i.creditor)}</span><span class="a muted">${fmtDMY(i.inquired)}</span><span class="s">${h(i.bureau)} · ${h(i.kind)}</span></div>`).join('')}</div>` : ''}
+      ${items.length ? `<h3>Items</h3><div class="list">${items.map((i) => `<div class="item"><span class="t">${h(i.kind)}${i.creditor ? ' · ' + h(i.creditor) : ''}</span><span class="a">${i.amount != null ? money(num(i.amount)) : ''}</span><span class="s">${h(i.bureau)} · ${h(i.status || '')} ${h(i.detail || '')}</span></div>`).join('')}</div>` : ''}
+    </div>` : `<div class="card"><p class="empty">No bureau report loaded for ${h(owner)}. Upload the Equifax, Experian and TransUnion reports in chat and they will be parsed into this page.</p></div>`}`;
+  if ($('#cr-owner')) $('#cr-owner').onchange = (e) => { localStorage.setItem('credit_owner', e.target.value); route(); };
   $('#btn-score').onclick = () => {
+    const l = mine[mine.length - 1];
     openSheet(`<h2>Log credit score</h2><div class="form">
-      <label class="field">Score <input id="c-score" class="short" type="number" inputmode="numeric" min="300" max="850" value="${last ? last.score : ''}"></label>
+      <label class="field">Bureau <select id="c-bureau" style="width:auto">${bureaus.map((b) => `<option ${l && l.bureau === b ? 'selected' : ''}>${b}</option>`).join('')}</select></label>
+      <label class="field">Model <select id="c-model" style="width:auto">${['FICO 8', 'FICO 9', 'FICO 10T', 'VantageScore 3.0', 'VantageScore 4.0', 'FICO Bankcard 8', 'FICO Auto 8'].map((m) => `<option ${l && l.model === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+      <label class="field">Score <input id="c-score" class="short" type="number" inputmode="numeric" min="300" max="850" value="${l ? l.score : ''}" style="width:8ch"></label>
       <label class="field">Date <input id="c-date" type="date" value="${today()}" style="width:auto"></label>
-      <label class="field">Bureau <select id="c-bureau" style="width:auto"><option>Experian</option><option>Equifax</option><option>TransUnion</option></select></label>
-      <label class="field">Source <input id="c-src" type="text" size="16" value="${h(last?.source || 'Amex app')}"></label>
+      <label class="field">Source <input id="c-src" type="text" size="18" value="${h(l?.source || 'Experian app')}"></label>
       <div class="actions"><button class="quiet" data-cancel>Cancel</button><button class="primary" data-save>Save</button></div></div>`);
-    if (last?.bureau) $('#c-bureau').value = last.bureau;
     $('#sheet-body').onclick = async (e) => {
       if (e.target.closest('[data-cancel]')) closeSheet();
       if (e.target.closest('[data-save]')) { const s = Number($('#c-score').value); if (!(s >= 300 && s <= 850)) return toast('Score must be 300–850.');
-        try { await rpc('log_credit_score', { p_as_of: $('#c-date').value, p_score: s, p_bureau: $('#c-bureau').value, p_source: $('#c-src').value }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
+        try { await rpc('add_credit_score', { p_owner: owner, p_bureau: $('#c-bureau').value, p_model: $('#c-model').value, p_score: s, p_as_of: $('#c-date').value, p_source: $('#c-src').value }); closeSheet(); invalidate(); route(); } catch (err) { toast(err.message); } }
     };
   };
 };
