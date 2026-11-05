@@ -1,0 +1,1806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Naga Control"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#17191b">
+<meta name="robots" content="noindex, nofollow">
+<title>Naga Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#1b1d20; --rail:#17191b; --panel:#212327; --well:#131416; --field:#2a2d31; --raise:#303338;
+  --line:#2e3136; --line2:#3c4046; --text:#ecebe7; --dim:#a0a4ab; --faint:#6e737b;
+  --amber:#e3a93b; --amber-ink:#1d1606; --amber-soft:rgba(227,169,59,.14);
+  --ok:#8cbf84; --bad:#e2735e; --warn:#e3a93b;
+  --hot:#262a30; --hotline:#4d535c;
+  --r-s:6px; --r-m:10px;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#eeeff1; --rail:#e5e7ea; --panel:#f8f8f9; --well:#dfe2e6; --field:#fff; --raise:#f1f2f4;
+  --line:#d5d8dd; --line2:#c3c7cd; --text:#1c1f23; --dim:#5b616a; --faint:#878d96;
+  --amber:#a66c0a; --amber-ink:#fff; --amber-soft:rgba(166,108,10,.12);
+  --ok:#3b7a37; --bad:#b4442f; --warn:#a66c0a; --hot:#2a2e35; --hotline:#59606a;
+  color-scheme:light;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.5 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button{background:var(--field);color:var(--text);border:1px solid var(--line2);border-radius:var(--r-s);padding:6px 12px;font:inherit;font-weight:500;cursor:pointer}
+button:hover:not(:disabled){background:var(--raise)}
+button.primary{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);font-weight:600}
+button.primary:hover:not(:disabled){filter:brightness(1.06);background:var(--amber)}
+button.link{background:none;border:0;padding:3px 2px;color:var(--dim);font-weight:500}
+button.link:hover:not(:disabled){background:none;color:var(--text);text-decoration:underline;text-underline-offset:3px}
+button:disabled{opacity:.4;cursor:default}
+button.primary:disabled{background:var(--field);border-color:var(--line2);color:var(--dim);opacity:1}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+select,input,textarea{background:var(--field);color:var(--text);border:1px solid var(--line2);border-radius:var(--r-s);padding:5px 8px;font:inherit}
+input[type=number]{width:8ch;text-align:right}
+input[type=range]{accent-color:var(--amber)}
+input[type=checkbox],input[type=radio]{accent-color:var(--amber)}
+input[type=color]{width:34px;height:30px;padding:2px;cursor:pointer}
+textarea{width:100%;font:12.5px/1.5 ui-monospace,"SF Mono",Menlo,monospace}
+code{font:12.5px ui-monospace,"SF Mono",Menlo,monospace}
+h1{font-size:15px;font-weight:600;margin:0;letter-spacing:-.01em}
+h2{font-size:18px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+h3{font-size:15px;font-weight:600;margin:0 0 2px}
+p{margin:0 0 10px;max-width:68ch}
+.dim{color:var(--dim)} .faint{color:var(--faint)} .good{color:var(--ok)} .badc{color:var(--bad)} .warnc{color:var(--warn)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.grow{flex:1}
+.stack{display:grid;gap:10px}
+.small{font-size:12.5px}
+
+/* app frame */
+.app{display:grid;grid-template-columns:200px minmax(0,1fr);grid-template-rows:auto 1fr;min-height:100vh}
+.bar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 max(18px,env(safe-area-inset-right)) 0 max(18px,env(safe-area-inset-left));min-height:52px;padding-top:env(safe-area-inset-top);border-bottom:1px solid var(--line);background:var(--rail);position:sticky;top:0;z-index:20}
+.bar .brand{width:164px}
+.editing{display:flex;align-items:center;gap:8px}
+.editing select{font-weight:500;max-width:220px}
+.vlist{grid-column:1/-1;border:1px solid var(--line);border-radius:var(--r-s);background:var(--well);margin-top:4px}
+.vrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.vrow:last-child{border-bottom:0}
+.vrow b{font-weight:600}.vrow .when{color:var(--dim);font-size:12.5px}
+.vrow .acts{display:flex;gap:2px 10px;flex-wrap:wrap;justify-content:flex-end}
+.syncbox{border:1px solid var(--line);border-radius:var(--r-m);background:var(--panel);padding:14px 16px;margin-bottom:18px}
+.syncbox .row{margin-top:10px}
+.tag.pending{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.status{display:flex;align-items:center;gap:8px;color:var(--dim);white-space:nowrap}
+.status .lamp{width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.status.on .lamp{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 20%,transparent)}
+.status.bad .lamp{background:var(--bad)}
+.status.on #stConn{color:var(--text)}
+.sep{width:1px;height:18px;background:var(--line2)}
+#stMatch{color:var(--dim);white-space:nowrap} #stMatch b{color:var(--text);font-weight:500}
+#stSave{white-space:nowrap}
+.rail{border-right:1px solid var(--line);background:var(--rail);padding:14px 10px;position:sticky;top:52px;height:calc(100vh - 52px)}
+.rail nav{display:grid;gap:2px}
+.rail nav button{background:none;border:0;text-align:left;padding:8px 12px;border-radius:var(--r-s);color:var(--dim);font-weight:500}
+.rail nav button:hover{background:var(--panel);color:var(--text)}
+.rail nav button.sel{background:var(--panel);color:var(--text);box-shadow:inset 2px 0 0 var(--amber)}
+.rail .foot{position:absolute;left:12px;right:12px;bottom:14px;font-size:12px;color:var(--faint)}
+main{min-width:0}
+.tab{display:none} .tab.sel{display:block}
+.page{padding:26px 32px 60px;max-width:880px}
+.page>header{margin-bottom:18px}
+#alerts{display:grid;gap:8px;padding:14px 22px 0}
+#alerts:empty{display:none}
+.banner{border:1px solid var(--line2);border-left:3px solid var(--warn);border-radius:var(--r-s);padding:10px 14px;background:var(--panel)}
+.banner.bad{border-left-color:var(--bad)} .banner.good{border-left-color:var(--ok)}
+.banner b{display:block;margin-bottom:2px;font-weight:600}
+.banner .row{margin-top:8px}
+
+/* settings rows */
+.group{border-top:1px solid var(--line);margin-top:22px;padding-top:6px}
+.group>h3{margin:12px 0 2px}
+.set{display:grid;grid-template-columns:minmax(160px,240px) minmax(0,1fr);gap:20px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.set:last-child{border-bottom:0}
+.set>div:first-child b{display:block;font-weight:500}
+.set>div:first-child span{display:block;color:var(--dim);font-size:12.5px;line-height:1.4;margin-top:2px}
+.seg{display:inline-flex;background:var(--well);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:6px;color:var(--dim)}
+.seg button:hover:not(:disabled){background:none;color:var(--text)}
+.seg button.sel{background:var(--raise);color:var(--text);box-shadow:0 1px 0 rgba(0,0,0,.25),0 0 0 1px var(--line2)}
+.value{min-width:7ch;text-align:right;font-weight:500}
+
+/* buttons tab: canvas + inspector */
+.studio{display:grid;grid-template-columns:minmax(0,1fr) 360px;min-height:calc(100vh - 52px)}
+.canvas{padding:16px 22px 22px;display:flex;flex-direction:column;min-width:0}
+.canvasbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.stage{background:var(--well);border:1px solid var(--line);border-radius:var(--r-m);padding:4px;position:relative}
+.stage svg{display:block;width:100%;height:auto}
+svg text{font-family:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,sans-serif}
+.below{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-top:10px}
+#stageNote{margin:0;font-size:12.5px;color:var(--dim);max-width:60ch}
+#photoBar{gap:10px}
+#photoBar .dim{font-size:12.5px}
+.insp{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;position:sticky;top:52px;height:calc(100vh - 52px)}
+#insp{padding:20px 20px 0;overflow:auto;flex:1}
+.insp .kicker{color:var(--dim);font-size:12.5px}
+.insp h3{font-size:17px;margin:2px 0 14px}
+.insp .now{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 12px;background:var(--well);border:1px solid var(--line);border-radius:var(--r-s);margin-bottom:18px}
+.insp .now span{color:var(--dim);font-size:12.5px}
+.insp .now b{font-weight:600;font-size:15px;text-align:right}
+.insp .q{font-weight:500;margin:0 0 8px}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:16px}
+.cats .chip{text-align:left;background:none;border:1px solid var(--line);padding:7px 10px;font-weight:400;color:var(--dim)}
+.cats .chip:hover{color:var(--text);background:var(--raise)}
+.cats .chip.sel{border-color:var(--amber);color:var(--text);background:var(--amber-soft)}
+.cats .chip.adv{grid-column:1/-1;border:0;padding:4px 2px;font-size:12px;color:var(--faint)}
+.cats .chip.adv.sel{color:var(--amber);background:none}
+.panel{display:grid;gap:12px;padding-bottom:16px}
+.panel .label{color:var(--dim);font-size:12.5px;margin-bottom:6px}
+.quick{display:flex;flex-wrap:wrap;gap:4px}
+.quick button,.quick .chip{padding:3px 9px;font-size:12.5px;font-weight:400;border-color:var(--line)}
+.quick .chip.sel{border-color:var(--amber);color:var(--text);background:var(--amber-soft)}
+.mods{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.mods button{padding:5px 10px;font-weight:400}
+.mods button.sel{background:var(--amber-soft);border-color:var(--amber)}
+.mods select{min-width:9ch}
+.rec{border-style:dashed;background:none;color:var(--dim);font-weight:400}
+.rec.on{border-color:var(--amber);color:var(--amber)}
+.inspfoot{border-top:1px solid var(--line);padding:14px 20px 18px;background:var(--panel)}
+.preview{font-size:12.5px;color:var(--dim);margin-bottom:10px} .preview b{color:var(--text);font-size:14px;font-weight:600}
+.assign{width:100%;padding:9px;font-size:14px}
+
+/* svg: mouse + annotations */
+.hot{fill:var(--hot);stroke:var(--hotline);stroke-width:1.5;cursor:pointer;transition:fill .12s,stroke .12s}
+.hotband{fill:none;stroke:transparent;stroke-width:26;stroke-linecap:round;cursor:pointer}
+.band{fill:none;stroke:var(--hotline);stroke-width:3;stroke-linecap:round;pointer-events:none}
+g.slot:hover .hot,g.slot.hover .hot{stroke:var(--amber);fill:#323844}
+g.slot:hover .band,g.slot.hover .band{stroke:var(--amber)}
+g.slot.sel .hot{fill:#4a3a1a;stroke:var(--amber);stroke-width:2.5}
+g.slot.sel .band{stroke:var(--amber);stroke-width:5}
+g.slot.hs .hot{stroke:var(--ok);stroke-width:2.5}
+.hot.mk{fill:rgba(12,14,18,.4);stroke:#fff;stroke-width:2.5}
+g.slot:hover .hot.mk,g.slot.hover .hot.mk{stroke:var(--amber)}
+g.slot.sel .hot.mk{fill:rgba(227,169,59,.35);stroke:var(--amber);stroke-width:3}
+.mk-n{fill:#fff;font-size:12px;font-weight:600;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2px}
+.editing g.slot{cursor:grab}
+.keynum{fill:#c9ccd2;font-size:15px;font-weight:600;pointer-events:none;text-anchor:middle}
+.co{cursor:pointer}
+.co rect{fill:transparent;stroke:none}
+.co:hover rect,.co.hover rect{fill:color-mix(in srgb,var(--text) 5%,transparent)}
+.co.sel rect{fill:var(--amber-soft)}
+.co .n{fill:var(--dim);font-size:13.5px}
+.co .a{fill:var(--text);font-size:16.5px;font-weight:600}
+.co .a.off{fill:var(--faint);font-weight:400}
+.co.sel .a{fill:var(--amber)}
+.co .badge{fill:var(--amber)}
+.lead{fill:none;stroke:var(--line2);stroke-width:1;pointer-events:none}
+.lead.sel{stroke:var(--amber);stroke-width:1.6}
+.lead.hidden{display:none} .lead.show{display:inline;stroke:var(--dim)} .lead.sel.show{stroke:var(--amber)}
+.dot{fill:var(--dim);pointer-events:none} .dot.sel{fill:var(--amber)}
+.listv{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0 18px;padding:10px 14px}
+.listv button{display:flex;justify-content:space-between;gap:10px;text-align:left;padding:9px 6px;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;font-weight:400}
+.listv button b{font-weight:600}
+.listv button:hover{background:color-mix(in srgb,var(--text) 4%,transparent)}
+.listv button.sel{box-shadow:inset 2px 0 0 var(--amber)} .listv button.sel b{color:var(--amber)}
+.listv .g{grid-column:1/-1;margin:14px 6px 2px;font-size:12.5px;color:var(--dim);font-weight:500}
+
+/* lighting */
+.zones{display:grid;gap:2px;margin-bottom:16px}
+.zcard{display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:center;text-align:left;background:none;border:1px solid transparent;padding:9px 10px;font-weight:400}
+.zcard:hover{background:var(--raise)}
+.zcard.sel{border-color:var(--amber);background:var(--amber-soft)}
+.zcard b{grid-column:2;font-weight:500}
+.zcard .sw{grid-column:1;grid-row:1/3;width:22px;height:22px;border-radius:50%;box-shadow:0 0 0 1px var(--line2)}
+.zcard small{grid-column:2;color:var(--dim);font-size:12.5px}
+.fxgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.fxgrid button{padding:8px 6px;font-size:13px;font-weight:400;background:none;border-color:var(--line);color:var(--dim)}
+.fxgrid button:hover{color:var(--text)}
+.fxgrid button.sel{border-color:var(--amber);color:var(--text);background:var(--amber-soft)}
+.swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.swatches button{width:24px;height:24px;border-radius:50%;padding:0;border:2px solid transparent;box-shadow:0 0 0 1px var(--line2)}
+.swatches button.sel{border-color:var(--panel);box-shadow:0 0 0 2px var(--text)}
+#zoneEditor h2{font-size:12.5px;font-weight:500;color:var(--dim);margin:0 0 8px}
+.fx-breath{animation:breath 3.2s ease-in-out infinite}
+.fx-alt{animation:breath 3.2s ease-in-out infinite reverse}
+.fx-hue{animation:hue 5s linear infinite}
+.fx-react{animation:react 2.4s ease-out infinite}
+@keyframes breath{0%,100%{opacity:.12}50%{opacity:1}}
+@keyframes hue{to{filter:hue-rotate(360deg)}}
+@keyframes react{0%,8%{opacity:1}60%,100%{opacity:.08}}
+@media (prefers-reduced-motion: reduce){.fx-breath,.fx-alt,.fx-hue,.fx-react{animation:none}}
+
+/* sensitivity / power */
+.stagerow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.stagerow:last-of-type{border-bottom:0}
+.stagerow input[type=range]{width:100%}
+.stagerow label b{font-weight:600}
+.meter{height:6px;border-radius:3px;background:var(--well);overflow:hidden;border:1px solid var(--line);flex:1;min-width:120px}
+.meter i{display:block;height:100%;background:var(--ok)}
+
+/* layouts, history */
+.lrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;align-items:start;padding:14px 0;border-bottom:1px solid var(--line)}
+.lrow:last-child{border-bottom:0}
+.lrow small{display:block;color:var(--dim);font-size:12.5px;line-height:1.45;margin-top:2px;max-width:62ch}
+.lrow .acts{display:flex;gap:4px 10px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+.tag{font-size:11.5px;padding:1px 7px;border-radius:4px;margin-left:8px;white-space:nowrap;font-weight:500;background:var(--amber-soft);color:var(--amber)}
+.tag.plain{background:var(--field);color:var(--dim);border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%}
+td,th{padding:9px 8px 9px 0;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;font-size:13px}
+th{color:var(--dim);font-weight:500;font-size:12.5px}
+dl{margin:0} dt{font-weight:600;margin-top:12px} dd{margin:2px 0 0;color:var(--dim);max-width:68ch}
+.ldot{display:inline-block;width:9px;height:9px;border-radius:50%;vertical-align:0;margin:0 3px 0 6px;box-shadow:0 0 0 1px var(--line2)}
+.plan{margin:6px 0 0;padding-left:18px} .plan li{margin:2px 0}
+pre,#log{font:12px/1.5 ui-monospace,"SF Mono",Menlo,monospace;background:var(--well);border:1px solid var(--line);padding:10px;border-radius:var(--r-s);overflow:auto;white-space:pre-wrap;max-height:260px;margin:0}
+.steps{display:grid;gap:4px;margin:0 0 12px;padding-left:20px;color:var(--dim)}
+label.btn{display:inline-block;background:var(--field);border:1px solid var(--line2);border-radius:var(--r-s);padding:6px 12px;cursor:pointer;font-weight:500}
+label.btn:hover{background:var(--raise)}
+details>summary{cursor:pointer;color:var(--dim)} details>summary:hover{color:var(--text)}
+details[open]>summary{margin-bottom:8px}
+
+/* dialog, toast */
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line2);border-radius:var(--r-m);padding:20px 22px;max-width:540px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,.45)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog h3{font-size:16px;margin-bottom:6px}
+dialog ul{max-height:50vh;overflow:auto}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(120px);visibility:hidden;background:var(--raise);border:1px solid var(--line2);border-radius:var(--r-s);padding:9px 14px;display:flex;gap:14px;align-items:center;transition:transform .22s ease;z-index:50;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:calc(100% - 32px)}
+#toast.show{transform:translateX(-50%) translateY(0);visibility:visible}
+#toast .link{color:var(--amber)}
+
+@media (max-width:1100px){.studio{grid-template-columns:1fr}.insp{position:static;height:auto;border-left:0;border-top:1px solid var(--line)}}
+@media (hover:none) and (pointer:coarse){ .rec{display:none} .co{cursor:default} }
+@media (max-width:820px){
+  input,select,textarea{font-size:16px}
+  .seg button{padding:8px 12px}.cats .chip{padding:10px}.quick button{padding:6px 10px}.mods button{padding:8px 12px}
+  .editing select{max-width:none;flex:1}.editing{flex:1 1 100%}
+  #stMatch,#stSync{order:5}
+  body{padding-bottom:env(safe-area-inset-bottom)}
+  .app{grid-template-columns:1fr}
+  .bar{height:auto;flex-wrap:wrap;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;gap:8px 12px;position:static}.bar .brand{width:auto}
+  .rail{position:sticky;top:0;z-index:15}
+  .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:6px 10px;overflow-x:auto}
+  .rail nav{display:flex}.rail nav button{white-space:nowrap}.rail nav button.sel{box-shadow:inset 0 -2px 0 var(--amber)}.rail .foot{display:none}
+  .page{padding:20px 16px 50px}.canvas{padding:12px 16px}#alerts{padding:12px 16px 0}
+  .set{grid-template-columns:1fr;gap:8px}
+  .lrow{grid-template-columns:1fr}.lrow .acts{justify-content:flex-start}
+  .fxgrid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="bar">
+  <div class="brand"><h1>Naga Control</h1></div>
+  <div class="status" id="statusBox"><span class="lamp"></span><span id="stConn">Not connected</span><span id="stBatt" hidden></span></div>
+  <button class="primary" id="btnConnect">Connect mouse</button>
+  <div class="editing"><label for="editSel" class="dim small">Editing</label><select id="editSel"></select></div>
+  <span class="grow"></span>
+  <span id="stMatch" hidden></span>
+  <span id="stSave" class="small"></span>
+  <span id="stSync" class="small dim" hidden></span>
+  <button id="btnVersion" hidden title="Keep a named copy of this layout as it is now">Save version</button>
+  <button id="btnUndo" disabled title="Put back what the mouse had before your last change">Undo</button>
+</div>
+
+<aside class="rail">
+  <nav id="tabs" aria-label="Sections">
+    <button data-tab="buttons" class="sel">Buttons</button>
+    <button data-tab="lighting">Lighting</button>
+    <button data-tab="sens">Sensitivity</button>
+    <button data-tab="power">Power</button>
+    <button data-tab="layouts">Layouts</button>
+    <button data-tab="history">History</button>
+    <button data-tab="help">Help</button>
+  </nav>
+  <div class="foot">Razer Naga V3 Pro</div>
+</aside>
+
+<main>
+<div id="alerts"></div>
+
+<!-- BUTTONS -->
+<section class="tab sel" id="tab-buttons">
+  <div class="studio">
+    <div class="canvas">
+      <div class="canvasbar">
+        <div class="seg" id="viewSeg" aria-label="View">
+          <button data-v="top" class="sel">Top</button><button data-v="left">Left side</button><button data-v="right">Right side</button><button data-v="bottom">Bottom</button><button data-v="list">List</button>
+        </div>
+        <div class="seg" id="layerSeg" aria-label="Layer">
+          <button data-l="0" class="sel">Normal</button><button data-l="1">While holding HyperShift</button>
+        </div>
+      </div>
+      <div class="stage" id="stage"></div>
+      <div class="below"><p id="stageNote"></p><div class="row" id="photoBar"></div></div>
+      <input type="file" id="photoFile" accept="image/*" hidden>
+    </div>
+    <aside class="insp"><div id="insp"></div><div class="inspfoot" id="inspFoot"></div></aside>
+  </div>
+</section>
+
+<!-- LIGHTING -->
+<section class="tab" id="tab-lighting">
+  <div class="studio">
+    <div class="canvas">
+      <div class="canvasbar"><span class="dim small">Preview</span><span class="dim small">Click a glowing part to edit it</span></div>
+      <div class="stage" id="lightStage"></div>
+    </div>
+    <aside class="insp"><div id="insp-light" style="padding:20px;overflow:auto;flex:1">
+      <h3 style="font-size:17px;margin-bottom:12px">Lighting</h3>
+      <div class="zones" id="zoneCards"></div>
+      <div class="row" style="margin-bottom:16px"><label class="row" style="gap:6px"><input type="checkbox" id="ledLink"> Same on all three</label><span class="grow"></span><button id="ledAllOff">Turn all off</button></div>
+      <div id="zoneEditor"></div>
+    </div>
+    <div class="inspfoot small dim">Changes save automatically, and show on the mouse right away when you're editing the mouse. The side plate's 12 keys light together.</div></aside>
+  </div>
+</section>
+
+<!-- SENSITIVITY -->
+<section class="tab" id="tab-sens">
+  <div class="page">
+    <header><h2>Sensitivity</h2><p class="dim">How far the pointer moves when you move the mouse.</p></header>
+    <div class="group" style="border-top:0;margin-top:0">
+      <h3>Stages</h3>
+      <p class="dim small">Up to five speeds. The index-finger buttons step through them; the selected dot is where the mouse starts.</p>
+      <div id="dpiBox" class="dim">Connect the mouse to read its stages.</div>
+      <div class="row" style="margin-top:12px"><button id="dpiAdd">Add stage</button><label class="row" style="gap:6px"><input type="checkbox" id="dpiXY"> Separate horizontal and vertical speed</label></div>
+    </div>
+    <div class="group">
+      <div class="set"><div><b>Polling rate</b><span>How often the mouse reports its position. 1000 Hz is smoothest; lower saves battery.</span></div>
+        <div><div class="seg" id="pollSeg"><button data-p="125">125 Hz</button><button data-p="500">500 Hz</button><button data-p="1000">1000 Hz</button></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- POWER -->
+<section class="tab" id="tab-power">
+  <div class="page">
+    <header><h2>Power</h2><p class="dim">Battery and sleep settings, stored on the mouse.</p></header>
+    <div class="set"><div><b>Battery</b><span id="battSub">Connect the mouse to read the battery.</span></div>
+      <div class="row"><div class="meter"><i id="battBar" style="width:0"></i></div><span class="value" id="battBig">—</span></div></div>
+    <div class="set"><div><b>Sleep after</b><span>Time without movement before the mouse sleeps.</span></div>
+      <div class="row"><input type="range" id="idle" min="60" max="900" step="30" class="grow"><span class="value" id="idleLbl">—</span></div></div>
+    <div class="set"><div><b>Low-battery warning</b><span>The light flashes when the battery drops below this.</span></div>
+      <div class="row"><input type="range" id="lowbat" min="5" max="25" step="1" class="grow"><span class="value" id="lowbatLbl">—</span></div></div>
+    <div class="set"><div><b>Scroll wheel feel</b><span>Clicky, free-spin or smart.</span></div>
+      <div class="dim small">No app can read or set this. The front button behind the wheel switches it, unless you've given that button another job. <span id="fwInfo" class="faint"></span></div></div>
+  </div>
+</section>
+
+<!-- LAYOUTS -->
+<section class="tab" id="tab-layouts">
+  <div class="page">
+    <header class="row" style="justify-content:space-between;align-items:flex-end">
+      <div><h2>Layouts</h2><p class="dim" style="margin:0">Complete setups saved in this browser. Loading one lists every change first.</p></div>
+      <div class="row"><button id="profSnap">Save the mouse as a layout</button><label class="btn">Import file<input type="file" id="profImport" accept=".json,.txt" hidden></label></div>
+    </header>
+    <div class="syncbox" id="syncBox"></div>
+    <div id="layoutList"></div>
+    <div class="group">
+      <h3>Edit a layout with Claude</h3>
+      <ol class="steps">
+        <li>Press <b>Copy the mouse's setup</b> and paste it into the chat.</li>
+        <li>Ask for changes. Claude replies with an updated layout.</li>
+        <li>Paste the reply below and press <b>Check</b> to see what would change.</li>
+      </ol>
+      <div class="row"><button id="txtFromMouse">Copy the mouse's setup</button><button id="txtGuide" class="link">Copy the format guide</button><span class="dim small" id="txtCopyNote"></span></div>
+      <textarea id="layoutText" rows="11" spellcheck="false" placeholder="Paste a layout here" style="margin-top:12px"></textarea>
+      <div class="row" style="margin-top:8px"><button id="txtCheck">Check</button><button id="txtLoad" class="primary">Load onto mouse</button><button id="txtSave" class="link">Save as a layout instead</button></div>
+      <div id="txtResult" style="margin-top:10px"></div>
+      <details style="margin-top:10px"><summary>Format guide</summary><pre id="guideText"></pre></details>
+    </div>
+  </div>
+</section>
+
+<!-- HISTORY -->
+<section class="tab" id="tab-history">
+  <div class="page" style="max-width:1000px">
+    <header class="row" style="justify-content:space-between;align-items:flex-end">
+      <div><h2>History</h2><p class="dim" style="margin:0">A copy of the mouse is saved when you connect and before every change. <span id="backupNote"></span></p></div>
+      <div class="row"><button id="backupAll">Download full backup</button><label class="btn">Restore a backup<input type="file" id="backupLoad" accept=".json" hidden></label></div>
+    </header>
+    <table><thead><tr><th>When</th><th>What</th><th>Differs from the mouse now</th><th></th></tr></thead><tbody id="histRows"><tr><td colspan="4" class="dim">Connect the mouse to start the history.</td></tr></tbody></table>
+  </div>
+</section>
+
+<!-- HELP -->
+<section class="tab" id="tab-help">
+  <div class="page">
+    <header><h2>Help</h2></header>
+    <h3>Where your settings live</h3>
+    <dl>
+      <dt>On the mouse</dt><dd>One active setup: buttons, HyperShift, sensitivity, lighting and power. It works on any computer with no software, including the hospital PC.</dd>
+      <dt>Layouts, in this browser</dt><dd>Named copies like Work and MapleStory. They do nothing until you load one onto the mouse.</dd>
+      <dt>History, in this browser</dt><dd>Automatic copies of the mouse from before each change. Download a full backup to keep them.</dd>
+    </dl>
+    <div class="group"><h3>How your setup is protected</h3>
+    <dl>
+      <dt>Connecting never changes the mouse</dt><dd>Synapse can push a blank setup onto a mouse on a new computer, after an update or when cloud sync fails. This page only writes when you change something.</dd>
+      <dt>Outside changes are caught</dt><dd>If Synapse, another app, another computer or a reset changed the mouse, you'll see a warning with a one-click restore.</dd>
+      <dt>Every change is saved permanently and checked</dt><dd>Changes go to the mouse's permanent memory and are read back. If the mouse sleeps or unplugs halfway, you can roll back.</dd>
+      <dt>Edits follow the profile button</dt><dd>Changes always go to the on-board slot the mouse is using.</dd>
+      <dt>Use one editor at a time</dt><dd>Close Synapse, OpenSnek and Naga Studio while this page is open.</dd>
+    </dl></div>
+    <div class="group"><h3>Razer terms</h3>
+    <dl>
+      <dt>Synapse profile</dt><dd>A setup kept in Razer's Synapse app. Same idea as a layout here.</dd>
+      <dt>On-board profile</dt><dd>A setup stored inside the mouse. The V3 Pro has five slots, but only Synapse can create extra ones; normally the mouse uses slot 1.</dd>
+      <dt>Profile light</dt><dd>The light under the mouse shows the slot:<span class="ldot" style="background:#fff"></span>1 white<span class="ldot" style="background:#e33"></span>2 red<span class="ldot" style="background:#3c3"></span>3 green<span class="ldot" style="background:#36f"></span>4 blue<span class="ldot" style="background:#3dd"></span>5 cyan.</dd>
+      <dt>HyperShift</dt><dd>A Shift key for the mouse. Hold the HyperShift button (the pinky button, from the factory) and the other buttons do their second job.</dd>
+      <dt>DPI</dt><dd>Sensitivity: how far the pointer moves per inch of mouse movement.</dd>
+      <dt>Chroma</dt><dd>Razer's name for the lights: scroll wheel, logo and side plate.</dd>
+      <dt>Turbo</dt><dd>Holding the button repeats its action, up to 20 times a second.</dd>
+      <dt>Macros</dt><dd>Typing text with one button. Not possible here yet.</dd>
+    </dl>
+    <p class="dim small" id="slotInfo" style="margin-top:14px"></p></div>
+    <div class="group"><h3>Advanced</h3>
+      <details><summary>Record what Synapse Web sends, to add macros later</summary>
+        <ol class="steps">
+          <li>Download a full backup first (History).</li>
+          <li>Open Synapse Web in Chrome, open the console (Mac: Cmd+Option+J, Windows: Ctrl+Shift+J), paste the recorder and press Enter.</li>
+          <li>Make a macro that types <b>ab</b> then Enter, and assign it to Side 2.</li>
+          <li>Type <code>copy(nagaCapture())</code> in the console and paste the result to Claude.</li>
+        </ol>
+        <div class="row"><button id="copyRecorder">Copy recorder</button><span class="dim small" id="recNote"></span></div>
+        <pre id="recorderCode" style="margin-top:8px"></pre>
+      </details>
+      <details style="margin-top:10px"><summary>Send a raw command</summary>
+        <p class="dim small">For testing only. A history copy is saved first.</p>
+        <div class="row">Class <input id="rawClass" value="00" style="width:6ch"> Cmd <input id="rawCmd" value="81" style="width:6ch"> Size <input id="rawSize" value="02" style="width:6ch"></div>
+        <div class="row" style="margin-top:6px;flex-wrap:nowrap">Args <input id="rawArgs" placeholder="hex, e.g. 01 40 00" style="flex:1;min-width:0"></div>
+        <button id="rawSend" style="margin-top:8px">Send</button>
+      </details>
+      <details style="margin-top:10px"><summary>Activity log</summary><div id="log"></div></details>
+    </div>
+  </div>
+</section>
+</main>
+</div>
+
+<dialog id="dlg"><h3 id="dlgTitle"></h3><div id="dlgBody" class="dim"></div><input id="dlgInput" style="width:100%;margin-top:10px" hidden><div class="row" style="justify-content:flex-end;margin-top:18px"><button id="dlgCancel">Cancel</button><button id="dlgOk" class="primary">OK</button></div></dialog>
+<div id="toast"><span id="toastMsg"></span><button class="link" id="toastUndo">Undo</button></div>
+
+<script>
+"use strict";
+// Protocol: OpenSnek docs/protocol/USB_PROTOCOL.md (Naga V3 Pro 0x00E7/0x00E8, txn 0x1F) and OpenRazer.
+const VID=0x1532, TXN=0x1F;
+const PIDS={0x00E7:"Naga V3 Pro, by cable",0x00E8:"Naga V3 Pro, wireless"};
+const STATUS=["no reply","busy","ok","rejected","timed out","not supported"];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const hex=a=>Array.from(a,b=>b.toString(16).padStart(2,"0")).join(" ");
+const parseHex=s=>(s.trim()?s.trim().split(/[\s,]+/).map(x=>parseInt(x,16)&255):[]);
+const $=id=>document.getElementById(id);
+const same=(a,b)=>!!a&&!!b&&a.length===b.length&&a.every((v,i)=>v===b[i]);
+const clone=o=>o==null?o:JSON.parse(JSON.stringify(o));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+const norm=s=>String(s).toLowerCase().replace(/[^a-z0-9+\-−=.\/*`'\[\];,\\←→↑↓]/g,"");
+function log(msg,cls){const d=document.createElement("div");if(cls)d.className=cls==="bad"?"badc":cls==="warn"?"warnc":"";d.textContent=new Date().toLocaleTimeString()+"  "+msg;$("log").prepend(d);}
+const safe=fn=>async(...a)=>{try{return await fn(...a);}catch(e){log(e.message||String(e),"bad"); toast(e.message||String(e));}};
+const store={
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){warnStorage();return false;}}
+};
+let storageWarned=false;
+function warnStorage(){ if(storageWarned) return; storageWarned=true; alertBox("storage","warn","This browser isn't keeping data for this page","History and saved layouts may be lost when the tab closes. Use “Download full backup” on the History tab."); }
+async function copyText(t,noteId){ try{ await navigator.clipboard.writeText(t); if(noteId) $(noteId).textContent="Copied."; return true; }catch(e){ if(noteId) $(noteId).textContent="Couldn't copy automatically; select the text and copy it."; return false; } }
+
+// ---------- UI helpers: alerts, dialog, toast, tabs ----------
+function alertBox(id,kind,title,text,actions=[]){
+  let el=document.getElementById("al-"+id); if(!el){ el=document.createElement("div"); el.id="al-"+id; $("alerts").prepend(el); }
+  el.className="banner "+kind; el.innerHTML=`<b>${esc(title)}</b><span>${esc(text)}</span><div class="row"></div>`;
+  const row=el.querySelector(".row");
+  actions.forEach(([label,fn,primary])=>{const b=document.createElement("button"); b.textContent=label; if(primary) b.className="primary"; b.onclick=safe(async()=>{ b.disabled=true; await fn(); }); row.append(b);});
+  const x=document.createElement("button"); x.textContent="Dismiss"; x.onclick=()=>el.remove(); row.append(x);
+}
+const clearAlert=id=>{const el=document.getElementById("al-"+id); if(el) el.remove();};
+function ask({title,text="",lines=null,ok="OK",input=null}){
+  return new Promise(res=>{ const d=$("dlg");
+    $("dlgTitle").textContent=title;
+    $("dlgBody").innerHTML=(text?`<p>${esc(text)}</p>`:"")+(lines?`<ul class="plan">${lines.map(l=>`<li>${esc(l)}</li>`).join("")}</ul>`:"");
+    const inp=$("dlgInput"); inp.hidden=input==null; if(input!=null) inp.value=input;
+    $("dlgOk").textContent=ok;
+    const done=v=>{ d.close(); $("dlgOk").onclick=$("dlgCancel").onclick=null; res(v); };
+    $("dlgOk").onclick=()=>done(input!=null?inp.value.trim()||false:true);
+    $("dlgCancel").onclick=()=>done(false); d.oncancel=e=>{e.preventDefault(); done(false);};
+    inp.onkeydown=e=>{ if(e.key==="Enter") $("dlgOk").click(); };
+    d.showModal(); if(input!=null){ inp.focus(); inp.select(); } else $("dlgOk").focus(); });
+}
+let toastTimer=null;
+function toast(msg,undo=false){ $("toastMsg").textContent=msg; $("toastUndo").hidden=!undo; $("toast").classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$("toast").classList.remove("show"),undo?6000:3500); }
+$("toastUndo").onclick=()=>{ $("toast").classList.remove("show"); $("btnUndo").click(); };
+function showTab(t){ document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("sel",b.dataset.tab===t)); document.querySelectorAll(".tab").forEach(s=>s.classList.toggle("sel",s.id==="tab-"+t)); try{ sessionStorage.setItem("naga.tab",t); }catch(e){} }
+$("tabs").onclick=e=>{ const t=e.target.dataset.tab; if(t) showTab(t); };
+try{ const t=sessionStorage.getItem("naga.tab"); if(t&&$("tab-"+t)) showTab(t); }catch(e){}
+let saveNoteTimer=null;
+function saveNote(text,cls){ const el=$("stSave"); el.textContent=text; el.className=cls||"dim"; clearTimeout(saveNoteTimer); if(/✓/.test(text)) saveNoteTimer=setTimeout(()=>el.textContent="",4000); }
+
+// ---------- transport ----------
+let dev=null, queue=Promise.resolve(), activeSlot=1, mouseId="naga";
+function buildReport(cls,cmd,size,args,txn=TXN){
+  const r=new Uint8Array(90); r[1]=txn; r[5]=size; r[6]=cls; r[7]=cmd;
+  args.forEach((b,i)=>{if(i<80)r[8+i]=b;});
+  let crc=0; for(let i=2;i<88;i++)crc^=r[i]; r[88]=crc; return r;
+}
+function rawCmd(cls,cmd,size,args=[],quiet=false,txn=TXN){
+  const job=queue.then(async()=>{
+    if(!dev) throw new Error("Mouse not connected.");
+    for(let attempt=0;attempt<2;attempt++){
+      await dev.sendFeatureReport(0,buildReport(cls,cmd,size,args,txn));
+      for(let t=0;t<20;t++){
+        await sleep(t?20:10);
+        const dv=await dev.receiveFeatureReport(0);
+        let res=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength);
+        if(res.length===91) res=res.slice(1);
+        if(res.length<90) continue;
+        const st=res[0];
+        if(st===0x00||st===0x01) continue;
+        if(res[6]!==cls||res[7]!==cmd) continue;
+        if(st===0x04&&attempt===0){ await sleep(150); break; }
+        const label=`${cls.toString(16).padStart(2,"0")}:${cmd.toString(16).padStart(2,"0")}`;
+        if(!quiet||st!==2) log(`${label} [${hex(args)}] → ${STATUS[st]||st} ${st===2?hex(res.slice(8,8+Math.max(size,4))):""}`,st===2?"":"warn");
+        return {status:st,args:res.slice(8,88)};
+      }
+    }
+    throw new Error("The mouse didn't answer. If it's wireless, move it to wake it, then try again.");
+  });
+  queue=job.catch(()=>{});
+  return job;
+}
+const ok=r=>r&&r.status===2;
+const P=()=>activeSlot;
+// Editing target: the connected mouse, or a saved layout (works with no mouse, e.g. on iPhone).
+let mode="mouse", editName=null;
+const HAS_HID="hid" in navigator;
+const inLayout=()=>mode==="layout";
+const canEdit=()=>inLayout()||!!dev;
+
+// ---------- connect ----------
+async function tryOpen(d){
+  try{ if(!d.opened) await d.open(); }catch(e){ return false; }
+  dev=d;
+  try{ if(ok(await rawCmd(0x00,0x81,0x02,[],true))) return true; }catch(e){}
+  dev=null; return false;
+}
+async function findAndConnect(list){ for(const d of list) if(await tryOpen(d)){ await onConnected(d); return true; } return false; }
+const connect=safe(async()=>{
+  if(!("hid" in navigator)) return;
+  try{ await navigator.hid.requestDevice({filters:[{vendorId:VID}]}); }catch(e){ return; }
+  const list=(await navigator.hid.getDevices()).filter(d=>d.vendorId===VID);
+  if(await findAndConnect(list)) return;
+  setConn("Couldn't reach the mouse","bad");
+  alertBox("conn","bad","The mouse was found but didn't answer","Plug in the USB cable or the wireless dongle (Bluetooth can't be used from a browser), move the mouse to wake it, then press Connect again. Close Synapse if it's running.");
+});
+function setConn(text,cls){ $("stConn").textContent=text; $("statusBox").className="status "+(cls||""); }
+let connecting=false;
+async function readEverything(progress){ await readSlots(); await readAllButtons(progress); await readDpi(); await readLighting(); }
+async function onConnected(d){
+  if(connecting) return; connecting=true;
+  try{
+    clearAlert("conn"); setConn("Reading the mouse…",""); $("btnConnect").hidden=true;
+    if(!PIDS[d.productId]) alertBox("model","warn","Untested mouse model","This page is built for the Naga V3 Pro. Other Razer mice may reject commands; nothing changes until you change something.");
+    await readIdentity(d);
+    if(inLayout()){ await readBattery(); setConn(PIDS[d.productId]||d.productName,"on"); log("Connected to "+d.productName); renderAll(); offerLoad(); return; }
+    await readInfo(); await readEverything(n=>setConn(`Reading buttons ${n}%…`,""));
+    dpiEdit=clone(dpiMouse); led=clone(ledMouse);
+    setConn(PIDS[d.productId]||d.productName,"on"); log("Connected to "+d.productName);
+    renderAll(); checkAgainstLastSeen("connect");
+  } finally { connecting=false; }
+}
+function onDisconnected(){ dev=null; setConn("Disconnected — plug in or wake the mouse","bad"); $("btnConnect").hidden=false; $("btnConnect").textContent="Reconnect"; renderAll(); }
+if("hid" in navigator){
+  navigator.hid.addEventListener("disconnect",e=>{ if(e.device===dev) onDisconnected(); });
+  navigator.hid.addEventListener("connect",safe(async e=>{ if(!dev&&e.device.vendorId===VID){ await sleep(400); await findAndConnect([e.device]); } }));
+}
+
+// ---------- identity, info, slots, device settings ----------
+async function readIdentity(d){
+  let serial="";
+  try{ const r=await rawCmd(0x00,0x82,0x16,[],true,0xFF); if(ok(r)) serial=String.fromCharCode(...r.args.slice(0,22).filter(c=>c>=32&&c<127)).trim(); }catch(e){}
+  mouseId="naga:"+(serial||d.productId.toString(16));
+}
+const POLL={1:1000,2:500,8:125}, POLLRAW={1000:1,500:2,125:8};
+const lbToPct=r=>Math.round(5+(r-0x0C)*20/(0x3F-0x0C)), pctToLb=p=>Math.round(0x0C+(p-5)*(0x3F-0x0C)/20);
+let devMouse={}, batt=null;
+async function readInfo(){
+  const fw=await rawCmd(0x00,0x81,0x02,[],true); if(ok(fw)) $("fwInfo").textContent=`Firmware ${fw.args[0]}.${fw.args[1]}`;
+  await readBattery();
+  devMouse={};
+  const p=await rawCmd(0x00,0x85,0x01,[],true); if(ok(p)&&POLL[p.args[0]]) devMouse.poll=POLL[p.args[0]];
+  const i=await rawCmd(0x07,0x83,0x02,[],true); if(ok(i)){ const s=(i.args[0]<<8)|i.args[1]; if(s>=60&&s<=900) devMouse.sleep=s; }
+  const l=await rawCmd(0x07,0x81,0x01,[],true); if(ok(l)&&l.args[0]>=0x0C&&l.args[0]<=0x3F) devMouse.lowbat=lbToPct(l.args[0]);
+}
+async function readBattery(){
+  const b=await rawCmd(0x07,0x80,0x02,[],true), c=await rawCmd(0x07,0x84,0x02,[],true);
+  if(ok(b)){ batt={pct:Math.round(b.args[1]/255*100),chg:!!(ok(c)&&c.args[1])}; renderBattery(); }
+}
+function renderBattery(){
+  if(!batt||!dev){ $("stBatt").hidden=true; $("battBig").textContent="—"; $("battBar").style.width="0"; $("battSub").textContent="Connect the mouse to read the battery."; return; }
+  $("stBatt").hidden=false; $("stBatt").textContent=`${batt.pct}%`+(batt.chg?" charging":""); $("stBatt").className=batt.pct<15&&!batt.chg?"warnc":"";
+  $("battBig").textContent=batt.pct+"%"; $("battBar").style.width=batt.pct+"%"; $("battSub").textContent=batt.chg?"Charging":"On battery";
+}
+function fmtSleep(s){ const m=Math.floor(s/60), r=s%60; return m?`${m} min${r?` ${r} s`:""}`:`${s} s`; }
+function renderDevice(){
+  document.querySelectorAll("#pollSeg button").forEach(b=>{ b.classList.toggle("sel",+b.dataset.p===devMouse.poll); b.disabled=!canEdit(); });
+  $("idle").disabled=$("lowbat").disabled=!canEdit();
+  if(devMouse.sleep){ $("idle").value=devMouse.sleep; $("idleLbl").textContent=fmtSleep(devMouse.sleep); }
+  if(devMouse.lowbat){ $("lowbat").value=devMouse.lowbat; $("lowbatLbl").textContent=devMouse.lowbat+"%"; }
+}
+async function readSlots(){
+  const inv=await rawCmd(0x05,0x81,0x02,[],true), act=await rawCmd(0x05,0x84,0x01,[],true);
+  const colors=["","white","red","green","blue","cyan"];
+  const prev=activeSlot;
+  if(ok(act)&&act.args[0]>=1&&act.args[0]<=5) activeSlot=act.args[0]; else activeSlot=1;
+  const used=ok(inv)?inv.args[1]:1, max=ok(inv)?inv.args[0]:5;
+  $("slotInfo").textContent=`Your mouse: ${used} of ${max} on-board slots in use; it's on slot ${activeSlot} (${colors[activeSlot]} light), so changes go there.`;
+  if(prev!==activeSlot) log(`Mouse is using on-board slot ${activeSlot}.`);
+  return prev!==activeSlot;
+}
+async function writeDevice(k,v){
+  if(inLayout()){ devMouse[k]=v; return true; }
+  let r;
+  if(k==="poll") r=await rawCmd(0x00,0x05,0x01,[POLLRAW[v]]);
+  if(k==="sleep") r=await rawCmd(0x07,0x03,0x02,[v>>8,v&255]);
+  if(k==="lowbat") r=await rawCmd(0x07,0x01,0x01,[pctToLb(v)]);
+  if(ok(r)) devMouse[k]=v; return ok(r);
+}
+$("pollSeg").onclick=safe(async e=>{ const p=+e.target.dataset.p; if(!p||!canEdit()) return; await applyAll({device:{poll:p}},"Before changing polling rate",{toast:`Polling rate ${p} Hz`}); });
+$("idle").oninput=()=>$("idleLbl").textContent=fmtSleep(+$("idle").value);
+$("idle").onchange=safe(async()=>{ await applyAll({device:{sleep:+$("idle").value}},"Before changing sleep time",{toast:"Sleep time"}); });
+$("lowbat").oninput=()=>$("lowbatLbl").textContent=$("lowbat").value+"%";
+$("lowbat").onchange=safe(async()=>{ await applyAll({device:{lowbat:+$("lowbat").value}},"Before changing low-battery warning",{toast:"Low-battery warning"}); });
+
+// ---------- DPI ----------
+let dpiMouse=null, dpiEdit=null;
+function normDpi(d){ if(!d||!Array.isArray(d.stages)||!d.stages.length) return null;
+  const st=d.stages.slice(0,5).map(s=>({x:Math.max(100,Math.min(50000,Math.round(+s.x)||800)),y:Math.max(100,Math.min(50000,Math.round(+(s.y??s.x))||800))}));
+  let start=d.start; if(start==null&&d.active!=null){ const i=d.stages.findIndex(s=>s.id===d.active); start=i<0?0:i; }
+  start=Math.max(0,Math.min(st.length-1,start|0)); return {start,stages:st}; }
+const dpiText=d=>d?d.stages.map((s,i)=>(i===d.start?"▸":"")+(s.x===s.y?s.x:`${s.x}x${s.y}`)).join(", "):"unknown";
+async function readDpi(){
+  if(inLayout()) return;
+  const r=await rawCmd(0x04,0x86,0x26,[P()],true);
+  if(!ok(r)){ dpiMouse=null; return; }
+  const a=r.args,n=Math.max(1,Math.min(5,a[2])); const stages=[];
+  for(let i=0;i<n;i++){const o=3+i*7; stages.push({id:a[o],x:(a[o+1]<<8)|a[o+2],y:(a[o+3]<<8)|a[o+4]});}
+  dpiMouse=normDpi({active:a[1],stages});
+}
+const posToDpi=p=>Math.max(100,Math.min(50000,Math.round(100*Math.pow(500,p/1000)/50)*50));
+const dpiToPos=d=>Math.round(1000*Math.log(d/100)/Math.log(500));
+let dpiTimer=null;
+function dpiChanged(rerender){ if(rerender) renderDpi(); saveNote("Saving…"); clearTimeout(dpiTimer); dpiTimer=setTimeout(safe(async()=>{ dpiTimer=null; await applyAll({dpi:dpiEdit},"Before changing DPI",{keepEditors:true,toast:"Sensitivity"}); }),700); }
+function renderDpi(){
+  const box=$("dpiBox"); $("dpiAdd").disabled=!canEdit()||!dpiEdit||dpiEdit.stages.length>=5; $("dpiXY").disabled=!canEdit()||!dpiEdit;
+  if(!canEdit()||!dpiEdit){ box.className="dim"; box.textContent=dev?"Couldn't read the stages.":"Connect the mouse, or pick a layout to edit at the top."; return; }
+  const xy=$("dpiXY").checked=!dpiEdit.stages.every(s=>s.x===s.y)||$("dpiXY").dataset.forced==="1";
+  box.className=""; box.innerHTML="";
+  dpiEdit.stages.forEach((s,i)=>{
+    const row=document.createElement("div"); row.className="stagerow";
+    row.innerHTML=`<label class="row" style="gap:6px" title="Start in this stage"><input type="radio" name="dpiact" ${i===dpiEdit.start?"checked":""}><b>${i+1}</b></label>
+      <div><input type="range" min="0" max="1000" value="${dpiToPos(s.x)}" aria-label="Stage ${i+1} speed">${xy?`<input type="range" min="0" max="1000" value="${dpiToPos(s.y)}" aria-label="Stage ${i+1} vertical">`:""}</div>
+      <div class="stack" style="gap:4px"><input type="number" min="100" max="50000" step="50" value="${s.x}" title="${xy?"Horizontal":"DPI"}">${xy?`<input type="number" min="100" max="50000" step="50" value="${s.y}" title="Vertical">`:""}</div><span></span>`;
+    const [rad,rx,ry]=row.querySelectorAll("input[type=radio],input[type=range]"), [nx,ny]=row.querySelectorAll("input[type=number]");
+    rad.onchange=()=>{ dpiEdit.start=i; dpiChanged(); };
+    rx.oninput=()=>{ s.x=posToDpi(+rx.value); nx.value=s.x; if(!xy) s.y=s.x; dpiChanged(); };
+    nx.onchange=()=>{ s.x=Math.max(100,Math.min(50000,Math.round((+nx.value||800)/50)*50)); nx.value=s.x; rx.value=dpiToPos(s.x); if(!xy) s.y=s.x; dpiChanged(); };
+    if(ry){ ry.oninput=()=>{ s.y=posToDpi(+ry.value); ny.value=s.y; dpiChanged(); }; ny.onchange=()=>{ s.y=Math.max(100,Math.min(50000,Math.round((+ny.value||800)/50)*50)); ny.value=s.y; ry.value=dpiToPos(s.y); dpiChanged(); }; }
+    if(dpiEdit.stages.length>1){ const del=document.createElement("button"); del.textContent="Remove"; del.className="link"; del.onclick=()=>{ dpiEdit.stages.splice(i,1); if(dpiEdit.start>=dpiEdit.stages.length) dpiEdit.start=dpiEdit.stages.length-1; dpiChanged(true); }; row.lastElementChild.replaceWith(del); }
+    box.appendChild(row);
+  });
+}
+$("dpiAdd").onclick=()=>{ const l=dpiEdit.stages[dpiEdit.stages.length-1]; dpiEdit.stages.push({x:Math.min(50000,l.x*2),y:Math.min(50000,l.y*2)}); dpiChanged(true); };
+$("dpiXY").onchange=()=>{ $("dpiXY").dataset.forced=$("dpiXY").checked?"1":"0"; if(!$("dpiXY").checked){ dpiEdit.stages.forEach(s=>s.y=s.x); dpiChanged(true); } else renderDpi(); };
+async function writeDpi(d){
+  d=normDpi(d); if(!d) return false;
+  if(inLayout()){ dpiMouse=d; return true; }
+  const rows=[]; for(let i=0;i<5;i++){ const s=d.stages[Math.min(i,d.stages.length-1)]; rows.push(i+1,s.x>>8,s.x&255,s.y>>8,s.y&255,0,0); }
+  for(const st of [P(),0x00]){ const r=await rawCmd(0x04,0x06,0x26,[st,d.start+1,d.stages.length,...rows]); if(!ok(r)) return false; }
+  return true;
+}
+
+// ---------- lighting ----------
+const ZONES=[{id:0x01,key:"Scroll wheel"},{id:0x04,key:"Logo"},{id:0x05,key:"Side plate"}];
+const EFFECTS=[["off","Off"],["static","Solid"],["breath","Breathing"],["spectrum","Rainbow"],["wave","Wave"],["reactive","Light up on click"]];
+const NEEDS={static:1,breath1:1,breath2:2,reactive:1};
+const PRESETS=["#44d62c","#00e5ff","#2962ff","#7c4dff","#ff2bd6","#ff1744","#ff6d00","#ffd600","#ffffff"];
+const COLORNAMES={red:"#ff0000",green:"#00ff00",blue:"#0000ff",white:"#ffffff",cyan:"#00ffff",magenta:"#ff00ff",pink:"#ff4fa0",purple:"#8000ff",orange:"#ff8000",yellow:"#ffff00",teal:"#00c0a0",black:"#000000"};
+const rgb=h=>{h=(h||"#000000").replace("#",""); return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16)||0);};
+const toHex=(r,g,b)=>"#"+[r,g,b].map(v=>(v|0).toString(16).padStart(2,"0")).join("");
+let ledMouse={}, led={}, selZone=0x04;
+const defZone=()=>({effect:"static",c1:"#44d62c",c2:"#2962ff",dir:1,speed:2,bright:255});
+function effectArgs(st,id,s){
+  const [r,g,b]=rgb(s.c1), [r2,g2,b2]=rgb(s.c2);
+  switch(s.effect){
+    case "off": return [st,id,0,0,0,0];
+    case "static": return [st,id,1,0,0,1,r,g,b];
+    case "breath1": return [st,id,2,1,0,1,r,g,b];
+    case "breath2": return [st,id,2,2,0,2,r,g,b,r2,g2,b2];
+    case "breathR": return [st,id,2,0,0,0];
+    case "spectrum": return [st,id,3,0,0,0];
+    case "wave": return [st,id,4,s.dir===2?2:1,0x28,0];
+    case "reactive": return [st,id,5,0,Math.max(1,Math.min(4,s.speed|0||2)),1,r,g,b];
+  }
+  return null;
+}
+function decodeEffect(a){
+  const c1=toHex(a[6],a[7],a[8]), c2=toHex(a[9],a[10],a[11]);
+  switch(a[2]){
+    case 0: return {effect:"off"};
+    case 1: return {effect:"static",c1};
+    case 2: return a[3]===1?{effect:"breath1",c1}:a[3]===2?{effect:"breath2",c1,c2}:{effect:"breathR"};
+    case 3: return {effect:"spectrum"};
+    case 4: return {effect:"wave",dir:a[3]===2?2:1};
+    case 5: return {effect:"reactive",c1,speed:a[4]||2};
+  }
+  return {effect:null};
+}
+async function readLighting(){
+  if(inLayout()) return;
+  for(const z of ZONES){
+    const s=Object.assign(defZone(),{effect:null});
+    try{ const e=await rawCmd(0x0F,0x82,0x0C,[P(),z.id,0,0,0,0,0,0,0,0,0,0],true); if(ok(e)) Object.assign(s,decodeEffect(e.args)); }catch(err){}
+    const b=await rawCmd(0x0F,0x84,0x03,[P(),z.id],true); if(ok(b)) s.bright=b.args[2];
+    ledMouse[z.id]=s;
+  }
+}
+function zoneText(s){
+  if(!s||!s.effect) return "unknown";
+  const pct=`, brightness ${Math.round((s.bright??255)/2.55)}%`;
+  switch(s.effect){
+    case "off": return "Off";
+    case "static": return `Static ${s.c1}${pct}`;
+    case "breath1": return `Breathing ${s.c1}${pct}`;
+    case "breath2": return `Breathing ${s.c1} ${s.c2}${pct}`;
+    case "breathR": return `Breathing random${pct}`;
+    case "spectrum": return `Spectrum${pct}`;
+    case "wave": return `Wave ${s.dir===2?"right":"left"}${pct}`;
+    case "reactive": return `Reactive ${s.c1} speed ${s.speed||2}${pct}`;
+  }
+  return "unknown";
+}
+const zoneLabel=s=>!s||!s.effect?"Unknown":({off:"Off",static:"Solid",breath1:"Breathing",breath2:"Breathing, two colors",breathR:"Breathing, random",spectrum:"Rainbow",wave:"Wave",reactive:"Light up on click"})[s.effect]+(s.effect==="off"?"":`, ${Math.round(s.bright/2.55)}%`);
+function parseZone(t){
+  t=String(t).trim(); const low=t.toLowerCase(); const out={};
+  const bm=low.match(/bright(?:ness)?\s*(\d{1,3})\s*%?/); if(bm) out.bright=Math.round(Math.min(100,+bm[1])*2.55);
+  const colors=[...low.matchAll(/#[0-9a-f]{6}\b|#[0-9a-f]{3}\b|\b[a-z]+\b/g)].map(m=>m[0]).map(w=>w[0]==="#"?(w.length===4?"#"+[...w.slice(1)].map(c=>c+c).join(""):w):COLORNAMES[w]).filter(Boolean);
+  const first=low.split(/[\s,]+/)[0];
+  if(/^(off|none|dark)$/.test(first)) out.effect="off";
+  else if(/^(static|solid|color|colour)$/.test(first)||(colors.length&&first[0]==="#")||COLORNAMES[first]) out.effect="static";
+  else if(/^(breathing|breathe|breath|pulse|pulsing)$/.test(first)) out.effect=/random/.test(low)||!colors.length?"breathR":colors.length>1?"breath2":"breath1";
+  else if(/^(spectrum|rainbow|cycle)$/.test(first)) out.effect="spectrum";
+  else if(first==="wave") { out.effect="wave"; out.dir=/right/.test(low)?2:1; }
+  else if(/^(reactive|react|click)$/.test(first)) { out.effect="reactive"; const sp=low.match(/speed\s*(\d)/); out.speed=sp?Math.max(1,Math.min(4,+sp[1])):2; }
+  else return {error:`unknown lighting "${t}"`};
+  const need=NEEDS[out.effect]||0;
+  if(colors.length<need) return {error:`"${t}" needs ${need} color${need>1?"s":""} (#rrggbb or a name like red)`};
+  if(need>=1) out.c1=colors[0]; if(need>=2) out.c2=colors[1];
+  return {zone:out};
+}
+const fillZone=(t,base)=>{ const z=Object.assign(defZone(),base&&base.effect?base:{},t); if(t&&t.color&&!t.c1) z.c1=t.color; return z; };
+const ledSame=(a,b)=>zoneText(a)===zoneText(b);
+async function writeZone(st,id,s,quiet){
+  if(inLayout()){ if(st!==0) ledMouse[id]=clone(s); return true; }
+  const a=effectArgs(st,id,s); if(!a) return false;
+  const r=await rawCmd(0x0F,0x02,a.length,a,quiet);
+  const b=await rawCmd(0x0F,0x04,0x03,[st,id,Math.max(0,Math.min(255,s.bright|0))],quiet);
+  return ok(r)&&ok(b);
+}
+let ledTimer=null, previewTimer=null; const previewZones=new Set();
+function ledChanged(ids){
+  if($("ledLink").checked){ const src=led[selZone]; ZONES.forEach(z=>{ if(z.id!==selZone) led[z.id]=clone(src); }); ids=ZONES.map(z=>z.id); }
+  renderLightStage(); renderZoneCards();
+  if(!canEdit()) return;
+  if(!inLayout()){ ids.forEach(i=>previewZones.add(i)); clearTimeout(previewTimer);
+    previewTimer=setTimeout(safe(async()=>{ const z=[...previewZones]; previewZones.clear(); for(const id of z) if(led[id]?.effect) await writeZone(0x00,id,led[id],true); }),120); }
+  saveNote("Saving…"); clearTimeout(ledTimer);
+  ledTimer=setTimeout(safe(async()=>{ ledTimer=null; const t={}; ZONES.forEach(z=>{ if(led[z.id]?.effect) t[z.id]=led[z.id]; }); await applyAll({lighting:t},"Before changing lighting",{keepEditors:true,toast:"Lighting"}); }),900);
+}
+function zoneVisual(s){
+  if(!s||!s.effect||s.effect==="off") return {fill:"#2a2f37",cls:"",alt:null,glow:false,op:1};
+  const op=.3+.7*(s.bright??255)/255;
+  switch(s.effect){
+    case "static": return {fill:s.c1,cls:"",glow:true,op};
+    case "breath1": return {fill:s.c1,cls:"fx-breath",glow:true,op};
+    case "breath2": return {fill:s.c2,cls:"",alt:s.c1,glow:true,op};
+    case "breathR": return {fill:"#ff2050",cls:"fx-hue",alt:null,breath:true,glow:true,op};
+    case "spectrum": case "wave": return {fill:"#ff2050",cls:"fx-hue",glow:true,op};
+    case "reactive": return {fill:s.c1,cls:"fx-react",glow:true,op};
+  }
+  return {fill:"#2a2f37",cls:"",glow:false,op:1};
+}
+function zoneShape(id,shape){ shape=String(shape);
+  const v=zoneVisual(led[id]); const sel=id===selZone;
+  const base=`<g class="${v.cls}" style="opacity:${v.op}" ${v.glow?'filter="url(#glow)"':""}><g class="${v.breath?"fx-breath":""}">${shape.replaceAll("FILL",v.fill)}</g>${v.alt?`<g class="fx-alt">${shape.replaceAll("FILL",v.alt)}</g>`:""}</g>`;
+  return `<g class="zonehit" data-zone="${id}" style="cursor:pointer" role="button" tabindex="0" aria-label="${ZONES.find(z=>z.id===id).key}">${base}${sel?shape.replaceAll("FILL","none").replaceAll('class="zone-shape"','class="zone-shape" stroke="var(--acc)" stroke-width="3" stroke-dasharray="6 4"'):""}</g>`;
+}
+function renderLightStage(){
+  const keys=[]; for(let r=0;r<4;r++) for(let c=0;c<3;c++) keys.push(`<rect class="zone-shape" x="${440+c*62}" y="${282+r*38}" width="56" height="32" rx="7" fill="FILL"/>`);
+  $("lightStage").innerHTML=`<svg viewBox="0 0 1000 560" role="img" aria-label="Mouse lighting preview">${DEFS}
+    <g transform="translate(-150,20) scale(0.8)">${TOP_BODY}
+      ${zoneShape(0x01,'<rect class="zone-shape" x="484" y="128" width="32" height="96" rx="15" fill="FILL"/>')}
+      ${zoneShape(0x04,'<path class="zone-shape" d="M500 438 L528 470 L500 502 L472 470 Z" fill="FILL"/>')}
+    </g>
+    <g transform="translate(263,40) scale(0.85)">${LEFT_BODY}
+      ${zoneShape(0x05,`<g>${keys.join("")}</g>`)}
+    </g>
+    <text x="250" y="545" text-anchor="middle" class="keynum" style="font-size:14px;fill:var(--dim)">Top</text>
+    <text x="690" y="545" text-anchor="middle" class="keynum" style="font-size:14px;fill:var(--dim)">Left side</text></svg>`.replace(/id="(\w+)"/g,'id="L_$1"').replace(/url\(#(\w+)\)/g,'url(#L_$1)');
+  $("lightStage").querySelectorAll(".zonehit").forEach(g=>{ const go=()=>{ selZone=+g.dataset.zone; renderLighting(); }; g.onclick=go; g.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } }; });
+}
+function renderZoneCards(){
+  $("zoneCards").innerHTML="";
+  ZONES.forEach(z=>{ const s=led[z.id]; const b=document.createElement("button"); b.className="zcard"+(z.id===selZone?" sel":"");
+    const v=zoneVisual(s); const bg=!s||s.effect==="off"||!s.effect?"var(--field)":/spectrum|wave|breathR/.test(s.effect)?"linear-gradient(90deg,#f33,#fd0,#3f6,#0cf,#66f,#f3c)":s.effect==="breath2"?`linear-gradient(90deg,${s.c1},${s.c2})`:v.fill;
+    b.innerHTML=`<b>${z.key}</b><span class="sw" style="background:${bg}"></span><small>${esc(zoneLabel(s))}</small>`;
+    b.onclick=()=>{ selZone=z.id; renderLighting(); }; $("zoneCards").append(b); });
+}
+function renderZoneEditor(){
+  const box=$("zoneEditor"); box.innerHTML=""; const s=led[selZone]; if(!s) return;
+  const eff=s.effect&&s.effect.startsWith("breath")?"breath":s.effect;
+  const head=document.createElement("h2"); head.textContent=$("ledLink").checked?"All zones":ZONES.find(z=>z.id===selZone).key; box.append(head);
+  const grid=document.createElement("div"); grid.className="fxgrid";
+  EFFECTS.forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if(v===eff) b.className="sel";
+    b.onclick=()=>{ s.effect=v==="breath"?"breath1":v; renderZoneEditor(); ledChanged([selZone]); }; grid.append(b); });
+  box.append(grid);
+  const opts=document.createElement("div"); opts.className="stack"; opts.style.marginTop="14px";
+  const colorRow=(label,key)=>{ const row=document.createElement("div"); row.innerHTML=`<div class="dim" style="font-size:12px;margin-bottom:4px">${label}</div>`;
+    const sw=document.createElement("div"); sw.className="swatches";
+    PRESETS.forEach(c=>{ const b=document.createElement("button"); b.style.background=c; b.title=c; if(s[key].toLowerCase()===c) b.className="sel"; b.onclick=()=>{ s[key]=c; renderZoneEditor(); ledChanged([selZone]); }; sw.append(b); });
+    const pick=document.createElement("input"); pick.type="color"; pick.value=s[key]; pick.title="Any color"; pick.oninput=()=>{ s[key]=pick.value; sw.querySelectorAll("button").forEach(b=>b.classList.remove("sel")); ledChanged([selZone]); };
+    sw.append(pick); row.append(sw); return row; };
+  if(eff==="breath"){ const seg=document.createElement("div"); seg.className="seg";
+    [["breath1","One color"],["breath2","Two colors"],["breathR","Random colors"]].forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if(s.effect===v) b.className="sel"; b.onclick=()=>{ s.effect=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); });
+    opts.append(seg); }
+  if(NEEDS[s.effect]>=1) opts.append(colorRow(s.effect==="breath2"?"First color":"Color","c1"));
+  if(s.effect==="breath2") opts.append(colorRow("Second color","c2"));
+  if(s.effect==="wave"){ const seg=document.createElement("div"); seg.className="seg"; [[1,"Leftward"],[2,"Rightward"]].forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if((s.dir||1)===v) b.className="sel"; b.onclick=()=>{ s.dir=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); }); opts.append(seg); }
+  if(s.effect==="reactive"){ const row=document.createElement("div"); row.innerHTML='<div class="dim" style="font-size:12px;margin-bottom:4px">How long the light stays after a click</div>'; const seg=document.createElement("div"); seg.className="seg";
+    [[1,"Short"],[2,"Medium"],[3,"Long"],[4,"Longest"]].forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if((s.speed||2)===v) b.className="sel"; b.onclick=()=>{ s.speed=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); }); row.append(seg); opts.append(row); }
+  if(s.effect&&s.effect!=="off"){ const row=document.createElement("div"); row.innerHTML=`<div class="row" style="justify-content:space-between"><span class="dim" style="font-size:12px">Brightness</span><b>${Math.round(s.bright/2.55)}%</b></div>`;
+    const r=document.createElement("input"); r.type="range"; r.min=0; r.max=255; r.value=s.bright; r.style.width="100%"; r.oninput=()=>{ s.bright=+r.value; row.querySelector("b").textContent=Math.round(s.bright/2.55)+"%"; ledChanged([selZone]); }; row.append(r); opts.append(row); }
+  if(!s.effect){ const p=document.createElement("p"); p.className="dim"; p.textContent="The mouse didn't report this zone's effect. Pick one above."; opts.append(p); }
+  box.append(opts);
+}
+function renderLighting(){ ZONES.forEach(z=>{ if(!led[z.id]) led[z.id]=defZone(); }); renderLightStage(); renderZoneCards(); renderZoneEditor(); }
+$("ledLink").onchange=()=>{ if($("ledLink").checked) ledChanged(ZONES.map(z=>z.id)); renderZoneEditor(); };
+$("ledAllOff").onclick=()=>{ ZONES.forEach(z=>led[z.id]=Object.assign(led[z.id]||defZone(),{effect:"off"})); renderLighting(); ledChanged(ZONES.map(z=>z.id)); };
+
+// ---------- buttons: data ----------
+const NUM=[0x1e,0x1f,0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x2d,0x2e];
+const SLOTS=[
+  ...Array.from({length:12},(_,i)=>({slot:0x40+i,key:`Side ${i+1}`,name:`Side ${i+1}`,group:"Side plate",def:[0x02,0x01,0x00,NUM[i],0,0,0]})),
+  {slot:1,key:"Left click",name:"Left click",group:"Top",def:[1,1,1,0,0,0,0],locked:true},
+  {slot:2,key:"Right click",name:"Right click",group:"Top",def:[1,1,2,0,0,0,0]},
+  {slot:9,key:"Scroll up",name:"Scroll up",group:"Top",def:[1,1,9,0,0,0,0]},
+  {slot:3,key:"Wheel click",name:"Wheel click",group:"Top",def:[1,1,3,0,0,0,0],alias:["middle click"]},
+  {slot:10,key:"Scroll down",name:"Scroll down",group:"Top",def:[1,1,10,0,0,0,0]},
+  {slot:52,key:"Tilt left",name:"Wheel tilt left",group:"Top",def:[0x0E,0x01,0x68,0,0x14,0,0]},
+  {slot:53,key:"Tilt right",name:"Wheel tilt right",group:"Top",def:[0x0E,0x01,0x69,0,0x14,0,0]},
+  {slot:106,key:"Behind wheel front",name:"Behind wheel, front",group:"Top",def:[0x12,1,1,0,0,0,0]},
+  {slot:128,key:"Behind wheel rear",name:"Behind wheel, rear",group:"Top",def:[0,1,0,0,0,0,0]},
+  {slot:11,key:"Index front",name:"Index button, front",group:"Top",def:[6,1,1,0,0,0,0]},
+  {slot:12,key:"Index rear",name:"Index button, rear",group:"Top",def:[6,1,2,0,0,0,0]},
+  {slot:57,key:"Pinky",name:"Pinky button",group:"Right side",def:[0x0C,0x01,0x39,0,0,0,0],alias:["ring finger","ringfinger","pinky button"]},
+  {slot:14,key:"Profile button",name:"Profile button",group:"Bottom",def:[7,1,4,0,0,0,0]},
+];
+const SLOT=Object.fromEntries(SLOTS.map(s=>[s.slot,s]));
+const SLOTBYNAME={}; SLOTS.forEach(s=>[s.key,s.name,...(s.alias||[])].forEach(n=>SLOTBYNAME[norm(n)]=s));
+const MOUSE={1:"Left click",2:"Right click",3:"Middle click",4:"Back",5:"Forward",9:"Scroll up",10:"Scroll down",0x68:"Scroll left",0x69:"Scroll right"};
+const MOUSEBYNAME={}; Object.entries(MOUSE).forEach(([v,n])=>MOUSEBYNAME[norm(n)]=+v);
+Object.assign(MOUSEBYNAME,{wheelclick:3,middle:3,mouse4:4,button4:4,mouse5:5,button5:5,click:1});
+const KEYGROUPS=[
+  ["Letters","ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")],["Numbers","1234567890".split("")],
+  ["Editing",["Enter","Tab","Esc","Space","Backspace","Delete","Insert"]],
+  ["Navigation",["←","→","↑","↓","Home","End","Page Up","Page Down"]],
+  ["Function keys",Array.from({length:24},(_,i)=>"F"+(i+1))],
+  ["Number pad",["Num 0","Num 1","Num 2","Num 3","Num 4","Num 5","Num 6","Num 7","Num 8","Num 9","Num +","Num −","Num *","Num /","Num .","Num Enter"]],
+  ["Symbols",["-","=","[","]","\\",";","'","`",",",".","/"]],
+  ["Other",["Print Screen","Caps Lock","Scroll Lock","Pause","Menu","Volume up","Volume down","Mute"]]];
+const KEYS=(()=>{const k={};"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((c,i)=>k[c]=0x04+i);"1234567890".split("").forEach((c,i)=>k[c]=0x1E+i);
+  Object.assign(k,{Enter:0x28,Esc:0x29,Backspace:0x2A,Tab:0x2B,Space:0x2C,"-":0x2D,"=":0x2E,"[":0x2F,"]":0x30,"\\":0x31,";":0x33,"'":0x34,"`":0x35,",":0x36,".":0x37,"/":0x38,
+  "Caps Lock":0x39,"Print Screen":0x46,"Scroll Lock":0x47,Pause:0x48,Insert:0x49,Home:0x4A,"Page Up":0x4B,Delete:0x4C,End:0x4D,"Page Down":0x4E,"→":0x4F,"←":0x50,"↓":0x51,"↑":0x52,
+  "Num /":0x54,"Num *":0x55,"Num −":0x56,"Num +":0x57,"Num Enter":0x58,"Num 0":0x62,"Num .":0x63,Menu:0x65,"Volume up":0x80,"Volume down":0x81,Mute:0x7F});
+  for(let i=1;i<=9;i++)k["Num "+i]=0x58+i;
+  for(let i=1;i<=24;i++)k["F"+i]=i<=12?0x39+i:0x67+(i-12);
+  return k;})();
+const KEYNAME=Object.fromEntries(Object.entries(KEYS).map(([n,v])=>[v,n]));
+const KEYBYNAME={}; Object.entries(KEYS).forEach(([n,v])=>KEYBYNAME[norm(n)]=v);
+Object.assign(KEYBYNAME,{return:0x28,escape:0x29,del:0x4C,pgup:0x4B,pageup:0x4B,pgdn:0x4E,pagedown:0x4E,left:0x50,leftarrow:0x50,right:0x4F,rightarrow:0x4F,up:0x52,uparrow:0x52,down:0x51,downarrow:0x51,
+  spacebar:0x2C,minus:0x2D,equals:0x2E,equal:0x2E,backtick:0x35,grave:0x35,prtsc:0x46,printscreen:0x46,"num-":0x56,numminus:0x56,numplus:0x57,"numpad+":0x57,"numpad-":0x56,numenter:0x58,numpadenter:0x58,
+  "num/":0x54,"num*":0x55,"num.":0x63,ins:0x49,capslock:0x39,volumeup:0x80,volumedown:0x81,mute:0x7F});
+for(let i=0;i<=9;i++){ KEYBYNAME["numpad"+i]=KEYBYNAME["num"+i]; }
+const CODE2NAME=c=>{ if(/^Key[A-Z]$/.test(c))return c[3]; if(/^Digit\d$/.test(c))return c[5]; if(/^F\d+$/.test(c))return c; if(/^Numpad\d$/.test(c))return "Num "+c[6];
+  return ({Enter:"Enter",Escape:"Esc",Backspace:"Backspace",Tab:"Tab",Space:"Space",Minus:"-",Equal:"=",BracketLeft:"[",BracketRight:"]",Backslash:"\\",Semicolon:";",Quote:"'",Backquote:"`",Comma:",",Period:".",Slash:"/",
+  PrintScreen:"Print Screen",Insert:"Insert",Home:"Home",PageUp:"Page Up",Delete:"Delete",End:"End",PageDown:"Page Down",ArrowRight:"→",ArrowLeft:"←",ArrowDown:"↓",ArrowUp:"↑",
+  NumpadDivide:"Num /",NumpadMultiply:"Num *",NumpadSubtract:"Num −",NumpadAdd:"Num +",NumpadEnter:"Num Enter",NumpadDecimal:"Num .",ContextMenu:"Menu"})[c]; };
+const MODS=[["Ctrl",0x01],["Shift",0x02],["Alt",0x04],["Win",0x08]];
+const MODBYNAME={ctrl:1,control:1,shift:2,alt:4,option:4,opt:4,win:8,windows:8,cmd:8,command:8,meta:8,super:8};
+const ppsToRaw=p=>Math.round(1+(20-Math.max(1,Math.min(20,p)))*254/19);
+const rawToPps=r=>Math.round(20-(Math.max(1,Math.min(255,r))-1)*19/254);
+const OFF=[0,0,0,0,0,0,0];
+function describe(b){
+  if(!b) return "unreadable";
+  const [c,l,a,d,e,f]=b;
+  const raw="Raw "+hex(b);
+  const mods=m=>MODS.filter(([,v])=>m&v).map(([n])=>n+"+").join("");
+  if(c===0) return l===1&&a===0&&!d?"Nothing":same(b,OFF)?"Off":raw;
+  if(c===1) return MOUSE[a]&&l===1?MOUSE[a]:raw;
+  if(c===0x0E){ if(!MOUSE[a]) return raw; if(l===3) return `${MOUSE[a]}, repeat ${rawToPps((d<<8)|e)}/s`; if(l===1&&(a===0x68||a===0x69)) return MOUSE[a]; return raw; }
+  if(c===2){ if(a&0xF0||!KEYNAME[d]) return raw; return mods(a)+KEYNAME[d]; }
+  if(c===0x0D){ if(a&0xF0||!KEYNAME[d]) return raw; return `${mods(a)}${KEYNAME[d]}, repeat ${rawToPps((e<<8)|f)}/s`; }
+  if(c===6) return ({1:"DPI up",2:"DPI down",6:"DPI cycle"})[a]||raw;
+  if(c===7&&a===4) return "Switch profile";
+  if(c===0x0C) return "HyperShift";
+  if(c===0x12&&a===1) return "Scroll wheel mode";
+  return raw;
+}
+const friendly=(b,hs)=>{ const d=describe(b); if(hs&&d==="Off") return "—"; if(/^[A-Z0-9]$|^[-=]$/.test(d)) return "Key "+d; return d==="HyperShift"?"HyperShift (hold)":d; };
+const sameMeaning=(a,b)=>same(a,b)||(!!a&&!!b&&describe(a)===describe(b)&&!describe(a).startsWith("Raw"));
+const isHS=b=>!!b&&b[0]===0x0C;
+function parseAction(text,slot,hs){
+  let t=String(text).trim(); if(!t) return {error:"empty"};
+  let low=t.toLowerCase();
+  if(/^raw\b/.test(low)){ const r=parseHex(t.slice(3)); return r.length===7&&r.every(v=>v>=0&&v<=255)?{blk:r}:{error:`"${t}" needs exactly 7 hex bytes`}; }
+  if(/^(type|macro|text)\b/.test(low)) return {error:"typing macros aren't supported yet"};
+  if(/^(factory|default)$/.test(low)) return {blk:hs?OFF.slice():SLOT[slot].def.slice()};
+  if(/^(off|disabled|none|—)$/.test(low)) return {blk:OFF.slice()};
+  if(/^(nothing|no action)$/.test(low)) return {blk:[0,1,0,0,0,0,0]};
+  let pps=0; const rm=t.match(/[,\s]+(?:repeat|turbo|autoclick)(?:\s+(\d+))?(?:\s*(?:\/s|x\/s|per second|times a second))?\s*$/i);
+  if(rm){ pps=Math.max(1,Math.min(20,+(rm[1]||20))); t=t.slice(0,rm.index).trim(); low=t.toLowerCase(); }
+  t=t.replace(/\s*\(hold\)$/i,""); low=t.toLowerCase();
+  const n=norm(t);
+  if(/^dpi(up|\+)$/.test(n)) return {blk:[6,1,1,0,0,0,0]}; if(/^dpi(down|−|-)$/.test(n)) return {blk:[6,1,2,0,0,0,0]}; if(/^dpi(cycle|next)?$/.test(n)) return {blk:[6,1,6,0,0,0,0]};
+  if(/^hyper ?shift/.test(low)) return {blk:[0x0C,0x01,0x39,0,0,0,0]};
+  if(/^(switch ?profile|profile( switch| cycle)?|next profile)$/.test(low)) return {blk:[7,1,4,0,0,0,0]};
+  if(/^(scroll ?wheel ?mode|wheel ?mode|change scroll-?wheel feel)$/.test(low)) return {blk:[0x12,1,1,0,0,0,0]};
+  if(MOUSEBYNAME[n]!=null){ const btn=MOUSEBYNAME[n];
+    if(pps) return {blk:[0x0E,0x03,btn,0,ppsToRaw(pps),0,0]};
+    if(btn===0x68||btn===0x69) return {blk:[0x0E,0x01,btn,0,0x14,0,0]};
+    return {blk:[1,1,btn,0,0,0,0]}; }
+  let rest=t.replace(/^key\s+/i,""), mods=0, m;
+  while((m=rest.match(/^\s*(ctrl|control|shift|alt|option|opt|win|windows|cmd|command|meta|super)\s*\+\s*/i))){ mods|=MODBYNAME[m[1].toLowerCase()]; rest=rest.slice(m[0].length); }
+  const key=KEYBYNAME[norm(rest)];
+  if(key==null) return {error:`don't know the action "${text}"`};
+  return {blk:pps?[0x0D,0x04,mods,key,0,ppsToRaw(pps),0]:[2,2,mods,key,0,0,0]};
+}
+let layer=0, view="top", selSlot=0x40;
+const current={0:{},1:{}};
+async function readSlot(slot,hs){
+  const r=await rawCmd(0x02,0x8C,0x0A,[P(),slot,hs],true);
+  if(!ok(r)||r.args[1]!==slot) return null;
+  return Array.from(r.args.slice(3,10));
+}
+async function readAllButtons(progress){
+  let n=0; const total=SLOTS.length*2;
+  for(const hs of [0,1]) for(const s of SLOTS){ current[hs][s.slot]=await readSlot(s.slot,hs); n++; if(progress&&n%6===0) progress(Math.round(n/total*100)); }
+}
+async function writeSlot(slot,hs,block){
+  if(slot===1||!block||block.length!==7) return false;
+  if(inLayout()){ current[hs][slot]=block.slice(); return true; }
+  for(const prof of [P(),0x00]){ const r=await rawCmd(0x02,0x0C,0x0A,[prof,slot,hs,...block]); if(!ok(r)) return false; }
+  const back=await readSlot(slot,hs); current[hs][slot]=back;
+  return sameMeaning(back,block);
+}
+function guardChanges(changes){
+  const after={0:{...current[0]},1:{...current[1]}};
+  for(const [slot,hs,blk] of changes) after[hs][slot]=blk;
+  const problems=[];
+  if(!SLOTS.some(s=>{const b=after[0][s.slot]; return b&&(b[0]===1||b[0]===0x0E)&&b[2]===2;})) problems.push("No button would right-click anymore.");
+  const hsUsed=SLOTS.some(s=>{const b=after[1][s.slot]; return b&&!same(b,OFF)&&!same(b,[0,1,0,0,0,0,0]);});
+  if(hsUsed&&!SLOTS.some(s=>isHS(after[0][s.slot]))) problems.push("HyperShift actions are set but no button is HyperShift, so they can't be used.");
+  return problems;
+}
+const hsHolders=()=>SLOTS.filter(s=>isHS(current[0][s.slot]));
+
+// ---------- buttons: the mouse drawing ----------
+const DEFS=`<defs>
+  <linearGradient id="bodyG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2b3039"/><stop offset=".55" stop-color="#1a1d23"/><stop offset="1" stop-color="#0f1115"/></linearGradient>
+  <linearGradient id="sideG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2f37"/><stop offset="1" stop-color="#121418"/></linearGradient>
+  <radialGradient id="shine" cx=".35" cy=".25" r=".6"><stop offset="0" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".45"/></filter></defs>`;
+const TOP_PATH="M500,80 C590,80 640,140 650,240 C660,340 662,430 642,500 C622,556 572,582 500,582 C428,582 380,560 360,505 C342,440 340,340 350,240 C360,140 410,80 500,80 Z";
+const TOP_BODY=`<path d="${TOP_PATH}" fill="url(#bodyG)" stroke="#3a414c" stroke-width="2" filter="url(#shadow)"/><path d="${TOP_PATH}" fill="url(#shine)"/>
+  <path d="M352,300 C346,360 346,420 356,470" fill="none" stroke="#3a414c" stroke-width="6" stroke-linecap="round"/>
+  <path d="M500,84 L500,268" stroke="#0b0c0f" stroke-width="3"/><path d="M357,300 C410,282 455,272 500,270 C545,272 590,282 643,300" fill="none" stroke="#0b0c0f" stroke-width="3"/>`;
+const SIDE_PATH="M210,430 C200,360 250,300 330,268 C430,228 560,214 660,240 C740,262 790,320 795,390 C798,425 785,446 760,450 L240,452 C222,452 212,444 210,430 Z";
+const LEFT_BODY=`<path d="${SIDE_PATH}" fill="url(#sideG)" stroke="#3a414c" stroke-width="2" filter="url(#shadow)"/>
+  <path d="M232,348 C290,296 380,252 486,230" fill="none" stroke="#0b0c0f" stroke-width="2.5"/>
+  <rect x="428" y="272" width="200" height="166" rx="18" fill="#101216" stroke="#353b46"/>
+  <path d="M240,452 L760,450" stroke="#353b46" stroke-width="5" stroke-linecap="round"/>`;
+const RIGHT_BODY=`<g transform="translate(1000,0) scale(-1,1)"><path d="${SIDE_PATH}" fill="url(#sideG)" stroke="#3a414c" stroke-width="2" filter="url(#shadow)"/>
+  <path d="M232,348 C290,296 380,252 486,230" fill="none" stroke="#0b0c0f" stroke-width="2.5"/>
+  <path d="M240,452 L760,450" stroke="#353b46" stroke-width="5" stroke-linecap="round"/>
+  <path d="M330,380 C420,404 560,404 640,386" fill="none" stroke="#2c323b" stroke-width="16" stroke-linecap="round"/></g>`;
+const BOTTOM_BODY=`<path d="${TOP_PATH}" fill="#16191e" stroke="#3a414c" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="440" y="96" width="120" height="14" rx="7" fill="#2b3038"/><rect x="430" y="548" width="140" height="14" rx="7" fill="#2b3038"/>
+  <circle cx="500" cy="300" r="26" fill="#0b0c0f" stroke="#353b46"/><circle cx="500" cy="300" r="9" fill="#5a1b22"/>
+  <rect x="484" y="470" width="32" height="16" rx="5" fill="#2b3038"/><text x="500" y="508" text-anchor="middle" class="keynum" style="font-size:11px;fill:#6b7380">power</text>`;
+const sideKeys=()=>{ const out=[]; for(let r=0;r<4;r++) for(let c=0;c<3;c++){ const n=r*3+c+1, x=440+c*62, y=282+r*38;
+  out.push({slot:0x3F+n,shape:`<rect class="hot" x="${x}" y="${y}" width="56" height="32" rx="7"/><text class="keynum" x="${x+28}" y="${y+21}">${n}</text>`,anchor:[x+28,y+16]}); } return out; };
+const band=d=>`<path class="hotband" d="${d}"/><path class="band" d="${d}"/>`;
+const VIEWS={
+  top:{body:TOP_BODY,lines:"always",spots:[
+    {slot:1,shape:`<path class="hot" d="M498,86 L498,266 C455,270 405,282 358,298 C352,226 362,158 402,116 C428,92 462,86 498,86 Z"/>`,anchor:[430,200]},
+    {slot:2,shape:`<path class="hot" d="M502,86 C538,86 572,92 598,116 C638,158 648,226 642,298 C595,282 545,270 502,266 Z"/>`,anchor:[575,200]},
+    {slot:9,shape:`<rect class="hot" x="484" y="128" width="32" height="30" rx="12"/>`,anchor:[500,143]},
+    {slot:3,shape:`<rect class="hot" x="484" y="161" width="32" height="30" rx="6"/>`,anchor:[500,176]},
+    {slot:10,shape:`<rect class="hot" x="484" y="194" width="32" height="30" rx="12"/>`,anchor:[500,209]},
+    {slot:52,shape:`<path class="hot" d="M476,160 L462,176 L476,192 Z"/>`,anchor:[465,176]},
+    {slot:53,shape:`<path class="hot" d="M524,160 L538,176 L524,192 Z"/>`,anchor:[535,176]},
+    {slot:106,shape:`<rect class="hot" x="488" y="234" width="24" height="16" rx="6"/>`,anchor:[500,242]},
+    {slot:128,shape:`<rect class="hot" x="488" y="254" width="24" height="16" rx="6"/>`,anchor:[500,262]},
+    {slot:11,shape:`<rect class="hot" x="370" y="146" width="16" height="40" rx="8"/>`,anchor:[378,166]},
+    {slot:12,shape:`<rect class="hot" x="364" y="192" width="16" height="40" rx="8"/>`,anchor:[372,212]},
+    {slot:57,shape:`<rect class="hot" x="652" y="330" width="14" height="64" rx="7"/>`,anchor:[659,362]},
+  ],L:[11,12,52,1],R:[9,3,10,53,106,128,2,57],tf:[1.12,500,330]},
+  left:{body:LEFT_BODY,lines:"hover",spots:[
+    {slot:1,shape:band("M240,338 C300,292 390,252 482,232"),anchor:[300,300]},
+    {slot:11,shape:`<rect class="hot" x="330" y="300" width="36" height="16" rx="8" transform="rotate(-24 348 308)"/>`,anchor:[348,308]},
+    {slot:12,shape:`<rect class="hot" x="378" y="280" width="36" height="16" rx="8" transform="rotate(-18 396 288)"/>`,anchor:[396,288]},
+    ...sideKeys()],L:[1,11,12],R:Array.from({length:12},(_,i)=>0x40+i),tf:[0.8,500,330]},
+  right:{body:RIGHT_BODY,lines:"always",spots:[
+    {slot:2,shape:band("M760,338 C700,292 610,252 518,232"),anchor:[700,300]},
+    {slot:57,shape:`<rect class="hot" x="560" y="328" width="84" height="26" rx="13"/>`,anchor:[602,341]},
+  ],L:[],R:[2,57],tf:[0.8,500,330]},
+  bottom:{body:BOTTOM_BODY,lines:"always",spots:[
+    {slot:14,shape:`<circle class="hot" cx="500" cy="410" r="17"/>`,anchor:[500,410]},
+  ],L:[],R:[14],tf:[1.12,500,330]},
+};
+function layoutCallouts(slots,anchors){
+  const items=slots.map(s=>({slot:s,ay:anchors[s][1]})).sort((a,b)=>a.ay-b.ay);
+  const TOP=12,BOT=628,n=items.length; const G=n>8?6:8; const H=Math.min(46,Math.floor((BOT-TOP-(n-1)*G)/Math.max(1,n)));
+  let y=TOP; items.forEach(it=>{ it.y=Math.max(y,it.ay-H/2); y=it.y+H+G; });
+  let lim=BOT; for(let i=n-1;i>=0;i--){ items[i].y=Math.min(items[i].y,lim-H); lim=items[i].y-G; }
+  items.forEach(it=>it.h=H); return items;
+}
+const trunc=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
+function renderStage(){
+  const st=$("stage");
+  if(view==="list"){ $("photoBar").innerHTML=""; renderList(); return; }
+  const V=VIEWS[view]; const [k,cx,cy]=V.tf||[1,500,330]; const anchors={}; V.spots.forEach(sp=>anchors[sp.slot]=[cx+(sp.anchor[0]-cx)*k,cy+(sp.anchor[1]-cy)*k]);
+  const ph=photos[view]; if(ph) V.spots.forEach(sp=>{ const p=photoPos[view]?.[sp.slot]; if(p) anchors[sp.slot]=p; });
+  const holders=new Set(hsHolders().map(s=>s.slot));
+  const cls=sl=>`slot${sl===selSlot?" sel":""}${layer===1&&holders.has(sl)?" hs":""}`;
+  const spots=ph?V.spots.map(sp=>{ const [x,y]=anchors[sp.slot], key=sp.slot>=0x40&&sp.slot<=0x4B;
+      return `<g class="${cls(sp.slot)}" data-slot="${sp.slot}"><circle class="hot mk" cx="${x}" cy="${y}" r="${key?12:15}"/>${key?`<text class="mk-n" x="${x}" y="${y+4}">${sp.slot-0x3F}</text>`:""}</g>`; }).join("")
+    :V.spots.map(sp=>`<g class="${cls(sp.slot)}" data-slot="${sp.slot}">${sp.shape}</g>`).join("");
+  let co="", leads="";
+  for(const side of ["L","R"]){ const x=side==="L"?14:736, w=250;
+    layoutCallouts(V[side],anchors).forEach(it=>{
+      const s=SLOT[it.slot], b=current[layer][it.slot], selc=it.slot===selSlot;
+      let act=!dev&&!b?"—":friendly(b,layer===1), dim=layer===1&&act==="—";
+      if(layer===1&&holders.has(it.slot)) { act="Hold for HyperShift"; dim=false; }
+      const custom=layer===0&&b&&!same(b,s.def)&&!sameMeaning(b,s.def);
+      const H=it.h, ex=side==="L"?x+w+2:x-2, ey=it.y+H/2, [ax,ay]=anchors[it.slot];
+      const mid=side==="L"?ex+22:ex-22;
+      const lc=V.lines==="hover"?" hidden":"";
+      leads+=`<path class="lead${selc?" sel show":lc}" data-lead="${it.slot}" d="M${ex},${ey} L${mid},${ey} L${ax},${ay}"/><rect class="dot${selc?" sel":""}" x="${ax-3}" y="${ay-3}" width="6" height="6" ${V.lines==="hover"&&!selc?'style="display:none"':""} data-dot="${it.slot}"/>`;
+      co+=`<g class="co${selc?" sel":""}" data-slot="${it.slot}" role="button" tabindex="0" aria-label="${esc(s.name)}: ${esc(act)}"><title>${esc(s.name)}: ${esc(act)}</title>
+        <rect x="${x}" y="${it.y}" width="${w}" height="${H}" rx="9"/>
+        ${custom?`<circle class="badge" cx="${side==="L"?x+10:x+w-10}" cy="${it.y+H/2-9}" r="3.5"><title>Changed from factory</title></circle>`:""}
+        <text class="n" x="${side==="L"?x+w-10:x+10}" y="${it.y+H/2-5}" text-anchor="${side==="L"?"end":"start"}">${esc(s.name)}</text>
+        <text class="a${dim?" off":""}" x="${side==="L"?x+w-10:x+10}" y="${it.y+H/2+13}" text-anchor="${side==="L"?"end":"start"}">${esc(trunc(act,27))}</text></g>`;
+    }); }
+  const narrow=st.clientWidth>0&&st.clientWidth<640;
+  const scene=ph?`<image href="${ph}" x="${PHOTO.x}" y="${PHOTO.y}" width="${PHOTO.w}" height="${PHOTO.h}" preserveAspectRatio="xMidYMid meet"/>${spots}`
+    :`<g transform="translate(${cx},${cy}) scale(${k}) translate(${-cx},${-cy})">${V.body}${spots}</g>`;
+  st.innerHTML=`<svg viewBox="${narrow?"230 0 540 640":"0 0 1000 640"}" class="${photoEdit&&ph?"editing":""}" role="img" aria-label="Naga V3 Pro, ${view} view">${DEFS}${scene}${narrow||photoEdit?"":leads+co}</svg>`;
+  if(narrow){ const wrap=document.createElement("div"); wrap.className="listv"; wrap.style.gridTemplateColumns="1fr";
+    [...V.L,...V.R].forEach(sl=>{ const b=document.createElement("button"); b.dataset.slot=sl; if(sl===selSlot) b.className="sel";
+      const act=layer===1&&holders.has(sl)?"Hold for HyperShift":!dev&&!current[layer][sl]?"—":friendly(current[layer][sl],layer===1);
+      b.innerHTML=`<span>${esc(SLOT[sl].name)}</span><b>${esc(act)}</b>`; wrap.append(b); }); st.append(wrap); }
+  if(ph&&photoEdit) enableDrag(st.querySelector("svg"));
+  renderPhotoBar(!!ph);
+  st.querySelectorAll("[data-slot]").forEach(g=>{ const s=+g.dataset.slot;
+    g.onclick=()=>{ if(!photoEdit) selectSlot(s); }; g.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); selectSlot(s); } };
+    g.onmouseenter=()=>hoverSlot(s,true); g.onmouseleave=()=>hoverSlot(s,false); });
+  const notes={top:"Click a button or its label to change it. An amber dot marks buttons changed from factory.",left:"The 12-button side plate, numbered as printed on the keys. Hover a label to see its key.",right:"The pinky button on the right side is HyperShift from the factory.",bottom:"The profile button switches on-board slots; its light shows which (white = slot 1)."};
+  if(photoEdit&&ph){ $("stageNote").textContent="Drag each circle onto its button in the photo, then press Done. Hover a circle to see which button it is."; return; }
+  $("stageNote").textContent=(layer===1?"Showing what each button does while HyperShift is held. “—” means nothing happens. ":"")+notes[view];
+}
+const H_CO=46;
+// ---------- your own photos of the mouse ----------
+const PHOTO={x:250,y:8,w:500,h:624};
+const VIEWNAME={top:"top",left:"left side",right:"right side",bottom:"bottom"};
+const photos={}; ["top","left","right","bottom"].forEach(v=>photos[v]=store.get("naga.photo."+v,null));
+let photoPos=store.get("naga.photoPos",{}), photoEdit=false;
+function renderPhotoBar(has){
+  const bar=$("photoBar"); bar.innerHTML="";
+  const mk=(t,fn,cls)=>{ const b=document.createElement("button"); b.textContent=t; if(cls) b.className=cls; b.onclick=fn; bar.append(b); };
+  if(!has){ mk(`Use a photo of your mouse's ${VIEWNAME[view]}`,()=>$("photoFile").click()); const s=document.createElement("span"); s.className="dim"; s.style.fontSize="12.5px"; s.textContent="Straight-on, plain background, cropped close."; bar.append(s); return; }
+  if(photoEdit){ mk("Done",()=>{ photoEdit=false; renderStage(); },"primary"); mk("Reset circles",()=>{ if(photoPos[view]) delete photoPos[view]; store.set("naga.photoPos",photoPos); renderStage(); }); return; }
+  mk("Move button circles",()=>{ photoEdit=true; renderStage(); });
+  mk("Replace photo",()=>$("photoFile").click(),"link");
+  mk("Use the drawing",()=>{ photos[view]=null; try{ localStorage.removeItem("naga.photo."+view); }catch(e){} renderStage(); },"link");
+}
+$("photoFile").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{
+    const url=URL.createObjectURL(f); const img=new Image(); await new Promise((ok,bad)=>{ img.onload=ok; img.onerror=()=>bad(new Error("That file isn't an image this browser can open (try a JPG or PNG).")); img.src=url; });
+    const scale=Math.min(1,1100/Math.max(img.width,img.height)); const c=document.createElement("canvas"); c.width=Math.round(img.width*scale); c.height=Math.round(img.height*scale);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
+    const data=c.toDataURL("image/jpeg",0.85);
+    if(!store.set("naga.photo."+view,data)) throw new Error("The browser didn't have room to keep this photo. Try a smaller one.");
+    photos[view]=data; const first=!photoPos[view]; photoEdit=true; renderStage();
+    if(first) toast("Now drag each circle onto its button in the photo");
+  }catch(err){ ask({title:"Couldn't use that photo",text:err.message}); } };
+function enableDrag(svg){
+  const toSvg=e=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); };
+  svg.querySelectorAll("g.slot").forEach(g=>{ const sl=+g.dataset.slot, c=g.querySelector("circle"), t=g.querySelector("text");
+    g.addEventListener("pointerdown",e=>{ e.preventDefault(); g.setPointerCapture(e.pointerId);
+      const move=ev=>{ const p=toSvg(ev); const x=Math.max(PHOTO.x,Math.min(PHOTO.x+PHOTO.w,p.x)), y=Math.max(PHOTO.y,Math.min(PHOTO.y+PHOTO.h,p.y));
+        c.setAttribute("cx",x); c.setAttribute("cy",y); if(t){ t.setAttribute("x",x); t.setAttribute("y",y+4); } };
+      const up=()=>{ g.removeEventListener("pointermove",move); g.removeEventListener("pointerup",up);
+        (photoPos[view]=photoPos[view]||{})[sl]=[+c.getAttribute("cx"),+c.getAttribute("cy")]; store.set("naga.photoPos",photoPos); };
+      g.addEventListener("pointermove",move); g.addEventListener("pointerup",up); });
+    g.insertAdjacentHTML("beforeend",`<title>${esc(SLOT[sl].name)}</title>`); });
+}
+function hoverSlot(s,on){ $("stage").querySelectorAll(`[data-slot="${s}"]`).forEach(g=>g.classList.toggle("hover",on));
+  const l=$("stage").querySelector(`[data-lead="${s}"]`), d=$("stage").querySelector(`[data-dot="${s}"]`);
+  if(l&&l.classList.contains("hidden")) l.classList.toggle("show",on); if(d&&VIEWS[view].lines==="hover"&&s!==selSlot) d.style.display=on?"":"none"; }
+function renderList(){
+  const st=$("stage"); st.innerHTML=""; const wrap=document.createElement("div"); wrap.className="listv"; let g="";
+  const holders=new Set(hsHolders().map(s=>s.slot));
+  SLOTS.forEach(s=>{ if(s.group!==g){ g=s.group; const h=document.createElement("div"); h.className="g"; h.textContent=g; wrap.append(h); }
+    const b=document.createElement("button"); if(s.slot===selSlot) b.className="sel";
+    const act=layer===1&&holders.has(s.slot)?"Hold for HyperShift":!dev&&!current[layer][s.slot]?"—":friendly(current[layer][s.slot],layer===1);
+    b.innerHTML=`<span>${esc(s.name)}</span><b>${esc(act)}</b>`; b.onclick=()=>selectSlot(s.slot); wrap.append(b); });
+  st.append(wrap); $("stageNote").textContent=layer===1?"Showing what each button does while HyperShift is held.":"Every button in one place.";
+}
+function selectSlot(s){ selSlot=s; draft=null; renderStage(); renderInspector(); if(window.innerWidth<=980) $("insp").scrollIntoView({behavior:"smooth",block:"start"}); }
+let lastNarrow=null; window.addEventListener("resize",()=>{ const n=$("stage").clientWidth<640; if(n!==lastNarrow){ lastNarrow=n; renderStage(); } });
+$("viewSeg").onclick=e=>{ const v=e.target.dataset.v; if(!v) return; view=v; photoEdit=false; document.querySelectorAll("#viewSeg button").forEach(b=>b.classList.toggle("sel",b.dataset.v===v));
+  const inView=v==="list"||VIEWS[v].spots.some(sp=>sp.slot===selSlot); if(!inView){ selSlot=VIEWS[v].spots.find(sp=>sp.slot!==1)?.slot??selSlot; draft=null; renderInspector(); } renderStage(); };
+$("layerSeg").onclick=e=>{ const l=e.target.dataset.l; if(l===undefined) return; layer=+l; draft=null; document.querySelectorAll("#layerSeg button").forEach(b=>b.classList.toggle("sel",b.dataset.l===l)); renderStage(); renderInspector(); };
+
+// ---------- buttons: the inspector ----------
+let draft=null;
+const QUICK=["Enter","Tab","Shift+Tab","Esc","Delete","Ctrl+C","Ctrl+V","Ctrl+Z","Ctrl+N","Win+2","Alt+C","Alt+L","Num +","Num −"];
+function draftFromBlock(b){
+  const d={type:"key",mods:0,key:KEYS.A,btn:1,dpi:6,turbo:false,pps:20,hex:b?hex(b):""};
+  if(!b) return d; const [c,l,a,k,e,f]=b;
+  if(c===2){ d.type="key"; d.mods=a; d.key=k; }
+  else if(c===0x0D){ d.type="key"; d.mods=a; d.key=k; d.turbo=true; d.pps=rawToPps((e<<8)|f); }
+  else if(c===1){ d.type="mouse"; d.btn=a; }
+  else if(c===0x0E){ d.type="mouse"; d.btn=a; if(l===3){ d.turbo=true; d.pps=rawToPps((k<<8)|e); } }
+  else if(c===6){ d.type="dpi"; d.dpi=a; }
+  else if(c===0x0C) d.type="hypershift"; else if(c===7) d.type="profile"; else if(c===0x12) d.type="wheelmode";
+  else if(c===0) d.type=layer===1?"key":"nothing";
+  if(describe(b).startsWith("Raw")) d.type="raw";
+  return d;
+}
+function blockFromDraft(d){
+  const turbo=d.turbo?ppsToRaw(d.pps||20):0;
+  switch(d.type){
+    case "off": return OFF.slice();
+    case "nothing": return [0,1,0,0,0,0,0];
+    case "default": return layer===0?SLOT[selSlot].def.slice():OFF.slice();
+    case "mouse": return turbo?[0x0E,0x03,d.btn,0,turbo,0,0]:(d.btn===0x68||d.btn===0x69)?[0x0E,1,d.btn,0,0x14,0,0]:[1,1,d.btn,0,0,0,0];
+    case "key": return turbo?[0x0D,0x04,d.mods,d.key,0,turbo,0]:[2,2,d.mods,d.key,0,0,0];
+    case "dpi": return [6,1,d.dpi,0,0,0,0];
+    case "hypershift": return [0x0C,0x01,0x39,0,0,0,0];
+    case "profile": return [7,1,4,0,0,0,0];
+    case "wheelmode": return [0x12,1,1,0,0,0,0];
+    case "raw": { const r=parseHex(d.hex); return r.length===7?r:null; }
+  }
+  return null;
+}
+const CATS=[["key","Key or shortcut"],["mouse","Mouse click"],["dpi","Sensitivity"],["hypershift","HyperShift"],["profile","On-board profile"],["wheelmode","Wheel feel"],["nothing","Do nothing"],["default","Factory setting"]];
+function renderInspector(){
+  const box=$("insp"), foot=$("inspFoot"); box.innerHTML=""; foot.innerHTML=""; foot.hidden=true; const s=SLOT[selSlot]; const cur=current[layer][selSlot];
+  const holders=hsHolders();
+  box.insertAdjacentHTML("beforeend",`<div class="kicker">${esc(s.group)}${layer?", while holding HyperShift":""}</div><h3>${esc(s.name)}</h3>`);
+  box.insertAdjacentHTML("beforeend",`<div class="now"><span>Does now</span><b>${esc(!dev&&!cur?"—":layer===1&&holders.some(h=>h.slot===selSlot)?"Hold for HyperShift":friendly(cur,layer===1))}</b></div>`);
+  if(s.locked){ box.insertAdjacentHTML("beforeend",'<p class="dim">Left click is locked so you can never lose the ability to click.</p>'); return; }
+  if(layer===1&&holders.some(h=>h.slot===selSlot)){ box.insertAdjacentHTML("beforeend",'<p class="dim">This is the HyperShift button, so it can\'t have a second job. Pick another button.</p>'); return; }
+  if(layer===1&&!holders.length) box.insertAdjacentHTML("beforeend",'<div class="banner" style="margin-bottom:12px"><b>No HyperShift button yet</b>Set the pinky button to HyperShift (Normal tab) or these won\'t do anything.</div>');
+  if(!canEdit()) box.insertAdjacentHTML("beforeend",'<p class="dim">Connect the mouse, or pick a layout to edit at the top.</p>');
+  if(!draft) draft=draftFromBlock(cur);
+  box.insertAdjacentHTML("beforeend",'<p class="q">Change it to</p>');
+  const cats=document.createElement("div"); cats.className="cats";
+  CATS.forEach(([v,t])=>{ const b=document.createElement("button"); b.className="chip"+(draft.type===v?" sel":""); b.textContent=t; b.onclick=()=>{ draft.type=v; renderInspector(); }; cats.append(b); });
+  const adv=document.createElement("button"); adv.className="chip adv"+(draft.type==="raw"?" sel":""); adv.textContent="Advanced: raw bytes"; adv.title="Advanced"; adv.onclick=()=>{ draft.type="raw"; if(!draft.hex&&cur) draft.hex=hex(cur); renderInspector(); }; cats.append(adv);
+  box.append(cats);
+  const pnl=document.createElement("div"); pnl.className="panel"; box.append(pnl);
+  const repeatUI=()=>{ const w=document.createElement("div"); w.className="row";
+    w.innerHTML=`<label class="row" style="gap:6px"><input type="checkbox" ${draft.turbo?"checked":""}> Repeat while held</label><input type="range" min="1" max="20" value="${draft.pps}" style="width:90px" ${draft.turbo?"":"disabled"}><span class="dim">${draft.pps}/s</span>`;
+    const [cb,r]=w.querySelectorAll("input"); cb.onchange=()=>{ draft.turbo=cb.checked; r.disabled=!cb.checked; update(); }; r.oninput=()=>{ draft.pps=+r.value; w.lastElementChild.textContent=draft.pps+"/s"; update(); }; return w; };
+  const chips=(items,get,set)=>{ const w=document.createElement("div"); w.className="quick"; items.forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if(get()===v) b.className="chip sel"; else b.className="chip"; b.onclick=()=>{ set(v); renderInspector(); }; w.append(b); }); return w; };
+  if(draft.type==="key"){
+    const q=document.createElement("div"); q.innerHTML='<div class="label">Common</div>'; const qw=document.createElement("div"); qw.className="quick";
+    QUICK.forEach(t=>{ const r=parseAction(t); const b=document.createElement("button"); b.textContent=t; b.onclick=()=>{ draft.mods=r.blk[2]; draft.key=r.blk[3]; renderInspector(); }; qw.append(b); }); q.append(qw); pnl.append(q);
+    const m=document.createElement("div"); m.className="mods";
+    MODS.forEach(([n,v])=>{ const b=document.createElement("button"); b.textContent=n==="Win"?"Win / ⌘":n; if(draft.mods&v) b.className="sel"; b.onclick=()=>{ draft.mods^=v; b.classList.toggle("sel"); update(); }; m.append(b); });
+    const plus=document.createElement("span"); plus.className="dim"; plus.textContent="+"; m.append(plus);
+    const ks=document.createElement("select"); KEYGROUPS.forEach(([g,list])=>{ const og=document.createElement("optgroup"); og.label=g; list.forEach(n=>og.append(new Option(n,KEYS[n]))); ks.append(og); }); ks.value=String(draft.key); ks.onchange=()=>{ draft.key=+ks.value; update(); }; m.append(ks);
+    pnl.append(m);
+    const rec=document.createElement("button"); rec.className="rec"; rec.textContent="Record a shortcut from the keyboard";
+    rec.onclick=()=>{ rec.classList.add("on"); rec.textContent="Press the shortcut now… (Esc cancels)"; const h=e=>{ if(["Control","Shift","Alt","Meta"].includes(e.key)) return;
+        document.removeEventListener("keydown",h,true); e.preventDefault(); e.stopPropagation();
+        if(e.code==="Escape"&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.shiftKey){ renderInspector(); return; }
+        const n=CODE2NAME(e.code); if(n){ draft.key=KEYS[n]; draft.mods=(e.ctrlKey?1:0)|(e.shiftKey?2:0)|(e.altKey?4:0)|(e.metaKey?8:0); } renderInspector(); };
+      document.addEventListener("keydown",h,true); };
+    pnl.append(rec);
+    const hint=document.createElement("div"); hint.className="dim"; hint.style.fontSize="12px"; hint.textContent="Shortcuts your computer grabs first (like Win+L) can't be recorded; pick them with the buttons above."; pnl.append(hint);
+    pnl.append(repeatUI());
+  } else if(draft.type==="mouse"){
+    pnl.append(chips(Object.entries(MOUSE).map(([v,n])=>[+v,n]),()=>draft.btn,v=>draft.btn=v)); pnl.append(repeatUI());
+    if(draft.turbo&&draft.btn===1) pnl.insertAdjacentHTML("beforeend",'<div class="dim" style="font-size:12px">This is an autoclicker: holding the button clicks repeatedly.</div>');
+  } else if(draft.type==="dpi"){
+    pnl.append(chips([[1,"Next stage up"],[2,"Next stage down"],[6,"Cycle through stages"]],()=>draft.dpi,v=>draft.dpi=v));
+  } else if(draft.type==="raw"){
+    const i=document.createElement("input"); i.value=draft.hex; i.placeholder="7 bytes, hex"; i.style.fontFamily="ui-monospace,Menlo,monospace"; i.style.width="100%"; i.oninput=()=>{ draft.hex=i.value; update(); }; pnl.append(i);
+    pnl.insertAdjacentHTML("beforeend",'<div class="dim" style="font-size:12px">For testing protocol codes. Use the other categories for normal changes.</div>');
+  } else {
+    const txt={hypershift:"Hold this button to switch every other button to its HyperShift job.",profile:"Steps through the on-board slots (only useful if Synapse created more than one).",wheelmode:"Switches the scroll wheel between clicky, free-spin and smart mode.",nothing:"The button does nothing.",default:layer?"Clears this button's HyperShift job.":`Puts back the factory job: ${friendly(s.def,false)}.`}[draft.type];
+    pnl.innerHTML=`<div class="dim">${esc(txt)}</div>`;
+  }
+  const prev=document.createElement("div"); prev.className="preview"; foot.append(prev); foot.hidden=false;
+  const btn=document.createElement("button"); btn.className="primary assign"; foot.append(btn);
+  function update(){ const blk=blockFromDraft(draft); const sameAsNow=blk&&cur&&sameMeaning(blk,cur);
+    prev.innerHTML=blk?`${esc(s.name)} will do <b>${esc(friendly(blk,layer===1))}</b>`:"Needs exactly 7 bytes.";
+    btn.textContent=sameAsNow?"Already set":inLayout()?`Save to “${editName}”`:"Save to mouse"; btn.disabled=!canEdit()||!blk||sameAsNow; }
+  btn.onclick=safe(async()=>{ const blk=blockFromDraft(draft); if(!blk) return; btn.disabled=true; btn.textContent="Saving…";
+    const r=await applyAll({buttons:{[layer]:{[selSlot]:blk}}},`Before changing ${s.name}${layer?" (HyperShift)":""}`,{toast:s.name});
+    draft=null; renderStage(); renderInspector(); });
+  update();
+}
+
+// ---------- one path for every change: plan, back up, write, verify, roll back if needed ----------
+function planChanges(t){
+  const plan={items:[],dpi:null,zones:[],device:[]};
+  for(const hs of [0,1]) for(const [slot,blk] of Object.entries(t.buttons?.[hs]||{})){ if(+slot===1||!SLOT[+slot]) continue; if(!sameMeaning(current[hs][+slot],blk)) plan.items.push([+slot,hs,blk]); }
+  const d=normDpi(t.dpi); if(d&&dpiText(d)!==dpiText(dpiMouse)) plan.dpi=d;
+  for(const z of ZONES){ const tz=t.lighting?.[z.id]; if(!tz||!tz.effect) continue; const full=fillZone(tz,ledMouse[z.id]); if(!ledSame(full,ledMouse[z.id])) plan.zones.push([z.id,full]); }
+  for(const [k,v] of Object.entries(t.device||{})) if(v!=null&&devMouse[k]!==v) plan.device.push([k,v]);
+  plan.total=plan.items.length+(plan.dpi?1:0)+plan.zones.length+plan.device.length;
+  return plan;
+}
+const DEVLABEL={poll:["Polling rate"," Hz"],sleep:["Sleep after"," s"],lowbat:["Low-battery warning","%"]};
+function planLines(plan){
+  const L=[];
+  for(const [slot,hs,blk] of plan.items) L.push(`${hs?"HyperShift + ":""}${SLOT[slot].name}: ${friendly(current[hs][slot],hs)} → ${friendly(blk,hs)}`);
+  if(plan.dpi) L.push(`DPI stages: ${dpiText(dpiMouse)} → ${dpiText(plan.dpi)}`);
+  const zl=s=>zoneLabel(s)+(s&&NEEDS[s.effect]?` ${s.c1}${s.effect==="breath2"?" / "+s.c2:""}`:"");
+  for(const [id,s] of plan.zones) L.push(`${ZONES.find(z=>z.id===id).key} light: ${zl(ledMouse[id])} → ${zl(s)}`);
+  for(const [k,v] of plan.device) L.push(`${DEVLABEL[k][0]}: ${devMouse[k]??"?"}${DEVLABEL[k][1]} → ${v}${DEVLABEL[k][1]}`);
+  return L;
+}
+let busy=false;
+async function applyAll(target,reason,opts={}){
+  if(!canEdit()) return {total:0,failed:0};
+  const plan=planChanges(target);
+  if(!plan.total){ if(opts.toast) saveNote(""); return {total:0,failed:0}; }
+  if(opts.confirm&&!(await ask({title:opts.confirm,text:inLayout()?`These change in “${editName}”. The previous version is kept.`:"These change on the mouse. A copy of its current setup goes to History first.",lines:planLines(plan),ok:opts.okLabel||(inLayout()?"Apply":"Load onto mouse")}))) return {total:0,failed:0,cancelled:true};
+  if(plan.items.length){ const p=guardChanges(plan.items); if(p.length&&!(await ask({title:"Are you sure?",lines:p,ok:"Save anyway"}))) return {total:0,failed:0,cancelled:true}; }
+  const before=snapshotNow(); if(!inLayout()) pushHistory(reason,before);
+  busy=true; saveNote("Saving…");
+  let done=0,failed=0,stop=false;
+  const step=async fn=>{ if(stop){ failed++; return; } try{ (await fn())?done++:failed++; }catch(e){ failed++; stop=true; log(e.message,"bad"); } if(plan.total>3) saveNote(`Saving ${done+failed} of ${plan.total}…`); };
+  try{
+    for(const [slot,hs,blk] of plan.items) await step(()=>writeSlot(slot,hs,blk));
+    if(plan.dpi) await step(async()=>{ const g=await writeDpi(plan.dpi); await readDpi(); return g; });
+    for(const [id,s] of plan.zones) await step(async()=>{ const a=await writeZone(P(),id,s); const b=await writeZone(0x00,id,s); return a&&b; });
+    if(plan.zones.length&&!stop) try{ await readLighting(); }catch(e){}
+    for(const [k,v] of plan.device) await step(()=>writeDevice(k,v));
+  } finally { busy=false; }
+  if(inLayout()) commitLayoutVersion(reason); else rememberMouse();
+  if(!opts.keepEditors){ if(plan.dpi){ dpiEdit=clone(dpiMouse); } if(plan.zones.length){ led=clone(ledMouse); } }
+  renderAll({skipEditors:opts.keepEditors});
+  if(failed){ saveNote(`${failed} change${failed>1?"s":""} not saved`,"badc");
+    alertBox("partial","bad","Not everything was saved",`${done} of ${plan.total} changes went through; the mouse may now be half-changed (it may have gone to sleep or been unplugged).`,
+    [["Put back how it was before",async()=>{ clearAlert("partial"); await applyAll(before,"Before rolling back a partial save"); },true],
+     ["Try again",async()=>{ clearAlert("partial"); await applyAll(target,"Before retrying",opts); }]]); }
+  else { clearAlert("partial"); const where=inLayout()?`“${editName}”`:"the mouse"; saveNote(`Saved to ${where} ✓`,"good"); if(opts.toast) toast(`${opts.toast} saved to ${where} ✓`,true); }
+  return {total:plan.total,failed,done};
+}
+
+// ---------- snapshots, history, undo, change detection ----------
+function snapshotNow(){
+  const buttons={0:{},1:{}};
+  for(const hs of [0,1]) for(const s of SLOTS) if(current[hs][s.slot]&&!s.locked) buttons[hs][s.slot]=current[hs][s.slot].slice();
+  const lighting={}; ZONES.forEach(z=>{ if(ledMouse[z.id]?.effect) lighting[z.id]=clone(ledMouse[z.id]); });
+  return {buttons,dpi:clone(dpiMouse),lighting,device:clone(devMouse),slot:activeSlot};
+}
+const histKey=()=>"naga.history."+mouseId, seenKey=()=>"naga.lastSeen."+mouseId;
+const getHistory=()=>store.get(histKey(),[]);
+function pushHistory(reason,snap){
+  const h=getHistory();
+  if(h[0]&&reason.startsWith("Before")&&h[0].reason===reason&&Date.now()-h[0].t<120000){ return; }   // one entry per burst of the same edit
+  if(h[0]&&snapEqual(h[0].snap,snap)&&h[0].reason.startsWith("Found")===reason.startsWith("Found")) return;
+  h.unshift({t:Date.now(),reason,snap}); while(h.length>40) h.pop();
+  store.set(histKey(),h); renderHistory(); updateUndo();
+}
+function rememberMouse(){ store.set(seenKey(),{t:Date.now(),snap:snapshotNow()}); }
+function diffSnap(a,b){
+  let n=0; for(const hs of [0,1]) for(const s of SLOTS){ if(s.locked) continue; const x=a?.buttons?.[hs]?.[s.slot], y=b?.buttons?.[hs]?.[s.slot]; if(x&&y&&!sameMeaning(x,y)) n++; }
+  const da=normDpi(a?.dpi), db=normDpi(b?.dpi); const dpi=!!(da&&db&&dpiText(da)!==dpiText(db));
+  let light=0; for(const z of ZONES){ const x=a?.lighting?.[z.id], y=b?.lighting?.[z.id]; if(x&&y&&!ledSame(x,y)) light++; }
+  return {buttons:n,dpi,light};
+}
+const diffText=d=>[d.buttons?`${d.buttons} button${d.buttons>1?"s":""}`:"",d.dpi?"DPI":"",d.light?`${d.light} light zone${d.light>1?"s":""}`:""].filter(Boolean).join(", ");
+const snapEqual=(a,b)=>{const d=diffSnap(a,b); return !d.buttons&&!d.dpi&&!d.light;};
+const isFactory=snap=>SLOTS.filter(s=>s.slot>=0x40&&s.slot<=0x4B||s.slot===57).every(s=>!snap.buttons?.[0]?.[s.slot]||sameMeaning(snap.buttons[0][s.slot],s.def));
+function checkAgainstLastSeen(when){
+  const now=snapshotNow(), seen=store.get(seenKey(),null);
+  clearAlert("changed");
+  if(seen&&!snapEqual(seen.snap,now)){
+    const factory=isFactory(now)&&!isFactory(seen.snap);
+    pushHistory("Found on mouse (changed outside this page)",now);
+    alertBox("changed",factory?"bad":"warn",
+      factory?"Your mouse looks reset to factory settings":"Your mouse was changed outside this page",
+      `${diffText(diffSnap(seen.snap,now))} differ from what this page last saw (${new Date(seen.t).toLocaleString()}). This usually means Synapse, OpenSnek, another computer or a reset. Nothing has been changed back yet.`,
+      [["Put back my previous setup",async()=>{ clearAlert("changed"); await applyAll(seen.snap,"Before restoring previous setup"); },true],
+       ["Keep what's on the mouse",async()=>{ rememberMouse(); clearAlert("changed"); }]]);
+  } else {
+    pushHistory(when==="connect"?"Found on mouse when connected":"Found on mouse",now);
+    rememberMouse();
+  }
+}
+function updateUndo(){
+  if(inLayout()){ const L=userLayouts[editName]; $("btnUndo").disabled=!(L&&L.versions&&L.versions.length>1); $("btnVersion").hidden=false; return; }
+  $("btnVersion").hidden=true;
+  const h=dev?getHistory():[]; $("btnUndo").disabled=!dev||!h.some(e=>e.reason.startsWith("Before")); }
+$("btnUndo").onclick=safe(async()=>{
+  if(inLayout()){ const L=userLayouts[editName]; const v=L?.versions?.[1]; if(!v) return; clearTimeout(ledTimer); clearTimeout(dpiTimer); ledTimer=dpiTimer=null;
+    setEditorFrom(layoutState(v.data)); commitLayoutVersion("Undo"); renderAll(); toast("Undone ✓"); return; }
+  const e=getHistory().find(e=>e.reason.startsWith("Before")); if(!e) return;
+  clearTimeout(ledTimer); clearTimeout(dpiTimer); ledTimer=dpiTimer=null;
+  const r=await applyAll(e.snap,"Before undo"); if(!r.total) toast("Nothing to undo: the mouse already matches."); else toast("Undone ✓"); });
+function renderHistory(){
+  const tb=$("histRows"); const h=getHistory(); tb.innerHTML="";
+  if(!h.length){ tb.innerHTML='<tr><td colspan="4" class="dim">Nothing yet.</td></tr>'; return; }
+  const now=snapshotNow();
+  h.forEach(e=>{ const tr=document.createElement("tr");
+    const dt=diffText(diffSnap(e.snap,now)); const status=dev?(dt||"same as mouse now"):"";
+    tr.innerHTML=`<td>${new Date(e.t).toLocaleString()}</td><td>${esc(e.reason)}${isFactory(e.snap)?'<span class="tag plain">factory</span>':""}</td><td class="dim">${status}</td><td style="text-align:right;white-space:nowrap"></td>`;
+    const b=document.createElement("button"); b.textContent="Put back"; b.disabled=!dev||!dt||inLayout(); if(inLayout()) b.title="Switch Editing to the mouse first";
+    b.onclick=safe(async()=>{ await applyAll(e.snap,"Before restoring from history",{confirm:`Put back the setup from ${new Date(e.t).toLocaleString()}?`}); });
+    const s=document.createElement("button"); s.textContent="Save as layout"; s.className="link"; s.onclick=safe(async()=>{ const n=await ask({title:"Save as layout",text:"Name for this layout:",input:"Restored "+new Date(e.t).toLocaleDateString(),ok:"Save"}); if(!n) return;
+      userLayouts[n]={note:"From history: "+e.reason+", "+new Date(e.t).toLocaleString(),...clone(e.snap)}; touch(n); saveLayouts(); renderLayouts(); toast(`Saved as “${n}”`); });
+    tr.lastElementChild.append(s," ",b); tb.append(tr); });
+}
+$("backupAll").onclick=()=>{ const data={format:"naga-control-backup/1",created:new Date().toISOString(),layouts:userLayouts,history:{},lastSeen:{}};
+  try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
+    if(k.startsWith("naga.history.")) data.history[k.slice(13)]=JSON.parse(localStorage.getItem(k));
+    if(k.startsWith("naga.lastSeen.")) data.lastSeen[k.slice(14)]=JSON.parse(localStorage.getItem(k)); } }catch(e){}
+  if(dev&&!data.history[mouseId]) data.history[mouseId]=[{t:Date.now(),reason:"In backup file",snap:snapshotNow()}];
+  data.photos=Object.fromEntries(Object.entries(photos).filter(([,v])=>v)); data.photoPos=photoPos;
+  download(`naga-backup-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(data,null,1));
+  store.set("naga.lastBackup",Date.now()); $("backupNote").textContent="Backup downloaded."; clearAlert("backup"); };
+$("backupLoad").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{ const j=JSON.parse(await f.text()); if(j.format!=="naga-control-backup/1") throw new Error("That isn't a Naga Control backup file.");
+    let added=0;
+    for(const n of Object.keys(j.layouts||{})){ let name=n; if(BUILTIN[name]) name+=" (backup)"; if(userLayouts[name]&&JSON.stringify(userLayouts[name])!==JSON.stringify(j.layouts[n])) name+=" (from backup)"; userLayouts[name]=j.layouts[n]; added++; }
+    for(const [id,h] of Object.entries(j.history||{})){ const k="naga.history."+id, mine=store.get(k,[]); const merged=[...mine,...h].sort((a,b)=>b.t-a.t).filter((e,i,a)=>i===0||e.t!==a[i-1].t).slice(0,60); store.set(k,merged); }
+    for(const [v,d] of Object.entries(j.photos||{})) if(!photos[v]&&store.set("naga.photo."+v,d)) photos[v]=d;
+    for(const [v,pos] of Object.entries(j.photoPos||{})) if(!photoPos[v]) photoPos[v]=pos; store.set("naga.photoPos",photoPos); renderStage();
+    saveLayouts(); renderLayouts(); renderHistory(); $("backupNote").textContent=`Restored ${added} layout(s) and history. Nothing on the mouse was changed.`; }catch(err){ log("Backup restore failed: "+err.message,"bad"); ask({title:"Backup restore failed",text:err.message}); } };
+function download(name,text){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type:"application/json"})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); }
+
+// ---------- layout text format (for chats with Claude) ----------
+const GUIDE=`Naga Control layout text (Razer Naga V3 Pro). JSON. Only what is listed gets changed.
+
+{
+  "naga-control": 2,
+  "name": "Work – reading",
+  "note": "optional description",
+  "buttons": { "Side 1": "Win+L", "Side 8": "Ctrl+N", "Pinky": "HyperShift", "everything else": "factory" },
+  "hypershift": { "Scroll up": "Num +", "Side 3": "Ctrl+V", "everything else": "off" },
+  "dpi": { "stages": [800, 1600, "3200x2400"], "start at stage": 2 },
+  "lighting": { "Logo": "off", "Side plate": "static #ff0000, brightness 60%", "Scroll wheel": "breathing #00ff00 #0000ff" },
+  "device": { "polling Hz": 1000, "sleep after seconds": 300, "low battery warning %": 10 }
+}
+
+Button names: Side 1 … Side 12, Pinky, Right click, Wheel click, Scroll up, Scroll down, Tilt left, Tilt right,
+Index front, Index rear, Behind wheel front, Behind wheel rear, Profile button. (Left click is locked.)
+"everything else" sets every button not listed. Leave it out to keep unlisted buttons as they are.
+"hypershift" = what each button does while the HyperShift button is held.
+
+Actions:
+  keys: Enter, Tab, Esc, Space, Backspace, Delete, A–Z, 0–9, F1–F24, Home, End, Page Up, Page Down,
+        Left/Right/Up/Down, Num 0–9, Num +, Num -, Num *, Num /, Num Enter, - = [ ] ; ' , . / \` \\,
+        Print Screen, Insert, Menu, Volume up, Volume down, Mute
+  shortcuts: Ctrl+N, Shift+Tab, Alt+C, Win+2, Ctrl+Shift+Esc (Win = Cmd on a Mac)
+  mouse: Left click, Right click, Middle click, Back, Forward, Scroll up, Scroll down, Scroll left, Scroll right
+  repeat while held: add ", repeat 20/s" (1–20), e.g. "Left click, repeat 20/s", "Enter, repeat 5/s"
+  other: DPI up, DPI down, DPI cycle, HyperShift, Switch profile, Scroll wheel mode, Nothing, Off, Factory
+  exact bytes: Raw 02 02 01 11 00 00 00
+  Not possible yet: typing text / macros.
+
+Lighting zones: Scroll wheel, Logo, Side plate, or "all". Each zone, one of:
+  off | static <color> | breathing <color> | breathing <color> <color> | breathing random |
+  spectrum | wave left | wave right | reactive <color> speed 1–4 (1 = shortest glow)
+  then optionally ", brightness 0–100%". Colors: #rrggbb or red, green, blue, white, cyan, magenta,
+  pink, purple, orange, yellow, teal.
+DPI: 1–5 stages, 100–50000; "800x600" = different horizontal x vertical.
+Device: polling 1000/500/125 Hz; sleep 60–900 s; low battery 5–25 %.`;
+$("guideText").textContent=GUIDE;
+function layoutToText(L,name){
+  const o={"naga-control":2,name}; if(L.note) o.note=L.note;
+  const editable=SLOTS.filter(s=>!s.locked);
+  for(const [hs,key] of [[0,"buttons"],[1,"hypershift"]]){
+    const b=L.buttons?.[hs]; if(!b||!Object.keys(b).length) continue;
+    const full=editable.every(s=>b[s.slot]); const out={};
+    if(hs===1&&full){ editable.forEach(s=>{ if(!same(b[s.slot],OFF)) out[s.key]=describe(b[s.slot]); }); out["everything else"]="off"; }
+    else editable.forEach(s=>{ if(b[s.slot]) out[s.key]=describe(b[s.slot]); });
+    o[key]=out;
+  }
+  const d=normDpi(L.dpi); if(d) o.dpi={stages:d.stages.map(s=>s.x===s.y?s.x:`${s.x}x${s.y}`),"start at stage":d.start+1};
+  if(L.lighting&&Object.keys(L.lighting).length){ o.lighting={}; ZONES.forEach(z=>{ const s=L.lighting[z.id]; if(s&&s.effect) o.lighting[z.key]=zoneText(s); }); }
+  if(L.device&&Object.keys(L.device).length){ o.device={}; if(L.device.poll) o.device["polling Hz"]=L.device.poll; if(L.device.sleep) o.device["sleep after seconds"]=L.device.sleep; if(L.device.lowbat) o.device["low battery warning %"]=L.device.lowbat; }
+  return JSON.stringify(o,null,2);
+}
+function parseLayoutText(text){
+  const errors=[];
+  let src=String(text).trim().replace(/^```[a-z]*\s*/i,"").replace(/```\s*$/,"");
+  const a=src.indexOf("{"), b=src.lastIndexOf("}"); if(a<0||b<a) return {errors:["No layout found. It should start with { and end with }."]};
+  src=src.slice(a,b+1).replace(/^\s*\/\/.*$/gm,"").replace(/,\s*([}\]])/g,"$1").replace(/[“”]/g,'"');
+  let j; try{ j=JSON.parse(src); }catch(e){ return {errors:["The text isn't valid JSON: "+e.message]}; }
+  if(j.format==="naga-control-layout/1"||(j.buttons&&(j.buttons["0"]||j.buttons["1"])&&Array.isArray(Object.values(j.buttons["0"]||j.buttons["1"]||{})[0]))){
+    const L={buttons:{0:{},1:{}},note:j.note}; for(const hs of ["0","1"]) for(const [slot,blk] of Object.entries(j.buttons?.[hs]||{})){
+      if(!Array.isArray(blk)||blk.length!==7||blk.some(v=>!(v>=0&&v<=255))) errors.push(`Bad entry for button ${slot}.`); else L.buttons[hs][slot]=blk; }
+    if(j.dpi) L.dpi=normDpi(j.dpi); if(j.lighting) L.lighting=j.lighting;
+    return {layout:L,name:j.name,errors};
+  }
+  const L={buttons:{0:{},1:{}}}; if(j.note) L.note=String(j.note);
+  const known=new Set(["naga-control","name","note","buttons","hypershift","dpi","lighting","device"]);
+  Object.keys(j).forEach(k=>{ if(!known.has(k)) errors.push(`Unknown section "${k}".`); });
+  for(const [hs,key] of [[0,"buttons"],[1,"hypershift"]]){
+    const sec=j[key]; if(sec==null) continue;
+    if(typeof sec!=="object"||Array.isArray(sec)){ errors.push(`"${key}" should be a list of "Button": "action".`); continue; }
+    let rest=null;
+    for(const [bn,act] of Object.entries(sec)){
+      if(/^(everything|all)\s*(else|others?)?$/i.test(bn.trim())){ rest=act; continue; }
+      const s=SLOTBYNAME[norm(bn)];
+      if(!s){ errors.push(`${key} › "${bn}": unknown button.`); continue; }
+      if(s.locked){ errors.push(`${key} › Left click is locked so it can't be lost.`); continue; }
+      const r=parseAction(act,s.slot,hs); if(r.error) errors.push(`${key} › ${s.key}: ${r.error}.`); else L.buttons[hs][s.slot]=r.blk;
+    }
+    if(rest!=null) SLOTS.forEach(s=>{ if(s.locked||L.buttons[hs][s.slot]) return; const r=parseAction(rest,s.slot,hs); if(r.error) errors.push(`${key} › everything else: ${r.error}.`); else L.buttons[hs][s.slot]=r.blk; });
+  }
+  if(j.dpi!=null){
+    const st=Array.isArray(j.dpi)?j.dpi:j.dpi.stages;
+    if(!Array.isArray(st)||!st.length||st.length>5) errors.push("dpi › stages should be a list of 1 to 5 numbers.");
+    else { const stages=[]; st.forEach(v=>{ const m=String(v).match(/^\s*(\d+)\s*(?:[x×]\s*(\d+))?\s*$/i); if(!m) errors.push(`dpi › "${v}" isn't a DPI value.`); else { const x=+m[1], y=+(m[2]||m[1]); if(x<100||x>50000||y<100||y>50000) errors.push(`dpi › ${v} is outside 100–50000.`); stages.push({x,y}); } });
+      const sa=Array.isArray(j.dpi)?1:(j.dpi["start at stage"]??j.dpi.start??1); if(!(sa>=1&&sa<=stages.length)) errors.push(`dpi › start at stage should be 1–${stages.length}.`);
+      L.dpi=normDpi({stages,start:(sa|0)-1}); }
+  }
+  if(j.lighting!=null){
+    L.lighting={}; const zoneByName={scrollwheel:1,wheel:1,scroll:1,logo:4,sideplate:5,sidepanel:5,side:5,buttons:5};
+    const entries=Object.entries(j.lighting); const allZ=entries.find(([k])=>norm(k)==="all");
+    if(allZ){ const r=parseZone(allZ[1]); if(r.error) errors.push(`lighting › all: ${r.error}.`); else ZONES.forEach(z=>L.lighting[z.id]=clone(r.zone)); }
+    for(const [k,v] of entries){ if(norm(k)==="all") continue; const id=zoneByName[norm(k)];
+      if(!id){ errors.push(`lighting › "${k}": unknown zone (use Scroll wheel, Logo, Side plate).`); continue; }
+      const r=parseZone(v); if(r.error) errors.push(`lighting › ${k}: ${r.error}.`); else L.lighting[id]=r.zone; }
+  }
+  if(j.device!=null){
+    L.device={};
+    for(const [k,v] of Object.entries(j.device)){ const n=norm(k), num=parseFloat(String(v).replace(/[^\d.]/g,"")), mins=/min/i.test(String(v));
+      if(/poll/.test(n)){ if(POLLRAW[num]) L.device.poll=num; else errors.push(`device › polling must be 1000, 500 or 125 Hz.`); }
+      else if(/sleep|idle/.test(n)){ const s=Math.round(mins?num*60:num); if(s>=60&&s<=900) L.device.sleep=s; else errors.push(`device › sleep must be 60–900 seconds.`); }
+      else if(/batt/.test(n)){ if(num>=5&&num<=25) L.device.lowbat=Math.round(num); else errors.push(`device › low battery warning must be 5–25%.`); }
+      else errors.push(`device › "${k}": unknown setting.`); }
+  }
+  return {layout:L,name:j.name,errors};
+}
+function showTextResult(html,cls){ $("txtResult").innerHTML=html?`<div class="banner ${cls||""}">${html}</div>`:""; }
+function checkText(){
+  const t=$("layoutText").value; if(!t.trim()){ showTextResult("<b>Nothing to check</b>Paste a layout first."); return null; }
+  const r=parseLayoutText(t);
+  if(r.errors.length){ showTextResult(`<b>${r.errors.length} problem${r.errors.length>1?"s":""}. Nothing was changed.</b><ul class="plan">${r.errors.map(e=>`<li>${esc(e)}</li>`).join("")}</ul>`,"bad"); return null; }
+  if(!canEdit()){ showTextResult(`<b>The text is valid${r.name?`: “${esc(r.name)}”`:""}</b>Connect the mouse or pick a layout to edit to see exactly what would change.`,"good"); return r; }
+  const lines=planLines(planChanges(r.layout));
+  showTextResult(lines.length?`<b>Valid. Loading it would change ${lines.length} thing${lines.length>1?"s":""}:</b><ul class="plan">${lines.map(l=>`<li>${esc(l)}</li>`).join("")}</ul>`:"<b>Valid. The mouse already matches it.</b>","good");
+  return r;
+}
+$("txtCheck").onclick=()=>checkText();
+$("txtLoad").onclick=safe(async()=>{ const r=checkText(); if(!r) return; if(!canEdit()){ showTextResult("<b>Connect the mouse or pick a layout to edit first</b>","bad"); return; }
+  const name=r.name||"pasted layout", where=inLayout()?`“${editName}”`:"the mouse";
+  const res=await applyAll(r.layout,`Before loading "${name}" from text`,{confirm:inLayout()?`Apply “${name}” to ${where}?`:`Load “${name}” onto the mouse?`});
+  if(res.cancelled) return;
+  showTextResult(res.total?(res.failed?`<b>Partly loaded</b>See the warning at the top.`:`<b>Applied to ${esc(where)} ✓</b>${res.total} change${res.total>1?"s":""} saved.`):`<b>${esc(where)} already matches it.</b>`,res.failed?"bad":"good"); });
+$("txtSave").onclick=safe(async()=>{ const r=checkText(); if(!r) return; let name=await ask({title:"Save as layout",text:"Name:",input:r.name||"",ok:"Save"}); if(!name) return;
+  if(BUILTIN[name]) name+=" (mine)"; if(userLayouts[name]&&!(await ask({title:`Replace “${name}”?`,ok:"Replace"}))) return;
+  userLayouts[name]=r.layout; touch(name); saveLayouts(); renderLayouts(); updateMatch(); showTextResult(`<b>Saved as “${esc(name)}”</b>It's in Saved layouts. The mouse wasn't changed.`,"good"); });
+$("txtFromMouse").onclick=safe(async()=>{ if(!canEdit()){ $("txtCopyNote").textContent="Connect the mouse or pick a layout first."; return; }
+  if(!inLayout()){ $("txtCopyNote").textContent="Reading the mouse…"; await readEverything(); await readInfo(); }
+  const t=layoutToText(snapshotNow(),inLayout()?editName:"My mouse "+new Date().toLocaleDateString()); $("layoutText").value=t; showTextResult("");
+  await copyText(t,"txtCopyNote"); renderAll(); });
+$("txtGuide").onclick=()=>copyText(GUIDE,"txtCopyNote");
+
+// ---------- saved layouts ----------
+const K=(mods,key)=>[2,2,mods,KEYS[key],0,0,0];
+const DEF=slot=>SLOT[slot].def.slice();
+const BUILTIN={
+  "Work – reading":{builtin:true,
+    note:"Side 1 locks the screen, 3 copies, 4 Tab, 5 Enter, 6 Alt+C, 7 Shift+Tab, 8 new session (Ctrl+N), 9 Alt+L, 11 Epic (Win+2); 2 is free for the username. Holding the pinky button: scroll is Num + and Num −, Side 3 pastes.",
+    buttons:{0:{0x40:K(8,"L"),0x41:OFF,0x42:K(1,"C"),0x43:K(0,"Tab"),0x44:K(0,"Enter"),0x45:K(4,"C"),0x46:K(2,"Tab"),0x47:K(1,"N"),0x48:K(4,"L"),0x49:DEF(0x49),0x4A:K(8,"2"),0x4B:DEF(0x4B),57:DEF(57)},
+             1:{9:K(0,"Num +"),10:K(0,"Num −"),0x42:K(1,"V")}}},
+  "MapleStory":{builtin:true,
+    note:"Side buttons type 1–9, 0, -, = (factory). Pinky = left click repeating 20/s while held.",
+    buttons:{0:{...Object.fromEntries(SLOTS.filter(s=>s.slot>=0x40&&s.slot<=0x4B).map(s=>[s.slot,s.def.slice()])),57:[0x0E,0x03,1,0,1,0,0]},
+             1:{9:OFF,10:OFF,0x42:OFF}}},
+  "Factory reset (buttons)":{builtin:true,note:"Every button back to how it came out of the box, HyperShift jobs cleared.",
+    buttons:{0:Object.fromEntries(SLOTS.filter(s=>!s.locked).map(s=>[s.slot,s.def.slice()])),1:Object.fromEntries(SLOTS.filter(s=>!s.locked).map(s=>[s.slot,OFF.slice()]))}},
+};
+let userLayouts=store.get("naga.layouts",{});
+const saveLayouts=()=>{ store.set("naga.layouts",userLayouts); scheduleSync(); };
+const touch=n=>{ if(userLayouts[n]) userLayouts[n].updated=Date.now(); };
+const bury=n=>{ tomb[n]=Date.now(); store.set("naga.deleted",tomb); };
+const all=()=>({...BUILTIN,...userLayouts});
+function layoutSummary(p){ const parts=[]; const nb=Object.keys(p.buttons?.[0]||{}).length, nh=Object.keys(p.buttons?.[1]||{}).length;
+  if(nb) parts.push(`${nb} button${nb>1?"s":""}`); if(nh) parts.push("HyperShift"); if(normDpi(p.dpi)) parts.push("DPI"); if(p.lighting&&Object.keys(p.lighting).length) parts.push("lighting"); if(p.device&&Object.keys(p.device).length) parts.push("power");
+  return "Sets "+parts.join(", ")+"."; }
+const openVersions=new Set();
+function rel(t){ if(!t) return "never"; const d=(Date.now()-t)/1000; if(d<60) return "just now"; if(d<3600) return `${Math.round(d/60)} min ago`; if(d<86400) return `${Math.round(d/3600)} h ago`; return new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric"})+(d<31536000?"":" "+new Date(t).getFullYear()); }
+function renderLayouts(){
+  const box=$("layoutList"); box.innerHTML="";
+  const names=[...Object.keys(userLayouts).sort((x,y)=>(userLayouts[y].updated||0)-(userLayouts[x].updated||0)),...Object.keys(BUILTIN)];
+  names.forEach(name=>{ const p=all()[name]; const row=document.createElement("div"); row.className="lrow";
+    const on=dev&&!inLayout()&&layoutMatches(p), editing=inLayout()&&editName===name;
+    const pending=!p.builtin&&p.updated&&(!p.lastLoaded||p.lastLoaded<p.updated)&&!on;
+    const meta=p.builtin?"Built-in starting point":`Changed ${rel(p.updated)}${p.lastLoaded?`, last loaded onto the mouse ${rel(p.lastLoaded)}`:""}`;
+    row.innerHTML=`<div><b>${esc(name)}</b>${p.builtin?'<span class="tag plain">built in</span>':""}${editing?'<span class="tag">editing</span>':""}${on?'<span class="tag">on the mouse</span>':""}${pending?'<span class="tag pending">not on the mouse yet</span>':""}<small>${esc(meta)}</small>${p.note?`<small>${esc(p.note)}</small>`:""}</div><div class="acts"></div>`;
+    const acts=row.lastElementChild;
+    const mk=(t,fn,cls,parent=acts)=>{ const b=document.createElement("button"); b.textContent=t; if(cls) b.className=cls; b.onclick=safe(fn); parent.append(b); return b; };
+    if(p.builtin){
+      mk("Make my own copy",async()=>{ let n=name.replace(/ \(buttons\)$/,""),i=2; while(all()[n]) n=`${name} ${i++}`; const c=clone(p); delete c.builtin; userLayouts[n]=c; touch(n); saveLayouts(); await enterLayoutMode(n); showTab("buttons"); toast(`Editing your copy, “${n}”`); });
+    } else {
+      if(!editing) mk("Edit",async()=>{ await enterLayoutMode(name); showTab("buttons"); });
+      mk(`Versions (${(p.versions||[]).length})`,async()=>{ openVersions.has(name)?openVersions.delete(name):openVersions.add(name); renderLayouts(); },"link");
+    }
+    mk("Copy as text",async()=>{ const t=layoutToText(p,name); $("layoutText").value=t; showTextResult(""); await copyText(t); toast("Copied as text; paste it into the chat"); },"link");
+    mk("Export",async()=>download(name.replace(/[^\w-]+/g,"_")+".json",layoutToText(p,name)),"link");
+    if(!p.builtin){
+      mk("Duplicate",async()=>{ let n=name+" copy",i=2; while(all()[n]) n=`${name} copy ${i++}`; const c=clone(p); c.versions=[]; delete c.lastLoaded; userLayouts[n]=c; touch(n); saveLayouts(); renderLayouts(); renderEditSel(); },"link");
+      mk("Copy the mouse into it",async()=>{ if(!dev) return toast("Plug in the mouse first; this copies what's on it.");
+        if(!(await ask({title:`Replace “${name}” with what's on the mouse?`,text:"The current version is kept in its versions list. The mouse isn't changed.",ok:"Replace"}))) return;
+        if(inLayout()) await enterMouseMode(); await readEverything(); const L=userLayouts[name]; Object.assign(L,dataOf(snapshotNow())); addVersion(L,"Copied from the mouse"); L.lastLoaded=Date.now(); touch(name); L.lastLoaded=L.updated; saveLayouts(); renderAll(); },"link");
+      mk("Rename",async()=>{ const n=await ask({title:"Rename layout",input:name,ok:"Rename"}); if(!n||n===name) return; if(all()[n]) return toast("That name is taken.");
+        userLayouts[n]=userLayouts[name]; delete userLayouts[name]; bury(name); touch(n); if(editName===name){ editName=n; store.set("naga.lastEdit",n); } saveLayouts(); renderAll(); },"link");
+      mk("Delete",async()=>{ if(!(await ask({title:`Delete “${name}”?`,text:"It's removed here and on your other devices. The mouse isn't changed.",ok:"Delete"}))) return;
+        delete userLayouts[name]; bury(name); saveLayouts(); if(editName===name) await pickStartTarget(); renderAll(); },"link");
+    }
+    if(on){ const t=document.createElement("span"); t.className="dim small"; t.textContent="On the mouse now"; acts.append(t); }
+    else { const ld=mk("Load onto mouse",async()=>{ await loadOntoMouse(p,name); }); ld.disabled=!dev; if(!dev) ld.title=HAS_HID?"Plug in the mouse first":"Use a computer with Chrome or Edge to load onto the mouse"; }
+    if(!p.builtin&&openVersions.has(name)){
+      const vl=document.createElement("div"); vl.className="vlist";
+      (p.versions||[]).forEach((v,i)=>{ const vr=document.createElement("div"); vr.className="vrow";
+        vr.innerHTML=`<div>${v.named?`<b>${esc(v.note)}</b>`:esc(v.note)}${i===0?' <span class="tag plain">current</span>':""}<div class="when">${new Date(v.t).toLocaleString()}</div></div><div class="acts"></div>`;
+        const va=vr.lastElementChild;
+        if(i>0) mk("Go back to this",async()=>{ if(!(await ask({title:`Go back to this version of “${name}”?`,text:`${v.note}, ${new Date(v.t).toLocaleString()}. The current version stays in the list.`,ok:"Go back"}))) return;
+          const L=userLayouts[name]; Object.assign(L,clone(v.data)); addVersion(L,`Went back to: ${v.note}`); touch(name); saveLayouts();
+          if(editName===name&&inLayout()) setEditorFrom(layoutState(L)); renderAll(); toast("Version restored ✓"); },"link",va);
+        const lv=mk("Load onto mouse",async()=>{ await loadOntoMouse(v.data,`${name} (${new Date(v.t).toLocaleString()})`,name); },"link",va); lv.disabled=!dev;
+        mk("Copy as text",async()=>{ await copyText(layoutToText(v.data,name)); toast("Copied as text"); },"link",va);
+        vl.append(vr); });
+      if(!(p.versions||[]).length) vl.innerHTML='<div class="vrow dim">No versions yet. They appear as you edit.</div>';
+      row.append(vl); }
+    box.append(row); });
+}
+function layoutMatches(p){ if(!p) return false; const plan=planChanges(p); const any=Object.keys(p.buttons?.[0]||{}).length+Object.keys(p.buttons?.[1]||{}).length+(p.dpi?1:0)+Object.keys(p.lighting||{}).length;
+  return any>0&&plan.items.length===0&&!plan.dpi&&plan.zones.length===0; }
+function updateMatch(){ if(!dev||inLayout()){ $("stMatch").hidden=true; return; }
+  const m=Object.entries(all()).filter(([,p])=>layoutMatches(p)).map(([n])=>n);
+  $("stMatch").hidden=false; $("stMatch").innerHTML=m.length?`Layout <b>${esc(m[0])}</b>`:"Custom setup"; }
+$("profSnap").onclick=safe(async()=>{ if(!dev) return toast("Plug in the mouse first; this copies what's on it.");
+  const name=await ask({title:"Save the mouse's setup as a layout",text:"Name:",input:"",ok:"Save"}); if(!name) return;
+  if(BUILTIN[name]) return toast("That name is used by a built-in layout.");
+  if(userLayouts[name]&&!(await ask({title:`Replace “${name}”?`,ok:"Replace"}))) return;
+  if(inLayout()) await enterMouseMode(); await readEverything(); userLayouts[name]={note:"Copied from the mouse on "+new Date().toLocaleString()+".",...dataOf(snapshotNow())}; touch(name); saveLayouts(); renderLayouts(); updateMatch(); toast(`Saved as “${name}”`); });
+$("profImport").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  const text=await f.text();
+  try{ if(JSON.parse(text).format==="naga-control-backup/1"){ ask({title:"That's a full backup",text:"Use “Restore from backup file” on the History tab."}); return; } }catch(err){}
+  const r=parseLayoutText(text);
+  if(r.errors.length){ ask({title:"Import failed",lines:r.errors}); return; }
+  let name=(r.name||f.name.replace(/\.(json|txt)$/,"")).trim();
+  if(BUILTIN[name]) name+=" (imported)"; if(userLayouts[name]&&!(await ask({title:`Replace “${name}”?`,ok:"Replace"}))) return;
+  userLayouts[name]=r.layout; touch(name); saveLayouts(); renderLayouts(); updateMatch(); toast(`Imported “${name}”`); };
+
+// ---------- editing a layout without the mouse ----------
+const DEFAULT_DPI={start:1,stages:[{x:800,y:800},{x:1600,y:1600},{x:3200,y:3200}]};
+const dataOf=L=>({buttons:clone(L.buttons||{0:{},1:{}}),dpi:clone(L.dpi||null),lighting:clone(L.lighting||{}),device:clone(L.device||{})});
+function layoutState(L){
+  const b={0:{},1:{}};
+  SLOTS.forEach(s=>{ b[0][s.slot]=(L.buttons?.[0]?.[s.slot]||s.def).slice(); b[1][s.slot]=(s.locked?OFF:(L.buttons?.[1]?.[s.slot]||OFF)).slice(); });
+  const lighting={}; ZONES.forEach(z=>{ const t=L.lighting?.[z.id]; lighting[z.id]=t&&t.effect?fillZone(t,defZone()):defZone(); });
+  return {buttons:b,dpi:normDpi(L.dpi)||clone(DEFAULT_DPI),lighting,device:{poll:1000,sleep:300,lowbat:10,...(L.device||{})}};
+}
+function setEditorFrom(st){ current[0]=clone(st.buttons[0]); current[1]=clone(st.buttons[1]); dpiMouse=normDpi(st.dpi); ledMouse=clone(st.lighting); devMouse=clone(st.device); dpiEdit=clone(dpiMouse); led=clone(ledMouse); }
+function addVersion(L,note,named){ L.versions=L.versions||[]; const v0=L.versions[0], now=Date.now(), data=dataOf(L);
+  if(!named&&v0&&v0.auto&&v0.note===note&&now-v0.t<120000){ v0.t=now; v0.data=data; }
+  else L.versions.unshift({t:now,note,data,...(named?{named:true}:{auto:true})});
+  pruneVersions(L); }
+function pruneVersions(L){ let auto=0; L.versions=(L.versions||[]).filter((v,i)=>i===0||v.named||++auto<=60); }
+function commitLayoutVersion(reason){
+  const L=userLayouts[editName]; if(!L) return;
+  Object.assign(L,dataOf(snapshotNow()));
+  let note=String(reason).replace(/^Before changing /,"Changed ").replace(/^Before saving /,"Saved ").replace(/^Before loading /,"Loaded ").replace(/^Before /,"");
+  addVersion(L,note.charAt(0).toUpperCase()+note.slice(1)); touch(editName); saveLayouts(); updateUndo();
+}
+async function enterLayoutMode(name){
+  const L=userLayouts[name]; if(!L) return;
+  clearTimeout(ledTimer); clearTimeout(dpiTimer); ledTimer=dpiTimer=null;
+  mode="layout"; editName=name; store.set("naga.lastEdit",name);
+  if(!L.versions||!L.versions.length){ addVersion(L,"Starting point",false); saveLayouts(); }
+  setEditorFrom(layoutState(L)); clearAlert("changed"); clearAlert("partial"); renderAll();
+  if(dev) offerLoad();
+}
+async function enterMouseMode(){
+  if(!dev){ if(HAS_HID) connect(); return; }
+  clearTimeout(ledTimer); clearTimeout(dpiTimer); ledTimer=dpiTimer=null;
+  mode="mouse"; editName=null; store.set("naga.lastEdit","__mouse__"); clearAlert("mouseReady");
+  setConn("Reading the mouse…",""); await readInfo(); await readEverything(n=>setConn(`Reading buttons ${n}%…`,""));
+  dpiEdit=clone(dpiMouse); led=clone(ledMouse); setConn(PIDS[dev.productId]||dev.productName,"on");
+  renderAll(); checkAgainstLastSeen("connect");
+}
+function offerLoad(){
+  const L=userLayouts[editName]; if(!dev||!L) return;
+  alertBox("mouseReady","good","The mouse is connected",`You're editing “${editName}”. Load it onto the mouse, or switch to editing the mouse directly.`,
+    [[`Load “${editName}” onto the mouse`,async()=>{ clearAlert("mouseReady"); await loadOntoMouse(L,editName,editName); },true],["Edit the mouse instead",async()=>{ await enterMouseMode(); }]]);
+}
+async function loadOntoMouse(data,label,layoutName){
+  if(!dev) return toast(HAS_HID?"Plug in the mouse first.":"Open this page on a computer with Chrome or Edge to load onto the mouse.");
+  const keepEditing=inLayout()?editName:null;
+  if(inLayout()){ mode="mouse"; editName=null; setConn("Reading the mouse…",""); await readInfo(); await readEverything(); setConn(PIDS[dev.productId]||dev.productName,"on"); checkAgainstLastSeen("connect"); }
+  const r=await applyAll(data,`Before loading "${label}"`,{confirm:`Load “${label}” onto the mouse?`});
+  const n=layoutName||label;
+  if(!r.cancelled&&!r.failed&&userLayouts[n]){ userLayouts[n].lastLoaded=Date.now(); store.set("naga.layouts",userLayouts); scheduleSync(); }
+  if(keepEditing&&userLayouts[keepEditing]) await enterLayoutMode(keepEditing); else renderAll();
+  if(!r.cancelled) toast(!r.total?`The mouse already matches “${label}”.`:r.failed?`“${label}” only partly loaded.`:`“${label}” is on the mouse ✓`,!!r.total&&!keepEditing);
+  return r;
+}
+function renderEditSel(){
+  const sel=$("editSel"); sel.innerHTML="";
+  if(HAS_HID) sel.add(new Option(dev?"The mouse":"The mouse (not connected)","__mouse__"));
+  const names=Object.keys(userLayouts).sort((a,b)=>a.localeCompare(b));
+  if(names.length){ const g=document.createElement("optgroup"); g.label="My layouts"; names.forEach(n=>g.append(new Option(n,n))); sel.append(g); }
+  sel.add(new Option("New layout…","__new__"));
+  sel.value=inLayout()?editName:"__mouse__";
+}
+$("editSel").onchange=safe(async()=>{ const v=$("editSel").value;
+  if(v==="__mouse__"){ await enterMouseMode(); renderEditSel(); return; }
+  if(v==="__new__"){ renderEditSel(); const n=await ask({title:"New layout",text:canEdit()?"It starts as a copy of what you're editing now.":"It starts from the Work layout.",input:"",ok:"Create"}); if(!n) return;
+    if(all()[n]) return toast("That name is taken.");
+    userLayouts[n]=canEdit()?{note:"",...dataOf(snapshotNow())}:{...clone(BUILTIN["Work – reading"]),builtin:undefined}; delete userLayouts[n].builtin; userLayouts[n].versions=[]; touch(n); saveLayouts();
+    await enterLayoutMode(n); toast(`Editing “${n}”`); return; }
+  await enterLayoutMode(v); });
+$("btnVersion").onclick=safe(async()=>{ const L=userLayouts[editName]; if(!L) return;
+  const n=await ask({title:"Save a version",text:`A named copy of “${editName}” as it is now. You can go back to it from Layouts.`,input:new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"})+" version",ok:"Save version"}); if(!n) return;
+  addVersion(L,n,true); touch(editName); saveLayouts(); renderLayouts(); toast(`Saved version “${n}”`); });
+async function pickStartTarget(){
+  const last=store.get("naga.lastEdit",null);
+  if(last&&last!=="__mouse__"&&userLayouts[last]) return enterLayoutMode(last);
+  if(HAS_HID){ mode="mouse"; editName=null; return; }
+  const names=Object.keys(userLayouts).sort((a,b)=>(userLayouts[b].updated||0)-(userLayouts[a].updated||0));
+  if(names.length) return enterLayoutMode(names[0]);
+  const c=clone(BUILTIN["Work – reading"]); delete c.builtin; userLayouts["Work"]=c; touch("Work"); saveLayouts(); return enterLayoutMode("Work");
+}
+
+// ---------- sync between devices (private store in Supabase, reachable only with your key) ----------
+const SUPA="https://noytzrdrvaztjeytdwma.supabase.co";
+const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5veXR6cmRydmF6dGpleXRkd21hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2NDIxMDYsImV4cCI6MjEwMTIxODEwNn0.vLNC_BytGT7mXfZ28XyYXDnCxg-hCLi3uuyZwGf1FrM";
+let syncKey=store.get("naga.syncKey",null), syncTimer=null, syncing=false, syncAgain=false, tomb=store.get("naga.deleted",{});
+function setSync(text,cls){ const el=$("stSync"); el.hidden=!syncKey; el.textContent=text; el.className="small "+(cls||"dim"); renderSyncBox(); }
+async function rpc(fn,body){ const r=await fetch(`${SUPA}/rest/v1/rpc/${fn}`,{method:"POST",headers:{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!r.ok) throw new Error(`the sync server answered ${r.status}`); return r.json(); }
+function mergeDocs(local,remote){
+  const deleted={...(remote.deleted||{})}; for(const [n,t] of Object.entries(local.deleted||{})) deleted[n]=Math.max(t,deleted[n]||0);
+  const out={layouts:{},deleted};
+  const names=new Set([...Object.keys(local.layouts||{}),...Object.keys(remote.layouts||{})]);
+  for(const n of names){ const a=local.layouts?.[n], b=remote.layouts?.[n];
+    const pick=clone(!a?b:!b?a:((b.updated||0)>(a.updated||0)?b:a));
+    const seen=new Set(); pick.versions=[...(a?.versions||[]),...(b?.versions||[])].sort((x,y)=>y.t-x.t).filter(v=>{ const k=v.t+"|"+v.note; if(seen.has(k)) return false; seen.add(k); return true; });
+    pick.lastLoaded=Math.max(a?.lastLoaded||0,b?.lastLoaded||0)||undefined; pruneVersions(pick);
+    if(deleted[n]&&deleted[n]>=(pick.updated||0)) continue;
+    out.layouts[n]=pick; }
+  return out;
+}
+function applyMerged(m){
+  const before=inLayout()?JSON.stringify(dataOf(userLayouts[editName]||{})):null;
+  userLayouts=m.layouts; tomb=m.deleted; store.set("naga.layouts",userLayouts); store.set("naga.deleted",tomb);
+  if(inLayout()){
+    if(!userLayouts[editName]){ pickStartTarget(); return; }
+    if(JSON.stringify(dataOf(userLayouts[editName]))!==before){ setEditorFrom(layoutState(userLayouts[editName])); renderAll(); toast(`“${editName}” was updated from another device`); return; }
+  }
+  renderLayouts(); renderEditSel();
+}
+async function syncNow(){
+  if(!syncKey) return; if(syncing){ syncAgain=true; return; }
+  if(!navigator.onLine){ setSync("Offline; will sync later"); return; }
+  if(ledTimer||dpiTimer||busy){ scheduleSync(); return; }
+  syncing=true; setSync("Syncing…");
+  try{
+    for(let i=0;i<4;i++){
+      const remote=await rpc("naga_pull",{p_key:syncKey});
+      const merged=mergeDocs({layouts:userLayouts,deleted:tomb},remote.doc||{});
+      applyMerged(merged);
+      const res=await rpc("naga_push",{p_key:syncKey,p_doc:{format:"naga-sync/1",...merged},p_base:remote.updated_at});
+      if(!res.conflict){ store.set("naga.syncAt",Date.now()); setSync("Synced"); return; }
+    }
+    setSync("Couldn't sync; try again","badc");
+  }catch(e){ setSync("Not synced: "+e.message,"badc"); log("Sync: "+e.message,"warn"); }
+  finally{ syncing=false; if(syncAgain){ syncAgain=false; scheduleSync(); } }
+}
+function scheduleSync(){ if(!syncKey) return; clearTimeout(syncTimer); syncTimer=setTimeout(()=>syncNow(),1200); }
+function newKey(){ const b=new Uint8Array(30); crypto.getRandomValues(b); return btoa(String.fromCharCode(...b)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+const syncLink=()=>location.origin+location.pathname+"#sync="+syncKey;
+function renderSyncBox(){
+  const box=$("syncBox"); if(!box) return; box.innerHTML="";
+  const mk=(t,fn,cls)=>{ const b=document.createElement("button"); b.textContent=t; if(cls) b.className=cls; b.onclick=safe(fn); return b; };
+  if(!syncKey){
+    box.innerHTML=`<h3>Use these layouts on your other devices</h3><p class="dim small" style="margin:0">Edit on your iPhone, then load onto the mouse from a computer. Layouts and their versions are kept in your private online store, which only opens with a key that stays on your devices.</p><div class="row"></div>`;
+    box.querySelector(".row").append(mk("Turn on sync",async()=>{ syncKey=newKey(); store.set("naga.syncKey",syncKey); await syncNow(); renderSyncBox(); toast("Sync is on. Open the device link on your other devices."); },"primary"),
+      mk("I already turned it on elsewhere",async()=>{ const k=await ask({title:"Connect to your layouts",text:"Open the device link from your other device here, or paste it below.",input:"",ok:"Connect"}); if(!k) return;
+        const m=k.match(/sync=([A-Za-z0-9_-]{32,})/)||k.match(/^([A-Za-z0-9_-]{32,})$/); if(!m) return toast("That isn't a device link.");
+        syncKey=m[1]; store.set("naga.syncKey",syncKey); await syncNow(); renderAll(); },"link"));
+    return; }
+  const at=store.get("naga.syncAt",0);
+  box.innerHTML=`<h3>Sync is on</h3><p class="dim small" style="margin:0">Last synced ${rel(at)}. To add a device, open the device link on it once (iPhone: AirDrop or Messages it to yourself, open it in Safari, then Share → Add to Home Screen).</p><div class="row"></div>`;
+  const row=box.querySelector(".row");
+  row.append(mk("Sync now",()=>syncNow()));
+  if(navigator.share) row.append(mk("Share device link",async()=>{ try{ await navigator.share({title:"Naga Control",url:syncLink()}); }catch(e){} }));
+  row.append(mk("Copy device link",async()=>{ await copyText(syncLink()); toast("Device link copied. Treat it like a password."); },navigator.share?"link":""));
+  row.append(mk("Stop syncing on this device",async()=>{ if(!(await ask({title:"Stop syncing on this device?",text:"Layouts already here stay here. Other devices keep syncing.",ok:"Stop"}))) return; syncKey=null; try{ localStorage.removeItem("naga.syncKey"); }catch(e){} setSync(""); renderSyncBox(); },"link"));
+}
+(()=>{ const m=location.hash.match(/sync=([A-Za-z0-9_-]{32,})/); if(m){ syncKey=m[1]; store.set("naga.syncKey",syncKey); history.replaceState(null,"",location.pathname+location.search); setTimeout(()=>toast("This device now syncs your layouts"),800); } })();
+window.addEventListener("online",()=>syncNow());
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") syncNow(); });
+
+// ---------- render everything ----------
+function renderAll(o={}){
+  draft=null; renderStage(); renderInspector(); renderBattery(); renderDevice();
+  if(!o.skipEditors){ renderDpi(); renderLighting(); } else renderZoneCards();
+  updateMatch(); renderLayouts(); renderHistory(); updateUndo();
+  $("txtFromMouse").disabled=$("txtLoad").disabled=!canEdit(); $("rawSend").disabled=!dev||inLayout();
+  $("txtFromMouse").textContent=inLayout()?"Copy this layout":"Copy the mouse's setup"; $("txtLoad").textContent=inLayout()?`Apply to “${editName}”`:"Load onto mouse";
+  renderEditSel(); renderSyncBox();
+}
+
+// ---------- watch for outside changes ----------
+let lastCheck=0, checking=false;
+window.addEventListener("focus",safe(async()=>{
+  if(syncKey&&!ledTimer&&!dpiTimer&&!busy) syncNow();
+  if(!dev||inLayout()||checking||connecting||busy||ledTimer||dpiTimer||Date.now()-lastCheck<5000) return; checking=true; lastCheck=Date.now();
+  try{
+    const before=snapshotNow();
+    const slotChanged=await readSlots(); await readEverything(); await readBattery(); renderBattery();
+    if(slotChanged||!snapEqual(before,snapshotNow())){ dpiEdit=clone(dpiMouse); led=clone(ledMouse); draft=null; renderAll(); }
+    if(slotChanged) alertBox("slot","warn","The mouse switched on-board slot",`It's now on slot ${activeSlot}. The page now shows and edits that slot.`);
+    checkAgainstLastSeen("focus"); } finally { checking=false; }
+}));
+try{ const bc=new BroadcastChannel("naga-control"); const twoTabs=()=>alertBox("tabs","warn","This page is open in another tab","Use one tab at a time so they don't overwrite each other's changes.");
+  bc.onmessage=e=>{ if(e.data==="hello"){ bc.postMessage("here"); twoTabs(); } if(e.data==="here") twoTabs(); }; bc.postMessage("hello"); }catch(e){}
+window.addEventListener("beforeunload",e=>{ if(busy||ledTimer||dpiTimer){ e.preventDefault(); e.returnValue=""; } });
+setTimeout(()=>{ const lb=store.get("naga.lastBackup",0); if(Object.keys(userLayouts).length&&Date.now()-lb>14*864e5) alertBox("backup","warn","No recent backup file","Your layouts live only in this browser. Download a full backup so clearing browser data can't lose them.",[["Download now",async()=>{ $("backupAll").click(); },true]]); },1500);
+
+// ---------- raw ----------
+$("rawSend").onclick=safe(async()=>{ const c=parseInt($("rawClass").value,16), m=parseInt($("rawCmd").value,16), z=parseInt($("rawSize").value,16);
+  if([c,m,z].some(Number.isNaN)) throw new Error("Class, Cmd and Size must be hex.");
+  if(!(m&0x80)) pushHistory("Before a raw command",snapshotNow());
+  await rawCmd(c,m,z,parseHex($("rawArgs").value)); });
+
+// ---------- Synapse Web recorder ----------
+const RECORDER=`(()=>{const L=[];window.nagaCapture=()=>JSON.stringify(L);const h=d=>{const u=d instanceof ArrayBuffer?new Uint8Array(d):new Uint8Array(d.buffer,d.byteOffset,d.byteLength);return Array.from(u,b=>b.toString(16).padStart(2,"0")).join(" ")};
+const P=HIDDevice.prototype,sf=P.sendFeatureReport,rf=P.receiveFeatureReport,sr=P.sendReport;
+P.sendFeatureReport=function(id,d){L.push({t:Date.now(),dir:"featOut",id,pid:this.productId,data:h(d)});return sf.call(this,id,d)};
+P.receiveFeatureReport=async function(id){const r=await rf.call(this,id);L.push({t:Date.now(),dir:"featIn",id,pid:this.productId,data:h(r)});return r};
+P.sendReport=function(id,d){L.push({t:Date.now(),dir:"out",id,pid:this.productId,data:h(d)});return sr.call(this,id,d)};
+console.log("Naga recorder on. When done: copy(nagaCapture())")})();`;
+$("recorderCode").textContent=RECORDER;
+$("copyRecorder").onclick=()=>copyText(RECORDER,"recNote");
+
+// ---------- start ----------
+ZONES.forEach(z=>led[z.id]=defZone());
+$("btnConnect").onclick=connect;
+(async()=>{
+  if(syncKey){ setSync("Syncing…"); await syncNow(); }
+  if(!HAS_HID){
+    $("btnConnect").hidden=true; setConn("Editing layouts on this device","");
+    if(!store.get("naga.noHidNoted",false)){ store.set("naga.noHidNoted",true);
+      alertBox("nohid","good","This device edits layouts; a computer loads them onto the mouse",`Safari on iPhone and iPad can't reach a USB mouse. Changes save to your layout${syncKey?" and sync":""}. To put them on the mouse, open this page on a computer with Chrome or Edge, plug in the mouse and press Load onto mouse.${syncKey?"":" Turn on sync in Layouts so your computer sees these edits."}`); }
+  }
+  await pickStartTarget(); renderAll();
+  if(!HAS_HID) return;
+  try{ await findAndConnect((await navigator.hid.getDevices()).filter(d=>d.vendorId===VID)); }catch(e){ log(e.message,"bad"); } })();
+</script>
+</body>
+</html>
