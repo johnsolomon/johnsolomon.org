@@ -514,12 +514,19 @@ function buildReport(cls,cmd,size,args,txn=TXN){
   args.forEach((b,i)=>{if(i<80)r[8+i]=b;});
   let crc=0; for(let i=2;i<88;i++)crc^=r[i]; r[88]=crc; return r;
 }
+// How many leading args identify what a reply is about (storage/profile, then LED or button slot).
+// A reply whose leading args differ belongs to an earlier command and is ignored, so one zone's
+// or button's answer can never be taken for another's.
+const KEYLEN={"0f:82":2,"0f:84":2,"0f:02":2,"0f:04":2,"02:8c":2,"02:0c":2,"04:86":1,"04:06":1};
 function rawCmd(cls,cmd,size,args=[],quiet=false,txn=TXN){
   const job=queue.then(async()=>{
     if(!dev) throw new Error("Mouse not connected.");
+    const label=`${cls.toString(16).padStart(2,"0")}:${cmd.toString(16).padStart(2,"0")}`;
+    const keyLen=Math.min(args.length,KEYLEN[label]??0), isSet=cmd<0x80;
     for(let attempt=0;attempt<2;attempt++){
       await dev.sendFeatureReport(0,buildReport(cls,cmd,size,args,txn));
-      for(let t=0;t<20;t++){
+      let fallback=null, fallbackAt=0;
+      for(let t=0;t<25;t++){
         await sleep(t?20:10);
         const dv=await dev.receiveFeatureReport(0);
         let res=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength);
@@ -527,12 +534,20 @@ function rawCmd(cls,cmd,size,args=[],quiet=false,txn=TXN){
         if(res.length<90) continue;
         const st=res[0];
         if(st===0x00||st===0x01) continue;
-        if(res[6]!==cls||res[7]!==cmd) continue;
-        if(st===0x04&&attempt===0){ await sleep(150); break; }
-        const label=`${cls.toString(16).padStart(2,"0")}:${cmd.toString(16).padStart(2,"0")}`;
+        if(res[1]!==txn||res[6]!==cls||res[7]!==cmd) continue;
+        let crc=0; for(let i=2;i<88;i++) crc^=res[i]; if(res[88]!==crc) continue;
+        let keyOk=true; for(let i=0;i<keyLen;i++) if(res[8+i]!==args[i]) keyOk=false;
+        if(!keyOk) continue;
+        if(st===0x04){ if(attempt===0){ await sleep(150); break; } }
+        // A write should come back with its own arguments. A reply that matches only the key
+        // may be the answer to an earlier write to the same place, so keep waiting for the exact one.
+        if(st===2&&isSet&&args.length){ let same=true; for(let i=0;i<args.length&&i<80;i++) if(res[8+i]!==args[i]) same=false;
+          if(!same){ if(!fallback) fallbackAt=t; fallback=res.slice(); if(t-fallbackAt>=5) break; continue; } }
         if(!quiet||st!==2) log(`${label} [${hex(args)}] → ${STATUS[st]||st} ${st===2?hex(res.slice(8,8+Math.max(size,4))):""}`,st===2?"":"warn");
         return {status:st,args:res.slice(8,88)};
       }
+      // Some firmware doesn't echo every byte of a write. Accept the key-matched reply; the caller reads it back.
+      if(fallback){ if(!quiet) log(`${label} [${hex(args)}] → OK (reply didn't echo every byte)`,""); return {status:2,args:fallback.slice(8,88),loose:true}; }
     }
     throw new Error("The mouse didn't answer. If it's wireless, move it to wake it, then try again.");
   });
@@ -634,7 +649,15 @@ async function writeDevice(k,v){
   if(k==="poll") r=await rawCmd(0x00,0x05,0x01,[POLLRAW[v]]);
   if(k==="sleep") r=await rawCmd(0x07,0x03,0x02,[v>>8,v&255]);
   if(k==="lowbat") r=await rawCmd(0x07,0x01,0x01,[pctToLb(v)]);
-  if(ok(r)) devMouse[k]=v; return ok(r);
+  if(!ok(r)) return false;
+  // Read it back so the page shows what the mouse actually holds.
+  let b;
+  if(k==="poll"){ b=await rawCmd(0x00,0x85,0x01,[],true); if(ok(b)&&POLL[b.args[0]]) devMouse.poll=POLL[b.args[0]]; }
+  if(k==="sleep"){ b=await rawCmd(0x07,0x83,0x02,[],true); if(ok(b)) devMouse.sleep=(b.args[0]<<8)|b.args[1]; }
+  if(k==="lowbat"){ b=await rawCmd(0x07,0x81,0x01,[],true); if(ok(b)) devMouse.lowbat=lbToPct(b.args[0]); }
+  if(!ok(b)){ devMouse[k]=v; return true; }
+  if(devMouse[k]!==v){ log(`${DEVLABEL[k][0]}: wrote ${v}, mouse reads ${devMouse[k]}`,"warn"); return false; }
+  return true;
 }
 $("pollSeg").onclick=safe(async e=>{ const p=+e.target.dataset.p; if(!p||!canEdit()) return; await applyAll({device:{poll:p}},"Before changing polling rate",{toast:`Polling rate ${p} Hz`}); });
 $("idle").oninput=()=>$("idleLbl").textContent=fmtSleep(+$("idle").value);
@@ -686,7 +709,7 @@ async function writeDpi(d){
   d=normDpi(d); if(!d) return false;
   if(inLayout()){ dpiMouse=d; return true; }
   const rows=[]; for(let i=0;i<5;i++){ const s=d.stages[Math.min(i,d.stages.length-1)]; rows.push(i+1,s.x>>8,s.x&255,s.y>>8,s.y&255,0,0); }
-  for(const st of [P(),0x00]){ const r=await rawCmd(0x04,0x06,0x26,[st,d.start+1,d.stages.length,...rows]); if(!ok(r)) return false; }
+  const r=await rawCmd(0x04,0x06,0x26,[P(),d.start+1,d.stages.length,...rows]); if(!ok(r)) return false;
   return true;
 }
 
@@ -725,6 +748,23 @@ function decodeEffect(a){
     case 5: return {effect:"reactive",c1,speed:a[4]||2};
   }
   return {effect:null};
+}
+// After a lighting save, read every zone back. A zone that was written must read back as written;
+// a zone that wasn't written must be unchanged. If an untouched zone changed, put it back once and warn.
+async function verifyLighting(prior,want){
+  try{ await readLighting(); }catch(e){ log("Couldn't read the lighting back: "+e.message,"warn"); return 0; }
+  const bad=[...want].filter(([id,s])=>!ledSame(ledMouse[id],s)).map(([id])=>id);
+  bad.forEach(id=>log(`${ZONES.find(z=>z.id===id).key}: wrote ${zoneText(want.get(id))}, mouse reads ${zoneText(ledMouse[id])}`,"warn"));
+  const hit=ZONES.filter(z=>!want.has(z.id)&&prior[z.id]?.effect&&ledMouse[z.id]?.effect&&!ledSame(prior[z.id],ledMouse[z.id])).map(z=>z.id);
+  if(!hit.length&&!bad.length){ clearAlert("crosstalk"); return 0; }
+  for(const id of hit){ log(`${ZONES.find(z=>z.id===id).key} changed without being edited (${zoneText(prior[id])} → ${zoneText(ledMouse[id])}). Putting it back.`,"warn"); try{ await writeZone(P(),id,prior[id],true); }catch(e){} }
+  try{ await readLighting(); }catch(e){}
+  const still=hit.filter(id=>!ledSame(prior[id],ledMouse[id]));
+  const names=ids=>ids.map(id=>ZONES.find(z=>z.id===id).key.toLowerCase()).join(" and ");
+  if(still.length) alertBox("crosstalk","bad","Lighting didn't save cleanly",`Changing the ${names([...want.keys()])} also changed the ${names(still)}, and putting it back didn't work. Check Lighting and set it again.`,[["Show lighting",()=>{ clearAlert("crosstalk"); showTab("lighting"); },true]]);
+  else if(bad.length) alertBox("crosstalk","warn","Lighting may not have saved",`The ${names(bad)} reads back differently from what was set. Try setting it again.`,[["Show lighting",()=>{ clearAlert("crosstalk"); showTab("lighting"); },true]]);
+  else clearAlert("crosstalk");
+  return bad.length;
 }
 async function readLighting(){
   if(inLayout()) return;
@@ -770,23 +810,27 @@ function parseZone(t){
 }
 const fillZone=(t,base)=>{ const z=Object.assign(defZone(),base&&base.effect?base:{},t); if(t&&t.color&&!t.c1) z.c1=t.color; return z; };
 const ledSame=(a,b)=>zoneText(a)===zoneText(b);
+// Lighting is written to the active on-board profile only (the same bank it's read from).
+// Writing the live bank (0) as well isn't needed on this mouse and isn't verified to be zone-safe.
 async function writeZone(st,id,s,quiet){
-  if(inLayout()){ if(st!==0) ledMouse[id]=clone(s); return true; }
+  if(!ZONES.some(z=>z.id===id)) return false;
+  if(inLayout()){ ledMouse[id]=clone(s); return true; }
   const a=effectArgs(st,id,s); if(!a) return false;
   const r=await rawCmd(0x0F,0x02,a.length,a,quiet);
   const b=await rawCmd(0x0F,0x04,0x03,[st,id,Math.max(0,Math.min(255,s.bright|0))],quiet);
   return ok(r)&&ok(b);
 }
-let ledTimer=null, previewTimer=null; const previewZones=new Set();
+// Only the zones edited since the last save are sent. Each save is checked against the mouse afterwards.
+let ledTimer=null; const ledDirty=new Set();
 function ledChanged(ids){
   if($("ledLink").checked){ const src=led[selZone]; ZONES.forEach(z=>{ if(z.id!==selZone) led[z.id]=clone(src); }); ids=ZONES.map(z=>z.id); }
+  ids.forEach(i=>ledDirty.add(i));
   renderLightStage(); renderZoneCards();
   if(!canEdit()) return;
-  if(!inLayout()){ ids.forEach(i=>previewZones.add(i)); clearTimeout(previewTimer);
-    previewTimer=setTimeout(safe(async()=>{ const z=[...previewZones]; previewZones.clear(); for(const id of z) if(led[id]?.effect) await writeZone(0x00,id,led[id],true); }),120); }
   saveNote("Saving…"); clearTimeout(ledTimer);
-  ledSave=safe(async()=>{ const t={}; ZONES.forEach(z=>{ if(led[z.id]?.effect) t[z.id]=clone(led[z.id]); }); await applyAll({lighting:t},"Before changing lighting",{keepEditors:true,toast:"Lighting"}); });
-  ledTimer=setTimeout(()=>{ ledTimer=null; ledSave(); },900);
+  ledSave=safe(async()=>{ const t={}; for(const id of ledDirty) if(led[id]?.effect) t[id]=clone(led[id]); ledDirty.clear();
+    await applyAll({lighting:t},"Before changing lighting",{keepEditors:true,toast:"Lighting"}); });
+  ledTimer=setTimeout(()=>{ ledTimer=null; ledSave(); },400);
 }
 function zoneVisual(s){
   if(!s||!s.effect||s.effect==="off") return {fill:"#2a2f37",cls:"",alt:null,glow:false,op:1};
@@ -1328,9 +1372,12 @@ async function applyAllNow(target,reason,opts={}){
   const step=async fn=>{ if(stop){ failed++; return; } try{ (await fn())?done++:failed++; }catch(e){ failed++; stop=true; log(e.message,"bad"); } if(plan.total>3) saveNote(`Saving ${done+failed} of ${plan.total}…`); };
   try{
     for(const [slot,hs,blk] of plan.items) await step(()=>writeSlot(slot,hs,blk));
-    if(plan.dpi) await step(async()=>{ const g=await writeDpi(plan.dpi); await readDpi(); return g; });
-    for(const [id,s] of plan.zones) await step(async()=>{ const a=await writeZone(P(),id,s); const b=await writeZone(0x00,id,s); return a&&b; });
-    if(plan.zones.length&&!stop) try{ await readLighting(); }catch(e){}
+    if(plan.dpi) await step(async()=>{ const g=await writeDpi(plan.dpi); await readDpi(); return g&&(inLayout()||dpiText(dpiMouse)===dpiText(plan.dpi)); });
+    if(plan.zones.length){
+      const prior=clone(ledMouse), want=new Map(plan.zones);
+      for(const [id,s] of plan.zones) await step(()=>writeZone(P(),id,s));
+      if(!stop&&!inLayout()){ const n=await verifyLighting(prior,want); failed+=n; done-=n; }
+    }
     for(const [k,v] of plan.device) await step(()=>writeDevice(k,v));
   } finally { busy=false; }
   if(inLayout()) commitLayoutVersion(reason,plan); else rememberMouse();
