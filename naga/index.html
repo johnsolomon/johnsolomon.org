@@ -28,6 +28,7 @@
   color-scheme:light;
 }}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--text);font:14px/1.5 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 button{background:var(--field);color:var(--text);border:1px solid var(--line2);border-radius:var(--r-s);padding:6px 12px;font:inherit;font-weight:500;cursor:pointer}
@@ -127,12 +128,6 @@ svg text{font-family:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,sans-serif}
 .insp .now span{color:var(--dim);font-size:12.5px}
 .insp .now b{font-weight:600;font-size:15px;text-align:right}
 .insp .q{font-weight:500;margin:0 0 8px}
-.cats{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:16px}
-.cats .chip{text-align:left;background:none;border:1px solid var(--line);padding:7px 10px;font-weight:400;color:var(--dim)}
-.cats .chip:hover{color:var(--text);background:var(--raise)}
-.cats .chip.sel{border-color:var(--amber);color:var(--text);background:var(--amber-soft)}
-.cats .chip.adv{grid-column:1/-1;border:0;padding:4px 2px;font-size:12px;color:var(--faint)}
-.cats .chip.adv.sel{color:var(--amber);background:none}
 .panel{display:grid;gap:12px;padding-bottom:16px}
 .panel .label{color:var(--dim);font-size:12.5px;margin-bottom:6px}
 .quick{display:flex;flex-wrap:wrap;gap:4px}
@@ -149,20 +144,24 @@ svg text{font-family:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,sans-serif}
 .assign{width:100%;padding:9px;font-size:14px}
 
 /* svg: mouse + annotations */
-.hot{fill:var(--hot);stroke:var(--hotline);stroke-width:1.5;cursor:pointer;transition:fill .12s,stroke .12s}
+.hot{fill:url(#btnG);stroke:#fff;stroke-opacity:.1;stroke-width:1;cursor:pointer;transition:stroke .12s,fill .12s}
+.hot.key{fill:url(#keyG)}
+.hot.ghost{fill:#fff;fill-opacity:0;stroke:none}
 .hotband{fill:none;stroke:transparent;stroke-width:26;stroke-linecap:round;cursor:pointer}
-.band{fill:none;stroke:var(--hotline);stroke-width:3;stroke-linecap:round;pointer-events:none}
-g.slot:hover .hot,g.slot.hover .hot{stroke:var(--amber);fill:#323844}
-g.slot:hover .band,g.slot.hover .band{stroke:var(--amber)}
-g.slot.sel .hot{fill:#4a3a1a;stroke:var(--amber);stroke-width:2.5}
-g.slot.sel .band{stroke:var(--amber);stroke-width:5}
-g.slot.hs .hot{stroke:var(--ok);stroke-width:2.5}
+.band{fill:none;stroke:#fff;stroke-opacity:0;stroke-width:3;stroke-linecap:round;pointer-events:none}
+g.slot:hover .hot,g.slot.hover .hot{stroke:var(--amber);stroke-opacity:1;stroke-width:1.6}
+g.slot:hover .hot.ghost,g.slot.hover .hot.ghost{fill:var(--amber);fill-opacity:.10;stroke:var(--amber);stroke-opacity:.9}
+g.slot:hover .band,g.slot.hover .band{stroke:var(--amber);stroke-opacity:1}
+g.slot.sel .hot{fill:url(#btnSel);stroke:var(--amber);stroke-opacity:1;stroke-width:2.4}
+g.slot.sel .hot.ghost{fill:var(--amber);fill-opacity:.16}
+g.slot.sel .band{stroke:var(--amber);stroke-opacity:1;stroke-width:5}
+g.slot.hs .hot{stroke:var(--ok);stroke-opacity:1;stroke-width:2.4}
 .hot.mk{fill:rgba(12,14,18,.4);stroke:#fff;stroke-width:2.5}
 g.slot:hover .hot.mk,g.slot.hover .hot.mk{stroke:var(--amber)}
 g.slot.sel .hot.mk{fill:rgba(227,169,59,.35);stroke:var(--amber);stroke-width:3}
 .mk-n{fill:#fff;font-size:12px;font-weight:600;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2px}
 .editing g.slot{cursor:grab}
-.keynum{fill:#c9ccd2;font-size:15px;font-weight:600;pointer-events:none;text-anchor:middle}
+.keynum{fill:#a3aab4;font-size:14px;font-weight:600;pointer-events:none;text-anchor:middle}
 .co{cursor:pointer}
 .co rect{fill:transparent;stroke:none}
 .co:hover rect,.co.hover rect{fill:color-mix(in srgb,var(--text) 5%,transparent)}
@@ -183,6 +182,31 @@ g.slot.sel .hot.mk{fill:rgba(227,169,59,.35);stroke:var(--amber);stroke-width:3}
 .listv button.sel{box-shadow:inset 2px 0 0 var(--amber)} .listv button.sel b{color:var(--amber)}
 .listv .g{grid-column:1/-1;margin:14px 6px 2px;font-size:12.5px;color:var(--dim);font-weight:500}
 
+.insp .cur{margin:0 0 16px;color:var(--dim)} .insp .cur b{color:var(--text);font-weight:600}
+.field{display:grid;gap:6px;margin-bottom:14px} .field>span{color:var(--dim);font-size:12.5px} .field select{width:100%;padding:8px 10px}
+.combo{display:flex;justify-content:space-between;align-items:center;width:100%;padding:10px 12px;background:var(--well);border:1px solid var(--line2);font-weight:400}
+.combo:hover{border-color:var(--amber)}
+.keys{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+kbd{font:600 13px "IBM Plex Sans",sans-serif;min-width:30px;text-align:center;padding:4px 8px;border-radius:5px;background:var(--raise);border:1px solid var(--line2);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);color:var(--text)}
+.plus{color:var(--faint);font-size:12px}
+.repeat{display:grid;gap:8px}
+.inspfoot .preview{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:13px}
+.inspfoot .preview .from{color:var(--dim);text-decoration:line-through;text-decoration-color:var(--faint)} .inspfoot .preview .arrow{color:var(--faint)}
+.kbd-dlg{max-width:1080px}
+.kb-wrap{overflow-x:auto;padding-bottom:4px}
+.kb{display:flex;gap:16px;min-width:max-content}
+.kb-block{display:grid;gap:5px}
+.kb-row{display:flex;gap:5px}
+.kb-key,.kb-gap{width:calc(var(--u) * 40px + (var(--u) - 1) * 5px);height:38px;flex:none}
+.kb-key{padding:0 4px;font-size:12px;font-weight:500;background:var(--raise);border:1px solid var(--line2);box-shadow:inset 0 -2px 0 rgba(0,0,0,.3);white-space:nowrap;overflow:hidden}
+.kb-key.sel{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+.kb-key.mod.sel{background:var(--amber-soft);color:var(--text)}
+.testpad{min-height:520px;display:grid;grid-template-rows:auto 1fr;gap:12px;padding:26px;outline:none;cursor:crosshair;user-select:none}
+.testpad:focus{box-shadow:inset 0 0 0 2px var(--amber);border-radius:var(--r-m)}
+.t-head{display:grid;gap:4px}
+.t-log{list-style:none;margin:0;padding:0;display:grid;gap:0;align-content:start}
+.t-log li{display:flex;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line)}
+.t-log li:first-child b{color:var(--amber)}
 /* lighting */
 .zones{display:grid;gap:2px;margin-bottom:16px}
 .zcard{display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:center;text-align:left;background:none;border:1px solid transparent;padding:9px 10px;font-weight:400}
@@ -249,8 +273,7 @@ dialog ul{max-height:50vh;overflow:auto}
 @media (hover:none) and (pointer:coarse){ .rec{display:none} .co{cursor:default} }
 @media (max-width:820px){
   input,select,textarea{font-size:16px}
-  .seg button{padding:8px 12px}.cats .chip{padding:10px}.quick button{padding:6px 10px}.mods button{padding:8px 12px}
-  .editing select{max-width:none;flex:1}.editing{flex:1 1 100%}
+  .seg button{padding:8px 12px}  .editing select{max-width:none;flex:1}.editing{flex:1 1 100%}
   #stMatch,#stSync{order:5}
   body{padding-bottom:env(safe-area-inset-bottom)}
   .app{grid-template-columns:1fr}
@@ -302,7 +325,7 @@ dialog ul{max-height:50vh;overflow:auto}
     <div class="canvas">
       <div class="canvasbar">
         <div class="seg" id="viewSeg" aria-label="View">
-          <button data-v="top" class="sel">Top</button><button data-v="left">Left side</button><button data-v="right">Right side</button><button data-v="bottom">Bottom</button><button data-v="list">List</button>
+          <button data-v="top" class="sel">Top</button><button data-v="left">Left side</button><button data-v="right">Right side</button><button data-v="bottom">Bottom</button><button data-v="list">List</button><button data-v="test">Test</button>
         </div>
         <div class="seg" id="layerSeg" aria-label="Layer">
           <button data-l="0" class="sel">Normal</button><button data-l="1">While holding HyperShift</button>
@@ -320,7 +343,7 @@ dialog ul{max-height:50vh;overflow:auto}
 <section class="tab" id="tab-lighting">
   <div class="studio">
     <div class="canvas">
-      <div class="canvasbar"><span class="dim small">Preview</span><span class="dim small">Click a glowing part to edit it</span></div>
+      <div class="canvasbar"><span class="dim small">Select a lit area to edit it.</span></div>
       <div class="stage" id="lightStage"></div>
     </div>
     <aside class="insp"><div id="insp-light" style="padding:20px;overflow:auto;flex:1">
@@ -329,7 +352,7 @@ dialog ul{max-height:50vh;overflow:auto}
       <div class="row" style="margin-bottom:16px"><label class="row" style="gap:6px"><input type="checkbox" id="ledLink"> Same on all three</label><span class="grow"></span><button id="ledAllOff">Turn all off</button></div>
       <div id="zoneEditor"></div>
     </div>
-    <div class="inspfoot small dim">Changes save automatically, and show on the mouse right away when you're editing the mouse. The side plate's 12 keys light together.</div></aside>
+    <div class="inspfoot small dim">Changes save as you make them. The 12 side keys light as one zone.</div></aside>
   </div>
 </section>
 
@@ -339,12 +362,12 @@ dialog ul{max-height:50vh;overflow:auto}
     <header><h2>Sensitivity</h2><p class="dim">How far the pointer moves when you move the mouse.</p></header>
     <div class="group" style="border-top:0;margin-top:0">
       <h3>Stages</h3>
-      <p class="dim small">Up to five speeds. The index-finger buttons step through them; the selected dot is where the mouse starts.</p>
+      <p class="dim small">Up to five stages. The DPI buttons step through them, and the mouse starts in the selected one.</p>
       <div id="dpiBox" class="dim">Connect the mouse to read its stages.</div>
       <div class="row" style="margin-top:12px"><button id="dpiAdd">Add stage</button><label class="row" style="gap:6px"><input type="checkbox" id="dpiXY"> Separate horizontal and vertical speed</label></div>
     </div>
     <div class="group">
-      <div class="set"><div><b>Polling rate</b><span>How often the mouse reports its position. 1000 Hz is smoothest; lower saves battery.</span></div>
+      <div class="set"><div><b>Polling rate</b><span>How often the mouse reports its position. Higher is smoother; lower uses less battery.</span></div>
         <div><div class="seg" id="pollSeg"><button data-p="125">125 Hz</button><button data-p="500">500 Hz</button><button data-p="1000">1000 Hz</button></div></div></div>
     </div>
   </div>
@@ -353,15 +376,15 @@ dialog ul{max-height:50vh;overflow:auto}
 <!-- POWER -->
 <section class="tab" id="tab-power">
   <div class="page">
-    <header><h2>Power</h2><p class="dim">Battery and sleep settings, stored on the mouse.</p></header>
+    <header><h2>Power</h2></header>
     <div class="set"><div><b>Battery</b><span id="battSub">Connect the mouse to read the battery.</span></div>
       <div class="row"><div class="meter"><i id="battBar" style="width:0"></i></div><span class="value" id="battBig">—</span></div></div>
     <div class="set"><div><b>Sleep after</b><span>Time without movement before the mouse sleeps.</span></div>
       <div class="row"><input type="range" id="idle" min="60" max="900" step="30" class="grow"><span class="value" id="idleLbl">—</span></div></div>
     <div class="set"><div><b>Low-battery warning</b><span>The light flashes when the battery drops below this.</span></div>
       <div class="row"><input type="range" id="lowbat" min="5" max="25" step="1" class="grow"><span class="value" id="lowbatLbl">—</span></div></div>
-    <div class="set"><div><b>Scroll wheel feel</b><span>Clicky, free-spin or smart.</span></div>
-      <div class="dim small">No app can read or set this. The front button behind the wheel switches it, unless you've given that button another job. <span id="fwInfo" class="faint"></span></div></div>
+    <div class="set"><div><b>Scroll wheel feel</b><span>Notched, free-spin or smart.</span></div>
+      <div class="dim small">Set with the front button behind the wheel. Software can't read or change it. <span id="fwInfo" class="faint"></span></div></div>
   </div>
 </section>
 
@@ -369,13 +392,13 @@ dialog ul{max-height:50vh;overflow:auto}
 <section class="tab" id="tab-layouts">
   <div class="page">
     <header class="row" style="justify-content:space-between;align-items:flex-end">
-      <div><h2>Layouts</h2><p class="dim" style="margin:0">Complete setups saved in this browser. Loading one lists every change first.</p></div>
+      <div><h2>Layouts</h2><p class="dim" style="margin:0">Saved setups. Loading one shows every change before it's applied.</p></div>
       <div class="row"><button id="profSnap">Save the mouse as a layout</button><label class="btn">Import file<input type="file" id="profImport" accept=".json,.txt" hidden></label></div>
     </header>
     <div class="syncbox" id="syncBox"></div>
     <div id="layoutList"></div>
     <div class="group">
-      <h3>Edit a layout with Claude</h3>
+      <h3>Work on a layout with Claude</h3>
       <ol class="steps">
         <li>Press <b>Copy the mouse's setup</b> and paste it into the chat.</li>
         <li>Ask for changes. Claude replies with an updated layout.</li>
@@ -414,8 +437,8 @@ dialog ul{max-height:50vh;overflow:auto}
     <div class="group"><h3>How your setup is protected</h3>
     <dl>
       <dt>Connecting never changes the mouse</dt><dd>Synapse can push a blank setup onto a mouse on a new computer, after an update or when cloud sync fails. This page only writes when you change something.</dd>
-      <dt>Outside changes are caught</dt><dd>If Synapse, another app, another computer or a reset changed the mouse, you'll see a warning with a one-click restore.</dd>
-      <dt>Every change is saved permanently and checked</dt><dd>Changes go to the mouse's permanent memory and are read back. If the mouse sleeps or unplugs halfway, you can roll back.</dd>
+      <dt>Changes made elsewhere are detected</dt><dd>If Synapse, another app, another computer or a reset changes the mouse, you'll be warned and can restore your setup.</dd>
+      <dt>Changes are verified</dt><dd>Every change is written to the mouse's permanent memory and read back. If the mouse disconnects partway through, you can undo the partial change.</dd>
       <dt>Edits follow the profile button</dt><dd>Changes always go to the on-board slot the mouse is using.</dd>
       <dt>Use one editor at a time</dt><dd>Close Synapse, OpenSnek and Naga Studio while this page is open.</dd>
     </dl></div>
@@ -456,6 +479,10 @@ dialog ul{max-height:50vh;overflow:auto}
 </div>
 
 <dialog id="dlg"><h3 id="dlgTitle"></h3><div id="dlgBody" class="dim"></div><input id="dlgInput" style="width:100%;margin-top:10px" hidden><div class="row" style="justify-content:flex-end;margin-top:18px"><button id="dlgCancel">Cancel</button><button id="dlgOk" class="primary">OK</button></div></dialog>
+<dialog id="kbdDlg" class="kbd-dlg"><div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">Choose a key</h3><div id="kbdCombo" class="keys"></div></div>
+<p class="dim small" style="margin:6px 0 12px">Click keys here, or press them on your keyboard. Toggle Ctrl, Shift, Alt or Win to add them.</p>
+<div id="kbdBody" class="kb-wrap"></div>
+<div class="row" style="justify-content:flex-end;margin-top:16px"><button id="kbdCancel">Cancel</button><button id="kbdOk" class="primary">Use this key</button></div></dialog>
 <div id="toast"><span id="toastMsg"></span><button class="link" id="toastUndo">Undo</button></div>
 
 <script>
@@ -479,7 +506,7 @@ const store={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){warnStorage();return false;}}
 };
 let storageWarned=false;
-function warnStorage(){ if(storageWarned) return; storageWarned=true; alertBox("storage","warn","This browser isn't keeping data for this page","History and saved layouts may be lost when the tab closes. Use “Download full backup” on the History tab."); }
+function warnStorage(){ if(storageWarned) return; storageWarned=true; alertBox("storage","warn","This browser isn't saving data","Layouts and history may be lost when you close the tab. Download a backup from History."); }
 async function copyText(t,noteId){ try{ await navigator.clipboard.writeText(t); if(noteId) $(noteId).textContent="Copied."; return true; }catch(e){ if(noteId) $(noteId).textContent="Couldn't copy automatically; select the text and copy it."; return false; } }
 
 // ---------- UI helpers: alerts, dialog, toast, tabs ----------
@@ -510,7 +537,7 @@ function showTab(t){ document.querySelectorAll("#tabs button").forEach(b=>b.clas
 $("tabs").onclick=e=>{ const t=e.target.dataset.tab; if(t) showTab(t); };
 try{ const t=sessionStorage.getItem("naga.tab"); if(t&&$("tab-"+t)) showTab(t); }catch(e){}
 let saveNoteTimer=null;
-function saveNote(text,cls){ const el=$("stSave"); el.textContent=text; el.className=cls||"dim"; clearTimeout(saveNoteTimer); if(/✓/.test(text)) saveNoteTimer=setTimeout(()=>el.textContent="",4000); }
+function saveNote(text,cls){ const el=$("stSave"); el.textContent=text; el.className=cls||"dim"; clearTimeout(saveNoteTimer); if(/^Saved/.test(text)) saveNoteTimer=setTimeout(()=>el.textContent="",4000); }
 
 // ---------- transport ----------
 let dev=null, queue=Promise.resolve(), activeSlot=1, mouseId="naga";
@@ -566,7 +593,7 @@ const connect=safe(async()=>{
   const list=(await navigator.hid.getDevices()).filter(d=>d.vendorId===VID);
   if(await findAndConnect(list)) return;
   setConn("Couldn't reach the mouse","bad");
-  alertBox("conn","bad","The mouse was found but didn't answer","Plug in the USB cable or the wireless dongle (Bluetooth can't be used from a browser), move the mouse to wake it, then press Connect again. Close Synapse if it's running.");
+  alertBox("conn","bad","The mouse didn't respond","Connect it with the USB cable or wireless dongle (browsers can't use Bluetooth), move it to wake it, and try again. Quit Synapse if it's open.");
 });
 function setConn(text,cls){ $("stConn").textContent=text; $("statusBox").className="status "+(cls||""); }
 let connecting=false;
@@ -575,7 +602,7 @@ async function onConnected(d){
   if(connecting) return; connecting=true;
   try{
     clearAlert("conn"); setConn("Reading the mouse…",""); $("btnConnect").hidden=true;
-    if(!PIDS[d.productId]) alertBox("model","warn","Untested mouse model","This page is built for the Naga V3 Pro. Other Razer mice may reject commands; nothing changes until you change something.");
+    if(!PIDS[d.productId]) alertBox("model","warn","Untested model","This app is built for the Naga V3 Pro. Other Razer mice may not accept its settings.");
     await readIdentity(d);
     if(inLayout()){ await readBattery(); setConn(PIDS[d.productId]||d.productName,"on"); log("Connected to "+d.productName); renderAll(); offerLoad(); return; }
     await readInfo(); await readEverything(n=>setConn(`Reading buttons ${n}%…`,""));
@@ -584,7 +611,7 @@ async function onConnected(d){
     renderAll(); checkAgainstLastSeen("connect");
   } finally { connecting=false; }
 }
-function onDisconnected(){ dev=null; setConn("Disconnected — plug in or wake the mouse","bad"); $("btnConnect").hidden=false; $("btnConnect").textContent="Reconnect"; renderAll(); }
+function onDisconnected(){ dev=null; setConn("Disconnected","bad"); $("btnConnect").hidden=false; $("btnConnect").textContent="Reconnect"; renderAll(); }
 if("hid" in navigator){
   navigator.hid.addEventListener("disconnect",e=>{ if(e.device===dev) onDisconnected(); });
   navigator.hid.addEventListener("connect",safe(async e=>{ if(!dev&&e.device.vendorId===VID){ await sleep(400); await findAndConnect([e.device]); } }));
@@ -815,7 +842,7 @@ function renderLightStage(){
   $("lightStage").innerHTML=`<svg viewBox="0 0 1000 560" role="img" aria-label="Mouse lighting preview">${DEFS}
     <g transform="translate(-150,20) scale(0.8)">${TOP_BODY}
       ${zoneShape(0x01,'<rect class="zone-shape" x="484" y="128" width="32" height="96" rx="15" fill="FILL"/>')}
-      ${zoneShape(0x04,'<path class="zone-shape" d="M500 438 L528 470 L500 502 L472 470 Z" fill="FILL"/>')}
+      ${zoneShape(0x04,'<circle class="zone-shape" cx="500" cy="470" r="19" fill="FILL"/>')}
     </g>
     <g transform="translate(263,40) scale(0.85)">${LEFT_BODY}
       ${zoneShape(0x05,`<g>${keys.join("")}</g>`)}
@@ -855,7 +882,7 @@ function renderZoneEditor(){
     [[1,"Short"],[2,"Medium"],[3,"Long"],[4,"Longest"]].forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if((s.speed||2)===v) b.className="sel"; b.onclick=()=>{ s.speed=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); }); row.append(seg); opts.append(row); }
   if(s.effect&&s.effect!=="off"){ const row=document.createElement("div"); row.innerHTML=`<div class="row" style="justify-content:space-between"><span class="dim" style="font-size:12px">Brightness</span><b>${Math.round(s.bright/2.55)}%</b></div>`;
     const r=document.createElement("input"); r.type="range"; r.min=0; r.max=255; r.value=s.bright; r.style.width="100%"; r.oninput=()=>{ s.bright=+r.value; row.querySelector("b").textContent=Math.round(s.bright/2.55)+"%"; ledChanged([selZone]); }; row.append(r); opts.append(row); }
-  if(!s.effect){ const p=document.createElement("p"); p.className="dim"; p.textContent="The mouse didn't report this zone's effect. Pick one above."; opts.append(p); }
+  if(!s.effect){ const p=document.createElement("p"); p.className="dim"; p.textContent="The mouse didn't report this zone's current effect."; opts.append(p); }
   box.append(opts);
 }
 function renderLighting(){ ZONES.forEach(z=>{ if(!led[z.id]) led[z.id]=defZone(); }); renderLightStage(); renderZoneCards(); renderZoneEditor(); }
@@ -931,7 +958,7 @@ function describe(b){
   if(c===0x12&&a===1) return "Scroll wheel mode";
   return raw;
 }
-const friendly=(b,hs)=>{ const d=describe(b); if(hs&&d==="Off") return "—"; if(/^[A-Z0-9]$|^[-=]$/.test(d)) return "Key "+d; return d==="HyperShift"?"HyperShift (hold)":d; };
+const friendly=(b,hs)=>{ const d=describe(b); if(d==="Off") return hs?"Nothing":"Disabled"; if(d==="Nothing") return "Disabled"; if(/^[A-Z0-9]$|^[-=]$/.test(d)) return "Key "+d; return d; };
 const sameMeaning=(a,b)=>same(a,b)||(!!a&&!!b&&describe(a)===describe(b)&&!describe(a).startsWith("Raw"));
 const isHS=b=>!!b&&b[0]===0x0C;
 function parseAction(text,slot,hs){
@@ -991,57 +1018,89 @@ const hsHolders=()=>SLOTS.filter(s=>isHS(current[0][s.slot]));
 
 // ---------- buttons: the mouse drawing ----------
 const DEFS=`<defs>
-  <linearGradient id="bodyG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2b3039"/><stop offset=".55" stop-color="#1a1d23"/><stop offset="1" stop-color="#0f1115"/></linearGradient>
-  <linearGradient id="sideG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2f37"/><stop offset="1" stop-color="#121418"/></linearGradient>
-  <radialGradient id="shine" cx=".35" cy=".25" r=".6"><stop offset="0" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  <linearGradient id="bodyG" x1=".15" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="#3d424a"/><stop offset=".42" stop-color="#23272d"/><stop offset="1" stop-color="#101215"/></linearGradient>
+  <linearGradient id="sideG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3f47"/><stop offset=".38" stop-color="#24282e"/><stop offset="1" stop-color="#0e1013"/></linearGradient>
+  <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#737a85"/><stop offset=".45" stop-color="#30353c"/><stop offset="1" stop-color="#121417"/></linearGradient>
+  <radialGradient id="topHi" cx=".42" cy=".26" r=".62"><stop offset="0" stop-color="#fff" stop-opacity=".17"/><stop offset=".55" stop-color="#fff" stop-opacity=".03"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  <linearGradient id="btnG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#454a53"/><stop offset="1" stop-color="#22262b"/></linearGradient>
+  <linearGradient id="keyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f444d"/><stop offset=".55" stop-color="#2b2f35"/><stop offset="1" stop-color="#1c1f23"/></linearGradient>
+  <linearGradient id="btnSel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a5a1e"/><stop offset="1" stop-color="#3f2d0d"/></linearGradient>
+  <linearGradient id="wheelHi" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset=".35" stop-color="#fff" stop-opacity=".10"/><stop offset=".65" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></linearGradient>
+  <pattern id="ribs" width="40" height="6" patternUnits="userSpaceOnUse"><rect width="40" height="6" fill="#1b1e22"/><rect width="40" height="2.6" fill="#4d535c"/></pattern>
+  <pattern id="knurl" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="7" fill="#fff" fill-opacity=".05"/></pattern>
+  <radialGradient id="floor" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#000" stop-opacity=".6"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+  <radialGradient id="lens" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="#5a2a33"/><stop offset=".6" stop-color="#1a0b0e"/><stop offset="1" stop-color="#050505"/></radialGradient>
   <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".45"/></filter></defs>`;
+  <filter id="soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.2"/></filter></defs>`;
+// seam = dark groove + faint highlight just below it, so parts read as separate pieces
+const seam=(d,w=2.2)=>`<path d="${d}" fill="none" stroke="#07080a" stroke-width="${w}" stroke-linecap="round"/><path d="${d}" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1" stroke-linecap="round" transform="translate(0.8,1.4)"/>`;
 const TOP_PATH="M500,80 C590,80 640,140 650,240 C660,340 662,430 642,500 C622,556 572,582 500,582 C428,582 380,560 360,505 C342,440 340,340 350,240 C360,140 410,80 500,80 Z";
-const TOP_BODY=`<path d="${TOP_PATH}" fill="url(#bodyG)" stroke="#3a414c" stroke-width="2" filter="url(#shadow)"/><path d="${TOP_PATH}" fill="url(#shine)"/>
-  <path d="M352,300 C346,360 346,420 356,470" fill="none" stroke="#3a414c" stroke-width="6" stroke-linecap="round"/>
-  <path d="M500,84 L500,268" stroke="#0b0c0f" stroke-width="3"/><path d="M357,300 C410,282 455,272 500,270 C545,272 590,282 643,300" fill="none" stroke="#0b0c0f" stroke-width="3"/>`;
+const TOP_BODY=`<ellipse cx="505" cy="594" rx="175" ry="22" fill="url(#floor)"/>
+  <path d="${TOP_PATH}" fill="url(#bodyG)"/>
+  <path d="M352,292 C344,360 345,440 362,505 C372,540 392,562 420,574 C388,548 372,512 366,470 C360,420 360,350 366,296 Z" fill="#0f1114"/>
+  <path d="M352,292 C344,360 345,440 362,505 C372,540 392,562 420,574 C388,548 372,512 366,470 C360,420 360,350 366,296 Z" fill="url(#knurl)"/>
+  <path d="${TOP_PATH}" fill="url(#topHi)"/>
+  <path d="${TOP_PATH}" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  ${seam("M500,86 L500,266")}
+  ${seam("M357,300 C410,282 455,272 500,270 C545,272 590,282 643,300")}
+  <rect x="477" y="118" width="46" height="116" rx="22" fill="#08090b"/>
+  <rect x="477" y="118" width="46" height="116" rx="22" fill="none" stroke="#fff" stroke-opacity=".06"/>
+  <rect x="484" y="126" width="32" height="100" rx="15" fill="url(#ribs)"/>
+  <rect x="484" y="126" width="32" height="100" rx="15" fill="url(#wheelHi)"/>
+  <circle cx="500" cy="470" r="19" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1.5"/>`;
 const SIDE_PATH="M210,430 C200,360 250,300 330,268 C430,228 560,214 660,240 C740,262 790,320 795,390 C798,425 785,446 760,450 L240,452 C222,452 212,444 210,430 Z";
-const LEFT_BODY=`<path d="${SIDE_PATH}" fill="url(#sideG)" stroke="#3a414c" stroke-width="2" filter="url(#shadow)"/>
-  <path d="M232,348 C290,296 380,252 486,230" fill="none" stroke="#0b0c0f" stroke-width="2.5"/>
-  <rect x="428" y="272" width="200" height="166" rx="18" fill="#101216" stroke="#353b46"/>
-  <path d="M240,452 L760,450" stroke="#353b46" stroke-width="5" stroke-linecap="round"/>`;
-const RIGHT_BODY=`<g transform="translate(1000,0) scale(-1,1)"><path d="${SIDE_PATH}" fill="url(#sideG)" stroke="#3a414c" stroke-width="2" filter="url(#shadow)"/>
-  <path d="M232,348 C290,296 380,252 486,230" fill="none" stroke="#0b0c0f" stroke-width="2.5"/>
-  <path d="M240,452 L760,450" stroke="#353b46" stroke-width="5" stroke-linecap="round"/>
-  <path d="M330,380 C420,404 560,404 640,386" fill="none" stroke="#2c323b" stroke-width="16" stroke-linecap="round"/></g>`;
-const BOTTOM_BODY=`<path d="${TOP_PATH}" fill="#16191e" stroke="#3a414c" stroke-width="2" filter="url(#shadow)"/>
-  <rect x="440" y="96" width="120" height="14" rx="7" fill="#2b3038"/><rect x="430" y="548" width="140" height="14" rx="7" fill="#2b3038"/>
-  <circle cx="500" cy="300" r="26" fill="#0b0c0f" stroke="#353b46"/><circle cx="500" cy="300" r="9" fill="#5a1b22"/>
-  <rect x="484" y="470" width="32" height="16" rx="5" fill="#2b3038"/><text x="500" y="508" text-anchor="middle" class="keynum" style="font-size:11px;fill:#6b7380">power</text>`;
+const plate=`<rect x="426" y="270" width="204" height="170" rx="22" fill="#0a0b0d"/>
+  <rect x="426" y="270" width="204" height="170" rx="22" fill="none" stroke="#fff" stroke-opacity=".07"/>`;
+const sideCommon=`<ellipse cx="502" cy="458" rx="310" ry="14" fill="url(#floor)"/>
+  <path d="${SIDE_PATH}" fill="url(#sideG)"/>
+  <path d="M640,300 C700,310 760,340 785,390 C790,420 780,440 760,446 L650,448 C670,410 668,350 640,300 Z" fill="url(#knurl)"/>
+  <path d="M215,425 C230,436 260,440 300,440 L700,440 C730,440 760,436 778,428" fill="none" stroke="#08090b" stroke-width="7" stroke-linecap="round"/>
+  <path d="${SIDE_PATH}" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  <path d="M228,350 C282,298 372,252 486,230 C560,218 630,222 690,244" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="2.5" stroke-linecap="round" filter="url(#soft)"/>
+  ${seam("M232,348 C290,296 380,252 486,230",2)}`;
+const LEFT_BODY=`${sideCommon}${plate}`;
+const RIGHT_BODY=`<g transform="translate(1000,0) scale(-1,1)">${sideCommon}
+  <path d="M330,372 C420,398 560,398 650,378" fill="none" stroke="#0b0c0f" stroke-width="20" stroke-linecap="round" opacity=".7"/>
+  <path d="M330,365 C420,391 560,391 650,371" fill="none" stroke="#fff" stroke-opacity=".05" stroke-width="2"/></g>`;
+const BOTTOM_BODY=`<path d="${TOP_PATH}" fill="#16181c"/>
+  <path d="${TOP_PATH}" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  <path d="M430,100 C470,92 530,92 570,100" fill="none" stroke="#9aa1ab" stroke-opacity=".28" stroke-width="12" stroke-linecap="round"/>
+  <path d="M420,560 C470,572 530,572 580,560" fill="none" stroke="#9aa1ab" stroke-opacity=".28" stroke-width="12" stroke-linecap="round"/>
+  <path d="M372,280 C366,330 366,380 372,430" fill="none" stroke="#9aa1ab" stroke-opacity=".18" stroke-width="8" stroke-linecap="round"/>
+  <path d="M628,280 C634,330 634,380 628,430" fill="none" stroke="#9aa1ab" stroke-opacity=".18" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="500" cy="300" r="30" fill="#0b0c0e" stroke="#fff" stroke-opacity=".06"/><circle cx="500" cy="300" r="11" fill="url(#lens)"/><circle cx="496" cy="296" r="2.5" fill="#fff" fill-opacity=".35"/>
+  <rect x="478" y="470" width="44" height="18" rx="9" fill="#0b0c0e"/><rect x="481" y="473" width="18" height="12" rx="6" fill="#4a4f58"/>
+  <circle cx="500" cy="380" r="5" fill="#2a2e34" stroke="#fff" stroke-opacity=".1"/>`;
 const sideKeys=()=>{ const out=[]; for(let r=0;r<4;r++) for(let c=0;c<3;c++){ const n=r*3+c+1, x=440+c*62, y=282+r*38;
-  out.push({slot:0x3F+n,shape:`<rect class="hot" x="${x}" y="${y}" width="56" height="32" rx="7"/><text class="keynum" x="${x+28}" y="${y+21}">${n}</text>`,anchor:[x+28,y+16]}); } return out; };
+  out.push({slot:0x3F+n,shape:`<rect class="hot key" x="${x}" y="${y}" width="56" height="32" rx="8"/><path d="M${x+8},${y+2.5} H${x+48}" stroke="#fff" stroke-opacity=".13" stroke-width="1.5" stroke-linecap="round" pointer-events="none"/><text class="keynum" x="${x+28}" y="${y+21}">${n}</text>`,anchor:[x+28,y+16]}); } return out; };
 const band=d=>`<path class="hotband" d="${d}"/><path class="band" d="${d}"/>`;
+const pill=(x,y,w,h,extra="")=>`<rect class="hot" x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(w,h)/2}" ${extra}/>`;
 const VIEWS={
   top:{body:TOP_BODY,lines:"always",spots:[
-    {slot:1,shape:`<path class="hot" d="M498,86 L498,266 C455,270 405,282 358,298 C352,226 362,158 402,116 C428,92 462,86 498,86 Z"/>`,anchor:[430,200]},
-    {slot:2,shape:`<path class="hot" d="M502,86 C538,86 572,92 598,116 C638,158 648,226 642,298 C595,282 545,270 502,266 Z"/>`,anchor:[575,200]},
-    {slot:9,shape:`<rect class="hot" x="484" y="128" width="32" height="30" rx="12"/>`,anchor:[500,143]},
-    {slot:3,shape:`<rect class="hot" x="484" y="161" width="32" height="30" rx="6"/>`,anchor:[500,176]},
-    {slot:10,shape:`<rect class="hot" x="484" y="194" width="32" height="30" rx="12"/>`,anchor:[500,209]},
-    {slot:52,shape:`<path class="hot" d="M476,160 L462,176 L476,192 Z"/>`,anchor:[465,176]},
-    {slot:53,shape:`<path class="hot" d="M524,160 L538,176 L524,192 Z"/>`,anchor:[535,176]},
-    {slot:106,shape:`<rect class="hot" x="488" y="234" width="24" height="16" rx="6"/>`,anchor:[500,242]},
-    {slot:128,shape:`<rect class="hot" x="488" y="254" width="24" height="16" rx="6"/>`,anchor:[500,262]},
-    {slot:11,shape:`<rect class="hot" x="370" y="146" width="16" height="40" rx="8"/>`,anchor:[378,166]},
-    {slot:12,shape:`<rect class="hot" x="364" y="192" width="16" height="40" rx="8"/>`,anchor:[372,212]},
-    {slot:57,shape:`<rect class="hot" x="652" y="330" width="14" height="64" rx="7"/>`,anchor:[659,362]},
+    {slot:1,shape:`<path class="hot ghost" d="M498,86 L498,266 C455,270 405,282 358,298 C352,226 362,158 402,116 C428,92 462,86 498,86 Z"/>`,anchor:[430,200]},
+    {slot:2,shape:`<path class="hot ghost" d="M502,86 C538,86 572,92 598,116 C638,158 648,226 642,298 C595,282 545,270 502,266 Z"/>`,anchor:[575,200]},
+    {slot:9,shape:`<rect class="hot ghost" x="482" y="124" width="36" height="34" rx="16"/>`,anchor:[500,141]},
+    {slot:3,shape:`<rect class="hot ghost" x="482" y="160" width="36" height="32" rx="6"/>`,anchor:[500,176]},
+    {slot:10,shape:`<rect class="hot ghost" x="482" y="194" width="36" height="34" rx="16"/>`,anchor:[500,211]},
+    {slot:52,shape:`<path class="hot" d="M470,164 L460,176 L470,188 Z"/>`,anchor:[464,176]},
+    {slot:53,shape:`<path class="hot" d="M530,164 L540,176 L530,188 Z"/>`,anchor:[536,176]},
+    {slot:106,shape:pill(487,242,26,13),anchor:[500,248]},
+    {slot:128,shape:pill(487,259,26,13),anchor:[500,265]},
+    {slot:11,shape:pill(372,148,14,38),anchor:[379,167]},
+    {slot:12,shape:pill(366,194,14,38),anchor:[373,213]},
+    {slot:57,shape:pill(653,328,12,62),anchor:[659,359]},
   ],L:[11,12,52,1],R:[9,3,10,53,106,128,2,57],tf:[1.12,500,330]},
   left:{body:LEFT_BODY,lines:"hover",spots:[
     {slot:1,shape:band("M240,338 C300,292 390,252 482,232"),anchor:[300,300]},
-    {slot:11,shape:`<rect class="hot" x="330" y="300" width="36" height="16" rx="8" transform="rotate(-24 348 308)"/>`,anchor:[348,308]},
-    {slot:12,shape:`<rect class="hot" x="378" y="280" width="36" height="16" rx="8" transform="rotate(-18 396 288)"/>`,anchor:[396,288]},
-    ...sideKeys()],L:[1,11,12],R:Array.from({length:12},(_,i)=>0x40+i),tf:[0.8,500,330]},
+    {slot:11,shape:pill(330,300,36,15,'transform="rotate(-25 348 307)"'),anchor:[348,307]},
+    {slot:12,shape:pill(378,280,36,15,'transform="rotate(-19 396 287)"'),anchor:[396,287]},
+    ...sideKeys()],L:[1,11,12],R:Array.from({length:12},(_,i)=>0x40+i),tf:[0.9,250,330],lw:205},
   right:{body:RIGHT_BODY,lines:"always",spots:[
     {slot:2,shape:band("M760,338 C700,292 610,252 518,232"),anchor:[700,300]},
-    {slot:57,shape:`<rect class="hot" x="560" y="328" width="84" height="26" rx="13"/>`,anchor:[602,341]},
-  ],L:[],R:[2,57],tf:[0.8,500,330]},
+    {slot:57,shape:pill(556,326,92,24),anchor:[602,338]},
+  ],L:[],R:[2,57],tf:[0.92,-700,330]},
   bottom:{body:BOTTOM_BODY,lines:"always",spots:[
-    {slot:14,shape:`<circle class="hot" cx="500" cy="410" r="17"/>`,anchor:[500,410]},
+    {slot:14,shape:`<circle class="hot" cx="500" cy="410" r="16"/>`,anchor:[500,410]},
   ],L:[],R:[14],tf:[1.12,500,330]},
 };
 function layoutCallouts(slots,anchors){
@@ -1055,6 +1114,7 @@ const trunc=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
 function renderStage(){
   const st=$("stage");
   if(view==="list"){ $("photoBar").innerHTML=""; renderList(); return; }
+  if(view==="test"){ renderTest(); return; }
   const V=VIEWS[view]; const [k,cx,cy]=V.tf||[1,500,330]; const anchors={}; V.spots.forEach(sp=>anchors[sp.slot]=[cx+(sp.anchor[0]-cx)*k,cy+(sp.anchor[1]-cy)*k]);
   const ph=photos[view]; if(ph) V.spots.forEach(sp=>{ const p=photoPos[view]?.[sp.slot]; if(p) anchors[sp.slot]=p; });
   const holders=new Set(hsHolders().map(s=>s.slot));
@@ -1063,10 +1123,10 @@ function renderStage(){
       return `<g class="${cls(sp.slot)}" data-slot="${sp.slot}"><circle class="hot mk" cx="${x}" cy="${y}" r="${key?12:15}"/>${key?`<text class="mk-n" x="${x}" y="${y+4}">${sp.slot-0x3F}</text>`:""}</g>`; }).join("")
     :V.spots.map(sp=>`<g class="${cls(sp.slot)}" data-slot="${sp.slot}">${sp.shape}</g>`).join("");
   let co="", leads="";
-  for(const side of ["L","R"]){ const x=side==="L"?14:736, w=250;
+  for(const side of ["L","R"]){ const w=side==="L"?(V.lw||250):250, x=side==="L"?(V.lw?6:14):736;
     layoutCallouts(V[side],anchors).forEach(it=>{
       const s=SLOT[it.slot], b=current[layer][it.slot], selc=it.slot===selSlot;
-      let act=!dev&&!b?"—":friendly(b,layer===1), dim=layer===1&&act==="—";
+      let act=!canEdit()&&!b?"—":friendly(b,layer===1), dim=act==="Nothing"||act==="Disabled";
       if(layer===1&&holders.has(it.slot)) { act="Hold for HyperShift"; dim=false; }
       const custom=layer===0&&b&&!same(b,s.def)&&!sameMeaning(b,s.def);
       const H=it.h, ex=side==="L"?x+w+2:x-2, ey=it.y+H/2, [ax,ay]=anchors[it.slot];
@@ -1092,9 +1152,9 @@ function renderStage(){
   st.querySelectorAll("[data-slot]").forEach(g=>{ const s=+g.dataset.slot;
     g.onclick=()=>{ if(!photoEdit) selectSlot(s); }; g.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); selectSlot(s); } };
     g.onmouseenter=()=>hoverSlot(s,true); g.onmouseleave=()=>hoverSlot(s,false); });
-  const notes={top:"Click a button or its label to change it. An amber dot marks buttons changed from factory.",left:"The 12-button side plate, numbered as printed on the keys. Hover a label to see its key.",right:"The pinky button on the right side is HyperShift from the factory.",bottom:"The profile button switches on-board slots; its light shows which (white = slot 1)."};
-  if(photoEdit&&ph){ $("stageNote").textContent="Drag each circle onto its button in the photo, then press Done. Hover a circle to see which button it is."; return; }
-  $("stageNote").textContent=(layer===1?"Showing what each button does while HyperShift is held. “—” means nothing happens. ":"")+notes[view];
+  const notes={top:"A dot marks buttons changed from their factory setting.",left:"Side keys are numbered as printed on the mouse.",right:"",bottom:"The light next to the profile button shows the active on-board profile."};
+  if(photoEdit&&ph){ $("stageNote").textContent="Drag each marker onto its button, then select Done."; return; }
+  $("stageNote").textContent=(layer===1?"HyperShift layer: what each button does while the HyperShift button is held. ":"")+notes[view];
 }
 const H_CO=46;
 // ---------- your own photos of the mouse ----------
@@ -1105,11 +1165,11 @@ let photoPos=store.get("naga.photoPos",{}), photoEdit=false;
 function renderPhotoBar(has){
   const bar=$("photoBar"); bar.innerHTML="";
   const mk=(t,fn,cls)=>{ const b=document.createElement("button"); b.textContent=t; if(cls) b.className=cls; b.onclick=fn; bar.append(b); };
-  if(!has){ mk(`Use a photo of your mouse's ${VIEWNAME[view]}`,()=>$("photoFile").click()); const s=document.createElement("span"); s.className="dim"; s.style.fontSize="12.5px"; s.textContent="Straight-on, plain background, cropped close."; bar.append(s); return; }
-  if(photoEdit){ mk("Done",()=>{ photoEdit=false; renderStage(); },"primary"); mk("Reset circles",()=>{ if(photoPos[view]) delete photoPos[view]; store.set("naga.photoPos",photoPos); renderStage(); }); return; }
-  mk("Move button circles",()=>{ photoEdit=true; renderStage(); });
+  if(!has){ mk("Use a photo",()=>$("photoFile").click(),"link"); return; }
+  if(photoEdit){ mk("Done",()=>{ photoEdit=false; renderStage(); },"primary"); mk("Reset markers",()=>{ if(photoPos[view]) delete photoPos[view]; store.set("naga.photoPos",photoPos); renderStage(); }); return; }
+  mk("Adjust markers",()=>{ photoEdit=true; renderStage(); });
   mk("Replace photo",()=>$("photoFile").click(),"link");
-  mk("Use the drawing",()=>{ photos[view]=null; try{ localStorage.removeItem("naga.photo."+view); }catch(e){} renderStage(); },"link");
+  mk("Remove photo",()=>{ photos[view]=null; try{ localStorage.removeItem("naga.photo."+view); }catch(e){} renderStage(); },"link");
 }
 $("photoFile").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return;
   try{
@@ -1119,7 +1179,7 @@ $("photoFile").onchange=async e=>{ const f=e.target.files[0]; e.target.value="";
     const data=c.toDataURL("image/jpeg",0.85);
     if(!store.set("naga.photo."+view,data)) throw new Error("The browser didn't have room to keep this photo. Try a smaller one.");
     photos[view]=data; const first=!photoPos[view]; photoEdit=true; renderStage();
-    if(first) toast("Now drag each circle onto its button in the photo");
+    if(first) toast("Drag each marker onto its button");
   }catch(err){ ask({title:"Couldn't use that photo",text:err.message}); } };
 function enableDrag(svg){
   const toSvg=e=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); };
@@ -1142,12 +1202,12 @@ function renderList(){
     const b=document.createElement("button"); if(s.slot===selSlot) b.className="sel";
     const act=layer===1&&holders.has(s.slot)?"Hold for HyperShift":!dev&&!current[layer][s.slot]?"—":friendly(current[layer][s.slot],layer===1);
     b.innerHTML=`<span>${esc(s.name)}</span><b>${esc(act)}</b>`; b.onclick=()=>selectSlot(s.slot); wrap.append(b); });
-  st.append(wrap); $("stageNote").textContent=layer===1?"Showing what each button does while HyperShift is held.":"Every button in one place.";
+  st.append(wrap); $("stageNote").textContent=layer===1?"HyperShift layer: what each button does while the HyperShift button is held.":"";
 }
 function selectSlot(s){ selSlot=s; draft=null; renderStage(); renderInspector(); if(window.innerWidth<=980) $("insp").scrollIntoView({behavior:"smooth",block:"start"}); }
 let lastNarrow=null; window.addEventListener("resize",()=>{ const n=$("stage").clientWidth<640; if(n!==lastNarrow){ lastNarrow=n; renderStage(); } });
 $("viewSeg").onclick=e=>{ const v=e.target.dataset.v; if(!v) return; view=v; photoEdit=false; document.querySelectorAll("#viewSeg button").forEach(b=>b.classList.toggle("sel",b.dataset.v===v));
-  const inView=v==="list"||VIEWS[v].spots.some(sp=>sp.slot===selSlot); if(!inView){ selSlot=VIEWS[v].spots.find(sp=>sp.slot!==1)?.slot??selSlot; draft=null; renderInspector(); } renderStage(); };
+  const inView=v==="list"||v==="test"||VIEWS[v].spots.some(sp=>sp.slot===selSlot); if(!inView){ selSlot=VIEWS[v].spots.find(sp=>sp.slot!==1)?.slot??selSlot; draft=null; renderInspector(); } renderStage(); };
 $("layerSeg").onclick=e=>{ const l=e.target.dataset.l; if(l===undefined) return; layer=+l; draft=null; document.querySelectorAll("#layerSeg button").forEach(b=>b.classList.toggle("sel",b.dataset.l===l)); renderStage(); renderInspector(); };
 
 // ---------- buttons: the inspector ----------
@@ -1169,8 +1229,7 @@ function draftFromBlock(b){
 function blockFromDraft(d){
   const turbo=d.turbo?ppsToRaw(d.pps||20):0;
   switch(d.type){
-    case "off": return OFF.slice();
-    case "nothing": return [0,1,0,0,0,0,0];
+    case "nothing": return layer===1?OFF.slice():[0,1,0,0,0,0,0];
     case "default": return layer===0?SLOT[selSlot].def.slice():OFF.slice();
     case "mouse": return turbo?[0x0E,0x03,d.btn,0,turbo,0,0]:(d.btn===0x68||d.btn===0x69)?[0x0E,1,d.btn,0,0x14,0,0]:[1,1,d.btn,0,0,0,0];
     case "key": return turbo?[0x0D,0x04,d.mods,d.key,0,turbo,0]:[2,2,d.mods,d.key,0,0,0];
@@ -1182,65 +1241,102 @@ function blockFromDraft(d){
   }
   return null;
 }
-const CATS=[["key","Key or shortcut"],["mouse","Mouse click"],["dpi","Sensitivity"],["hypershift","HyperShift"],["profile","On-board profile"],["wheelmode","Wheel feel"],["nothing","Do nothing"],["default","Factory setting"]];
+const ACTIONS=[["key","Keyboard key"],["mouse","Mouse button"],["dpi","Sensitivity"],["hypershift","HyperShift"],["profile","Switch on-board profile"],["wheelmode","Scroll wheel mode"],["nothing","Disabled"],["default","Factory default"],["raw","Raw value (advanced)"]];
+const ACTION_NOTE={hypershift:"While held, every other button switches to its HyperShift action.",profile:"Steps through the mouse's on-board profiles. Only useful if Synapse created more than one.",wheelmode:"Switches the scroll wheel between notched, free-spin and smart mode.",nothing:"The button does nothing.",raw:"Seven bytes in hex. For testing protocol values."};
+const keycaps=(mods,key)=>[...MODS.filter(([,v])=>mods&v).map(([n])=>n),KEYNAME[key]||"?"].map(k=>`<kbd>${esc(k)}</kbd>`).join('<span class="plus">+</span>');
 function renderInspector(){
-  const box=$("insp"), foot=$("inspFoot"); box.innerHTML=""; foot.innerHTML=""; foot.hidden=true; const s=SLOT[selSlot]; const cur=current[layer][selSlot];
-  const holders=hsHolders();
-  box.insertAdjacentHTML("beforeend",`<div class="kicker">${esc(s.group)}${layer?", while holding HyperShift":""}</div><h3>${esc(s.name)}</h3>`);
-  box.insertAdjacentHTML("beforeend",`<div class="now"><span>Does now</span><b>${esc(!dev&&!cur?"—":layer===1&&holders.some(h=>h.slot===selSlot)?"Hold for HyperShift":friendly(cur,layer===1))}</b></div>`);
-  if(s.locked){ box.insertAdjacentHTML("beforeend",'<p class="dim">Left click is locked so you can never lose the ability to click.</p>'); return; }
-  if(layer===1&&holders.some(h=>h.slot===selSlot)){ box.insertAdjacentHTML("beforeend",'<p class="dim">This is the HyperShift button, so it can\'t have a second job. Pick another button.</p>'); return; }
-  if(layer===1&&!holders.length) box.insertAdjacentHTML("beforeend",'<div class="banner" style="margin-bottom:12px"><b>No HyperShift button yet</b>Set the pinky button to HyperShift (Normal tab) or these won\'t do anything.</div>');
-  if(!canEdit()) box.insertAdjacentHTML("beforeend",'<p class="dim">Connect the mouse, or pick a layout to edit at the top.</p>');
+  const box=$("insp"), foot=$("inspFoot"); box.innerHTML=""; foot.innerHTML=""; foot.hidden=true;
+  const s=SLOT[selSlot], cur=current[layer][selSlot], holders=hsHolders(), isHolder=holders.some(h=>h.slot===selSlot);
+  const curText=!canEdit()&&!cur?"Unknown":layer===1&&isHolder?"Hold for HyperShift":friendly(cur,layer===1);
+  box.insertAdjacentHTML("beforeend",`<div class="kicker">${esc(s.group)}${layer?' <span class="tag">HyperShift layer</span>':""}</div><h3>${esc(s.name)}</h3><p class="cur">Current: <b>${esc(curText)}</b></p>`);
+  if(s.locked){ box.insertAdjacentHTML("beforeend",'<p class="dim">Left click can\'t be changed, so the mouse always has a working click.</p>'); return; }
+  if(layer===1&&isHolder){ box.insertAdjacentHTML("beforeend",'<p class="dim">This is the HyperShift button, so it has no HyperShift action of its own.</p>'); return; }
+  if(layer===1&&!holders.length) box.insertAdjacentHTML("beforeend",'<div class="banner" style="margin-bottom:14px"><b>No HyperShift button</b>Set a button to HyperShift on the Normal layer first, or these actions can\'t be used.</div>');
+  if(!canEdit()){ box.insertAdjacentHTML("beforeend",'<p class="dim">Connect the mouse, or choose a layout to edit.</p>'); return; }
   if(!draft) draft=draftFromBlock(cur);
-  box.insertAdjacentHTML("beforeend",'<p class="q">Change it to</p>');
-  const cats=document.createElement("div"); cats.className="cats";
-  CATS.forEach(([v,t])=>{ const b=document.createElement("button"); b.className="chip"+(draft.type===v?" sel":""); b.textContent=t; b.onclick=()=>{ draft.type=v; renderInspector(); }; cats.append(b); });
-  const adv=document.createElement("button"); adv.className="chip adv"+(draft.type==="raw"?" sel":""); adv.textContent="Advanced: raw bytes"; adv.title="Advanced"; adv.onclick=()=>{ draft.type="raw"; if(!draft.hex&&cur) draft.hex=hex(cur); renderInspector(); }; cats.append(adv);
-  box.append(cats);
+  const lab=document.createElement("label"); lab.className="field"; lab.innerHTML='<span>Action</span>';
+  const sel=document.createElement("select"); ACTIONS.forEach(([v,t])=>sel.add(new Option(t,v))); sel.value=draft.type;
+  sel.onchange=()=>{ draft.type=sel.value; if(draft.type==="raw"&&!draft.hex&&cur) draft.hex=hex(cur); renderInspector(); };
+  lab.append(sel); box.append(lab);
   const pnl=document.createElement("div"); pnl.className="panel"; box.append(pnl);
-  const repeatUI=()=>{ const w=document.createElement("div"); w.className="row";
-    w.innerHTML=`<label class="row" style="gap:6px"><input type="checkbox" ${draft.turbo?"checked":""}> Repeat while held</label><input type="range" min="1" max="20" value="${draft.pps}" style="width:90px" ${draft.turbo?"":"disabled"}><span class="dim">${draft.pps}/s</span>`;
-    const [cb,r]=w.querySelectorAll("input"); cb.onchange=()=>{ draft.turbo=cb.checked; r.disabled=!cb.checked; update(); }; r.oninput=()=>{ draft.pps=+r.value; w.lastElementChild.textContent=draft.pps+"/s"; update(); }; return w; };
-  const chips=(items,get,set)=>{ const w=document.createElement("div"); w.className="quick"; items.forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if(get()===v) b.className="chip sel"; else b.className="chip"; b.onclick=()=>{ set(v); renderInspector(); }; w.append(b); }); return w; };
+  const repeatUI=()=>{ const w=document.createElement("div"); w.className="repeat";
+    w.innerHTML=`<label class="row" style="gap:8px"><input type="checkbox" ${draft.turbo?"checked":""}> Repeat while held</label><div class="row" ${draft.turbo?"":"hidden"}><input type="range" min="1" max="20" value="${draft.pps}" class="grow"><span class="value">${draft.pps} per second</span></div>`;
+    const [cb,r]=w.querySelectorAll("input"); cb.onchange=()=>{ draft.turbo=cb.checked; w.lastElementChild.hidden=!cb.checked; update(); }; r.oninput=()=>{ draft.pps=+r.value; w.querySelector(".value").textContent=draft.pps+" per second"; update(); }; return w; };
+  const chips=(items,get,set)=>{ const w=document.createElement("div"); w.className="quick"; items.forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; b.className="chip"+(get()===v?" sel":""); b.onclick=()=>{ set(v); renderInspector(); }; w.append(b); }); return w; };
   if(draft.type==="key"){
+    const combo=document.createElement("button"); combo.className="combo"; combo.innerHTML=`<span class="keys">${keycaps(draft.mods,draft.key)}</span><span class="dim small">Change</span>`;
+    combo.onclick=()=>openKeyboard(draft.mods,draft.key,(m,k)=>{ draft.mods=m; draft.key=k; renderInspector(); });
+    pnl.append(combo);
     const q=document.createElement("div"); q.innerHTML='<div class="label">Common</div>'; const qw=document.createElement("div"); qw.className="quick";
-    QUICK.forEach(t=>{ const r=parseAction(t); const b=document.createElement("button"); b.textContent=t; b.onclick=()=>{ draft.mods=r.blk[2]; draft.key=r.blk[3]; renderInspector(); }; qw.append(b); }); q.append(qw); pnl.append(q);
-    const m=document.createElement("div"); m.className="mods";
-    MODS.forEach(([n,v])=>{ const b=document.createElement("button"); b.textContent=n==="Win"?"Win / ⌘":n; if(draft.mods&v) b.className="sel"; b.onclick=()=>{ draft.mods^=v; b.classList.toggle("sel"); update(); }; m.append(b); });
-    const plus=document.createElement("span"); plus.className="dim"; plus.textContent="+"; m.append(plus);
-    const ks=document.createElement("select"); KEYGROUPS.forEach(([g,list])=>{ const og=document.createElement("optgroup"); og.label=g; list.forEach(n=>og.append(new Option(n,KEYS[n]))); ks.append(og); }); ks.value=String(draft.key); ks.onchange=()=>{ draft.key=+ks.value; update(); }; m.append(ks);
-    pnl.append(m);
-    const rec=document.createElement("button"); rec.className="rec"; rec.textContent="Record a shortcut from the keyboard";
-    rec.onclick=()=>{ rec.classList.add("on"); rec.textContent="Press the shortcut now… (Esc cancels)"; const h=e=>{ if(["Control","Shift","Alt","Meta"].includes(e.key)) return;
-        document.removeEventListener("keydown",h,true); e.preventDefault(); e.stopPropagation();
-        if(e.code==="Escape"&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.shiftKey){ renderInspector(); return; }
-        const n=CODE2NAME(e.code); if(n){ draft.key=KEYS[n]; draft.mods=(e.ctrlKey?1:0)|(e.shiftKey?2:0)|(e.altKey?4:0)|(e.metaKey?8:0); } renderInspector(); };
-      document.addEventListener("keydown",h,true); };
-    pnl.append(rec);
-    const hint=document.createElement("div"); hint.className="dim"; hint.style.fontSize="12px"; hint.textContent="Shortcuts your computer grabs first (like Win+L) can't be recorded; pick them with the buttons above."; pnl.append(hint);
+    QUICK.forEach(t=>{ const r=parseAction(t); const b=document.createElement("button"); b.className="chip"+(r.blk[2]===draft.mods&&r.blk[3]===draft.key?" sel":""); b.textContent=t; b.onclick=()=>{ draft.mods=r.blk[2]; draft.key=r.blk[3]; renderInspector(); }; qw.append(b); }); q.append(qw); pnl.append(q);
     pnl.append(repeatUI());
   } else if(draft.type==="mouse"){
     pnl.append(chips(Object.entries(MOUSE).map(([v,n])=>[+v,n]),()=>draft.btn,v=>draft.btn=v)); pnl.append(repeatUI());
-    if(draft.turbo&&draft.btn===1) pnl.insertAdjacentHTML("beforeend",'<div class="dim" style="font-size:12px">This is an autoclicker: holding the button clicks repeatedly.</div>');
   } else if(draft.type==="dpi"){
-    pnl.append(chips([[1,"Next stage up"],[2,"Next stage down"],[6,"Cycle through stages"]],()=>draft.dpi,v=>draft.dpi=v));
+    pnl.append(chips([[1,"Next stage"],[2,"Previous stage"],[6,"Cycle stages"]],()=>draft.dpi,v=>draft.dpi=v));
   } else if(draft.type==="raw"){
-    const i=document.createElement("input"); i.value=draft.hex; i.placeholder="7 bytes, hex"; i.style.fontFamily="ui-monospace,Menlo,monospace"; i.style.width="100%"; i.oninput=()=>{ draft.hex=i.value; update(); }; pnl.append(i);
-    pnl.insertAdjacentHTML("beforeend",'<div class="dim" style="font-size:12px">For testing protocol codes. Use the other categories for normal changes.</div>');
-  } else {
-    const txt={hypershift:"Hold this button to switch every other button to its HyperShift job.",profile:"Steps through the on-board slots (only useful if Synapse created more than one).",wheelmode:"Switches the scroll wheel between clicky, free-spin and smart mode.",nothing:"The button does nothing.",default:layer?"Clears this button's HyperShift job.":`Puts back the factory job: ${friendly(s.def,false)}.`}[draft.type];
-    pnl.innerHTML=`<div class="dim">${esc(txt)}</div>`;
+    const i=document.createElement("input"); i.value=draft.hex; i.placeholder="02 02 00 04 00 00 00"; i.style.fontFamily="ui-monospace,Menlo,monospace"; i.style.width="100%"; i.oninput=()=>{ draft.hex=i.value; update(); }; pnl.append(i);
+    pnl.insertAdjacentHTML("beforeend",`<div class="dim small">${ACTION_NOTE.raw}</div>`);
+  } else if(draft.type==="default"){
+    pnl.innerHTML=`<div class="dim small">${layer?"Removes this button's HyperShift action.":`Factory action: ${esc(friendly(s.def,false))}.`}</div>`;
+  } else pnl.innerHTML=`<div class="dim small">${esc(ACTION_NOTE[draft.type]||"")}</div>`;
+  function update(){
+    const blk=blockFromDraft(draft); const changed=!!blk&&!(cur&&sameMeaning(blk,cur));
+    foot.hidden=!changed&&!(draft.type==="raw"&&!blk); foot.innerHTML="";
+    if(foot.hidden) return;
+    if(!blk){ foot.innerHTML='<div class="preview badc">Enter exactly 7 bytes.</div>'; return; }
+    foot.innerHTML=`<div class="preview"><span class="from">${esc(curText)}</span><span class="arrow">→</span><b>${esc(friendly(blk,layer===1))}</b></div><div class="row"><button class="grow" id="inspRevert">Cancel</button><button class="primary grow" id="inspSave">Save</button></div>`;
+    $("inspRevert").onclick=()=>{ draft=null; renderInspector(); };
+    $("inspSave").onclick=safe(async()=>{ $("inspSave").disabled=true; $("inspSave").textContent="Saving…";
+      await applyAll({buttons:{[layer]:{[selSlot]:blk}}},`Before changing ${s.name}${layer?" (HyperShift)":""}`,{toast:s.name});
+      draft=null; renderStage(); renderInspector(); });
   }
-  const prev=document.createElement("div"); prev.className="preview"; foot.append(prev); foot.hidden=false;
-  const btn=document.createElement("button"); btn.className="primary assign"; foot.append(btn);
-  function update(){ const blk=blockFromDraft(draft); const sameAsNow=blk&&cur&&sameMeaning(blk,cur);
-    prev.innerHTML=blk?`${esc(s.name)} will do <b>${esc(friendly(blk,layer===1))}</b>`:"Needs exactly 7 bytes.";
-    btn.textContent=sameAsNow?"Already set":inLayout()?`Save to “${editName}”`:"Save to mouse"; btn.disabled=!canEdit()||!blk||sameAsNow; }
-  btn.onclick=safe(async()=>{ const blk=blockFromDraft(draft); if(!blk) return; btn.disabled=true; btn.textContent="Saving…";
-    const r=await applyAll({buttons:{[layer]:{[selSlot]:blk}}},`Before changing ${s.name}${layer?" (HyperShift)":""}`,{toast:s.name});
-    draft=null; renderStage(); renderInspector(); });
   update();
+}
+
+// ---------- on-screen keyboard ----------
+const KB_MAIN=[
+  [["Esc",1],[null,1],["F1",1],["F2",1],["F3",1],["F4",1],[null,.5],["F5",1],["F6",1],["F7",1],["F8",1],[null,.5],["F9",1],["F10",1],["F11",1],["F12",1]],
+  [["`",1],["1",1],["2",1],["3",1],["4",1],["5",1],["6",1],["7",1],["8",1],["9",1],["0",1],["-",1],["=",1],["Backspace",2]],
+  [["Tab",1.5],["Q",1],["W",1],["E",1],["R",1],["T",1],["Y",1],["U",1],["I",1],["O",1],["P",1],["[",1],["]",1],["\\",1.5]],
+  [["Caps Lock",1.75],["A",1],["S",1],["D",1],["F",1],["G",1],["H",1],["J",1],["K",1],["L",1],[";",1],["'",1],["Enter",2.25]],
+  [["#Shift",2.25],["Z",1],["X",1],["C",1],["V",1],["B",1],["N",1],["M",1],[",",1],[".",1],["/",1],["#Shift",2.75]],
+  [["#Ctrl",1.25],["#Win",1.25],["#Alt",1.25],["Space",6.25],["#Alt",1.25],["#Win",1.25],["Menu",1.25],["#Ctrl",1.25]]];
+const KB_NAV=[[["Print Screen",1,"PrtSc"],["Scroll Lock",1,"ScrLk"],["Pause",1]],[["Insert",1,"Ins"],["Home",1],["Page Up",1,"PgUp"]],[["Delete",1,"Del"],["End",1],["Page Down",1,"PgDn"]],[[null,3]],[[null,1],["↑",1],[null,1]],[["←",1],["↓",1],["→",1]]];
+const KB_PAD=[[[null,4]],[[null,1],["Num /",1,"/"],["Num *",1,"*"],["Num −",1,"−"]],[["Num 7",1,"7"],["Num 8",1,"8"],["Num 9",1,"9"],["Num +",1,"+"]],[["Num 4",1,"4"],["Num 5",1,"5"],["Num 6",1,"6"],[null,1]],[["Num 1",1,"1"],["Num 2",1,"2"],["Num 3",1,"3"],["Num Enter",1,"Ent"]],[["Num 0",2,"0"],["Num .",1,"."],[null,1]]];
+const KB_MORE=["F13","F14","F15","F16","F17","F18","F19","F20","F21","F22","F23","F24","Volume up","Volume down","Mute"];
+function openKeyboard(mods,key,done){
+  const d=$("kbdDlg"); let m=mods, k=key;
+  const modVal={Ctrl:1,Shift:2,Alt:4,Win:8};
+  const block=rows=>`<div class="kb-block">${rows.map(r=>`<div class="kb-row">${r.map(([n,u,lbl])=>n===null?`<span class="kb-gap" style="--u:${u}"></span>`:n[0]==="#"?`<button class="kb-key mod" data-mod="${n.slice(1)}" style="--u:${u}">${n==="#Win"?"Win / ⌘":n.slice(1)}</button>`:`<button class="kb-key" data-key="${esc(n)}" style="--u:${u}">${esc(lbl||n)}</button>`).join("")}</div>`).join("")}</div>`;
+  $("kbdBody").innerHTML=`<div class="kb">${block(KB_MAIN)}${block(KB_NAV)}${block(KB_PAD)}</div><div class="label" style="margin-top:12px">More keys</div><div class="quick">${KB_MORE.map(n=>`<button class="chip" data-key="${n}">${n}</button>`).join("")}</div>`;
+  const paint=()=>{ $("kbdCombo").innerHTML=keycaps(m,k);
+    $("kbdBody").querySelectorAll("[data-mod]").forEach(b=>b.classList.toggle("sel",!!(m&modVal[b.dataset.mod])));
+    $("kbdBody").querySelectorAll("[data-key]").forEach(b=>b.classList.toggle("sel",KEYS[b.dataset.key]===k)); };
+  $("kbdBody").onclick=e=>{ const b=e.target.closest("button"); if(!b) return; if(b.dataset.mod) m^=modVal[b.dataset.mod]; else if(b.dataset.key) k=KEYS[b.dataset.key]; paint(); };
+  const onKey=e=>{ if(!d.open) return; if(["Control","Shift","Alt","Meta"].includes(e.key)) return; const n=CODE2NAME(e.code); if(!n) return;
+    if(n==="Esc"&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.shiftKey) return;
+    e.preventDefault(); e.stopPropagation(); k=KEYS[n]; m=(e.ctrlKey?1:0)|(e.shiftKey?2:0)|(e.altKey?4:0)|(e.metaKey?8:0); paint(); };
+  document.addEventListener("keydown",onKey,true);
+  const close=v=>{ document.removeEventListener("keydown",onKey,true); d.close(); if(v) done(m,k); };
+  $("kbdOk").onclick=()=>close(true); $("kbdCancel").onclick=()=>close(false); d.oncancel=e=>{ e.preventDefault(); close(false); };
+  paint(); d.showModal();
+}
+
+// ---------- button test ----------
+const testLog=[];
+function renderTest(){
+  const st=$("stage"); $("photoBar").innerHTML=""; $("stageNote").textContent="";
+  st.innerHTML=`<div class="testpad" tabindex="0" id="testPad"><div class="t-head"><b>Click here, then press buttons on the mouse.</b><span class="dim small">Each press is listed with what the computer received. Shortcuts the system handles itself, like Win+L, will still run.</span></div><ol class="t-log" id="testLogEl"></ol></div>`;
+  const pad=$("testPad"), list=$("testLogEl");
+  const draw=()=>{ list.innerHTML=testLog.length?testLog.map(t=>`<li><b>${esc(t.what)}</b><span class="dim small">${t.time}</span></li>`).join(""):'<li class="dim">Nothing yet.</li>'; };
+  const add=what=>{ testLog.unshift({what,time:new Date().toLocaleTimeString()}); testLog.length=Math.min(testLog.length,14); draw(); };
+  pad.onkeydown=e=>{ if(["Control","Shift","Alt","Meta"].includes(e.key)) return; e.preventDefault();
+    const n=CODE2NAME(e.code)||e.key; add([e.ctrlKey&&"Ctrl",e.shiftKey&&"Shift",e.altKey&&"Alt",e.metaKey&&"Win",n].filter(Boolean).join("+")); };
+  pad.onmousedown=e=>{ pad.focus(); add(["Left click","Middle click","Right click","Back","Forward"][e.button]||`Mouse button ${e.button+1}`); if(e.button>0) e.preventDefault(); };
+  pad.onauxclick=e=>e.preventDefault(); pad.oncontextmenu=e=>e.preventDefault();
+  let wt=0; pad.onwheel=e=>{ e.preventDefault(); if(Date.now()-wt<120) return; wt=Date.now(); add(Math.abs(e.deltaX)>Math.abs(e.deltaY)?(e.deltaX<0?"Scroll left":"Scroll right"):(e.deltaY<0?"Scroll up":"Scroll down")); };
+  draw(); pad.focus();
 }
 
 // ---------- one path for every change: plan, back up, write, verify, roll back if needed ----------
@@ -1268,7 +1364,7 @@ async function applyAll(target,reason,opts={}){
   if(!canEdit()) return {total:0,failed:0};
   const plan=planChanges(target);
   if(!plan.total){ if(opts.toast) saveNote(""); return {total:0,failed:0}; }
-  if(opts.confirm&&!(await ask({title:opts.confirm,text:inLayout()?`These change in “${editName}”. The previous version is kept.`:"These change on the mouse. A copy of its current setup goes to History first.",lines:planLines(plan),ok:opts.okLabel||(inLayout()?"Apply":"Load onto mouse")}))) return {total:0,failed:0,cancelled:true};
+  if(opts.confirm&&!(await ask({title:opts.confirm,text:inLayout()?`Changes to “${editName}”. The current version stays in its history.`:"Changes to the mouse. Its current setup is saved to History first.",lines:planLines(plan),ok:opts.okLabel||(inLayout()?"Apply":"Load onto mouse")}))) return {total:0,failed:0,cancelled:true};
   if(plan.items.length){ const p=guardChanges(plan.items); if(p.length&&!(await ask({title:"Are you sure?",lines:p,ok:"Save anyway"}))) return {total:0,failed:0,cancelled:true}; }
   const before=snapshotNow(); if(!inLayout()) pushHistory(reason,before);
   busy=true; saveNote("Saving…");
@@ -1285,10 +1381,10 @@ async function applyAll(target,reason,opts={}){
   if(!opts.keepEditors){ if(plan.dpi){ dpiEdit=clone(dpiMouse); } if(plan.zones.length){ led=clone(ledMouse); } }
   renderAll({skipEditors:opts.keepEditors});
   if(failed){ saveNote(`${failed} change${failed>1?"s":""} not saved`,"badc");
-    alertBox("partial","bad","Not everything was saved",`${done} of ${plan.total} changes went through; the mouse may now be half-changed (it may have gone to sleep or been unplugged).`,
-    [["Put back how it was before",async()=>{ clearAlert("partial"); await applyAll(before,"Before rolling back a partial save"); },true],
+    alertBox("partial","bad","Some changes weren't saved",`${done} of ${plan.total} changes were saved. The mouse may have gone to sleep or been disconnected.`,
+    [["Undo the partial change",async()=>{ clearAlert("partial"); await applyAll(before,"Before rolling back a partial save"); },true],
      ["Try again",async()=>{ clearAlert("partial"); await applyAll(target,"Before retrying",opts); }]]); }
-  else { clearAlert("partial"); const where=inLayout()?`“${editName}”`:"the mouse"; saveNote(`Saved to ${where} ✓`,"good"); if(opts.toast) toast(`${opts.toast} saved to ${where} ✓`,true); }
+  else { clearAlert("partial"); saveNote(inLayout()?`Saved to ${editName}`:"Saved","good"); if(opts.toast) toast(`${opts.toast} saved`,true); }
   return {total:plan.total,failed,done};
 }
 
@@ -1325,10 +1421,10 @@ function checkAgainstLastSeen(when){
     const factory=isFactory(now)&&!isFactory(seen.snap);
     pushHistory("Found on mouse (changed outside this page)",now);
     alertBox("changed",factory?"bad":"warn",
-      factory?"Your mouse looks reset to factory settings":"Your mouse was changed outside this page",
-      `${diffText(diffSnap(seen.snap,now))} differ from what this page last saw (${new Date(seen.t).toLocaleString()}). This usually means Synapse, OpenSnek, another computer or a reset. Nothing has been changed back yet.`,
-      [["Put back my previous setup",async()=>{ clearAlert("changed"); await applyAll(seen.snap,"Before restoring previous setup"); },true],
-       ["Keep what's on the mouse",async()=>{ rememberMouse(); clearAlert("changed"); }]]);
+      factory?"The mouse was reset to factory settings":"The mouse was changed elsewhere",
+      `${diffText(diffSnap(seen.snap,now))} changed since ${new Date(seen.t).toLocaleString()}, probably by Synapse, another app or another computer.`,
+      [["Restore my setup",async()=>{ clearAlert("changed"); await applyAll(seen.snap,"Before restoring previous setup"); },true],
+       ["Keep the changes",async()=>{ rememberMouse(); clearAlert("changed"); }]]);
   } else {
     pushHistory(when==="connect"?"Found on mouse when connected":"Found on mouse",now);
     rememberMouse();
@@ -1340,10 +1436,10 @@ function updateUndo(){
   const h=dev?getHistory():[]; $("btnUndo").disabled=!dev||!h.some(e=>e.reason.startsWith("Before")); }
 $("btnUndo").onclick=safe(async()=>{
   if(inLayout()){ const L=userLayouts[editName]; const v=L?.versions?.[1]; if(!v) return; clearTimeout(ledTimer); clearTimeout(dpiTimer); ledTimer=dpiTimer=null;
-    setEditorFrom(layoutState(v.data)); commitLayoutVersion("Undo"); renderAll(); toast("Undone ✓"); return; }
+    setEditorFrom(layoutState(v.data)); commitLayoutVersion("Undo"); renderAll(); toast("Undone"); return; }
   const e=getHistory().find(e=>e.reason.startsWith("Before")); if(!e) return;
   clearTimeout(ledTimer); clearTimeout(dpiTimer); ledTimer=dpiTimer=null;
-  const r=await applyAll(e.snap,"Before undo"); if(!r.total) toast("Nothing to undo: the mouse already matches."); else toast("Undone ✓"); });
+  const r=await applyAll(e.snap,"Before undo"); if(!r.total) toast("Nothing to undo"); else toast("Undone"); });
 function renderHistory(){
   const tb=$("histRows"); const h=getHistory(); tb.innerHTML="";
   if(!h.length){ tb.innerHTML='<tr><td colspan="4" class="dim">Nothing yet.</td></tr>'; return; }
@@ -1496,7 +1592,7 @@ $("txtLoad").onclick=safe(async()=>{ const r=checkText(); if(!r) return; if(!can
   const name=r.name||"pasted layout", where=inLayout()?`“${editName}”`:"the mouse";
   const res=await applyAll(r.layout,`Before loading "${name}" from text`,{confirm:inLayout()?`Apply “${name}” to ${where}?`:`Load “${name}” onto the mouse?`});
   if(res.cancelled) return;
-  showTextResult(res.total?(res.failed?`<b>Partly loaded</b>See the warning at the top.`:`<b>Applied to ${esc(where)} ✓</b>${res.total} change${res.total>1?"s":""} saved.`):`<b>${esc(where)} already matches it.</b>`,res.failed?"bad":"good"); });
+  showTextResult(res.total?(res.failed?`<b>Partly loaded</b>See the warning at the top.`:`<b>Applied to ${esc(where)}</b>${res.total} change${res.total>1?"s":""} saved.`):`<b>${esc(where)} already matches it.</b>`,res.failed?"bad":"good"); });
 $("txtSave").onclick=safe(async()=>{ const r=checkText(); if(!r) return; let name=await ask({title:"Save as layout",text:"Name:",input:r.name||"",ok:"Save"}); if(!name) return;
   if(BUILTIN[name]) name+=" (mine)"; if(userLayouts[name]&&!(await ask({title:`Replace “${name}”?`,ok:"Replace"}))) return;
   userLayouts[name]=r.layout; touch(name); saveLayouts(); renderLayouts(); updateMatch(); showTextResult(`<b>Saved as “${esc(name)}”</b>It's in Saved layouts. The mouse wasn't changed.`,"good"); });
@@ -1515,10 +1611,10 @@ const BUILTIN={
     buttons:{0:{0x40:K(8,"L"),0x41:OFF,0x42:K(1,"C"),0x43:K(0,"Tab"),0x44:K(0,"Enter"),0x45:K(4,"C"),0x46:K(2,"Tab"),0x47:K(1,"N"),0x48:K(4,"L"),0x49:DEF(0x49),0x4A:K(8,"2"),0x4B:DEF(0x4B),57:DEF(57)},
              1:{9:K(0,"Num +"),10:K(0,"Num −"),0x42:K(1,"V")}}},
   "MapleStory":{builtin:true,
-    note:"Side buttons type 1–9, 0, -, = (factory). Pinky = left click repeating 20/s while held.",
+    note:"Side keys at their factory setting. The pinky button clicks 20 times per second while held.",
     buttons:{0:{...Object.fromEntries(SLOTS.filter(s=>s.slot>=0x40&&s.slot<=0x4B).map(s=>[s.slot,s.def.slice()])),57:[0x0E,0x03,1,0,1,0,0]},
              1:{9:OFF,10:OFF,0x42:OFF}}},
-  "Factory reset (buttons)":{builtin:true,note:"Every button back to how it came out of the box, HyperShift jobs cleared.",
+  "Factory default":{builtin:true,note:"All buttons at their factory setting, with no HyperShift actions.",
     buttons:{0:Object.fromEntries(SLOTS.filter(s=>!s.locked).map(s=>[s.slot,s.def.slice()])),1:Object.fromEntries(SLOTS.filter(s=>!s.locked).map(s=>[s.slot,OFF.slice()]))}},
 };
 let userLayouts=store.get("naga.layouts",{});
@@ -1542,21 +1638,21 @@ function renderLayouts(){
     const acts=row.lastElementChild;
     const mk=(t,fn,cls,parent=acts)=>{ const b=document.createElement("button"); b.textContent=t; if(cls) b.className=cls; b.onclick=safe(fn); parent.append(b); return b; };
     if(p.builtin){
-      mk("Make my own copy",async()=>{ let n=name.replace(/ \(buttons\)$/,""),i=2; while(all()[n]) n=`${name} ${i++}`; const c=clone(p); delete c.builtin; userLayouts[n]=c; touch(n); saveLayouts(); await enterLayoutMode(n); showTab("buttons"); toast(`Editing your copy, “${n}”`); });
+      mk("Copy to my layouts",async()=>{ let n=name.replace(/ \(buttons\)$/,""),i=2; while(all()[n]) n=`${name} ${i++}`; const c=clone(p); delete c.builtin; userLayouts[n]=c; touch(n); saveLayouts(); await enterLayoutMode(n); showTab("buttons"); toast(`Created “${n}”`); });
     } else {
       if(!editing) mk("Edit",async()=>{ await enterLayoutMode(name); showTab("buttons"); });
       mk(`Versions (${(p.versions||[]).length})`,async()=>{ openVersions.has(name)?openVersions.delete(name):openVersions.add(name); renderLayouts(); },"link");
     }
-    mk("Copy as text",async()=>{ const t=layoutToText(p,name); $("layoutText").value=t; showTextResult(""); await copyText(t); toast("Copied as text; paste it into the chat"); },"link");
+    mk("Copy as text",async()=>{ const t=layoutToText(p,name); $("layoutText").value=t; showTextResult(""); await copyText(t); toast("Copied as text"); },"link");
     mk("Export",async()=>download(name.replace(/[^\w-]+/g,"_")+".json",layoutToText(p,name)),"link");
     if(!p.builtin){
       mk("Duplicate",async()=>{ let n=name+" copy",i=2; while(all()[n]) n=`${name} copy ${i++}`; const c=clone(p); c.versions=[]; delete c.lastLoaded; userLayouts[n]=c; touch(n); saveLayouts(); renderLayouts(); renderEditSel(); },"link");
-      mk("Copy the mouse into it",async()=>{ if(!dev) return toast("Plug in the mouse first; this copies what's on it.");
+      mk("Replace with mouse settings",async()=>{ if(!dev) return toast("Plug in the mouse first; this copies what's on it.");
         if(!(await ask({title:`Replace “${name}” with what's on the mouse?`,text:"The current version is kept in its versions list. The mouse isn't changed.",ok:"Replace"}))) return;
         if(inLayout()) await enterMouseMode(); await readEverything(); const L=userLayouts[name]; Object.assign(L,dataOf(snapshotNow())); addVersion(L,"Copied from the mouse"); L.lastLoaded=Date.now(); touch(name); L.lastLoaded=L.updated; saveLayouts(); renderAll(); },"link");
       mk("Rename",async()=>{ const n=await ask({title:"Rename layout",input:name,ok:"Rename"}); if(!n||n===name) return; if(all()[n]) return toast("That name is taken.");
         userLayouts[n]=userLayouts[name]; delete userLayouts[name]; bury(name); touch(n); if(editName===name){ editName=n; store.set("naga.lastEdit",n); } saveLayouts(); renderAll(); },"link");
-      mk("Delete",async()=>{ if(!(await ask({title:`Delete “${name}”?`,text:"It's removed here and on your other devices. The mouse isn't changed.",ok:"Delete"}))) return;
+      mk("Delete",async()=>{ if(!(await ask({title:`Delete “${name}”?`,text:"Removes it from all your devices. The mouse isn't affected.",ok:"Delete"}))) return;
         delete userLayouts[name]; bury(name); saveLayouts(); if(editName===name) await pickStartTarget(); renderAll(); },"link");
     }
     if(on){ const t=document.createElement("span"); t.className="dim small"; t.textContent="On the mouse now"; acts.append(t); }
@@ -1566,9 +1662,9 @@ function renderLayouts(){
       (p.versions||[]).forEach((v,i)=>{ const vr=document.createElement("div"); vr.className="vrow";
         vr.innerHTML=`<div>${v.named?`<b>${esc(v.note)}</b>`:esc(v.note)}${i===0?' <span class="tag plain">current</span>':""}<div class="when">${new Date(v.t).toLocaleString()}</div></div><div class="acts"></div>`;
         const va=vr.lastElementChild;
-        if(i>0) mk("Go back to this",async()=>{ if(!(await ask({title:`Go back to this version of “${name}”?`,text:`${v.note}, ${new Date(v.t).toLocaleString()}. The current version stays in the list.`,ok:"Go back"}))) return;
+        if(i>0) mk("Restore",async()=>{ if(!(await ask({title:`Go back to this version of “${name}”?`,text:`${v.note}, ${new Date(v.t).toLocaleString()}. The current version stays in the list.`,ok:"Go back"}))) return;
           const L=userLayouts[name]; Object.assign(L,clone(v.data)); addVersion(L,`Went back to: ${v.note}`); touch(name); saveLayouts();
-          if(editName===name&&inLayout()) setEditorFrom(layoutState(L)); renderAll(); toast("Version restored ✓"); },"link",va);
+          if(editName===name&&inLayout()) setEditorFrom(layoutState(L)); renderAll(); toast("Restored that version"); },"link",va);
         const lv=mk("Load onto mouse",async()=>{ await loadOntoMouse(v.data,`${name} (${new Date(v.t).toLocaleString()})`,name); },"link",va); lv.disabled=!dev;
         mk("Copy as text",async()=>{ await copyText(layoutToText(v.data,name)); toast("Copied as text"); },"link",va);
         vl.append(vr); });
@@ -1580,7 +1676,7 @@ function layoutMatches(p){ if(!p) return false; const plan=planChanges(p); const
   return any>0&&plan.items.length===0&&!plan.dpi&&plan.zones.length===0; }
 function updateMatch(){ if(!dev||inLayout()){ $("stMatch").hidden=true; return; }
   const m=Object.entries(all()).filter(([,p])=>layoutMatches(p)).map(([n])=>n);
-  $("stMatch").hidden=false; $("stMatch").innerHTML=m.length?`Layout <b>${esc(m[0])}</b>`:"Custom setup"; }
+  $("stMatch").hidden=false; $("stMatch").innerHTML=m.length?`Matches <b>${esc(m[0])}</b>`:""; $("stMatch").hidden=!m.length; }
 $("profSnap").onclick=safe(async()=>{ if(!dev) return toast("Plug in the mouse first; this copies what's on it.");
   const name=await ask({title:"Save the mouse's setup as a layout",text:"Name:",input:"",ok:"Save"}); if(!name) return;
   if(BUILTIN[name]) return toast("That name is used by a built-in layout.");
@@ -1634,8 +1730,8 @@ async function enterMouseMode(){
 }
 function offerLoad(){
   const L=userLayouts[editName]; if(!dev||!L) return;
-  alertBox("mouseReady","good","The mouse is connected",`You're editing “${editName}”. Load it onto the mouse, or switch to editing the mouse directly.`,
-    [[`Load “${editName}” onto the mouse`,async()=>{ clearAlert("mouseReady"); await loadOntoMouse(L,editName,editName); },true],["Edit the mouse instead",async()=>{ await enterMouseMode(); }]]);
+  alertBox("mouseReady","good","Mouse connected",`Load “${editName}” onto it, or edit the mouse directly.`,
+    [[`Load “${editName}”`,async()=>{ clearAlert("mouseReady"); await loadOntoMouse(L,editName,editName); },true],["Edit the mouse",async()=>{ await enterMouseMode(); }]]);
 }
 async function loadOntoMouse(data,label,layoutName){
   if(!dev) return toast(HAS_HID?"Plug in the mouse first.":"Open this page on a computer with Chrome or Edge to load onto the mouse.");
@@ -1645,7 +1741,7 @@ async function loadOntoMouse(data,label,layoutName){
   const n=layoutName||label;
   if(!r.cancelled&&!r.failed&&userLayouts[n]){ userLayouts[n].lastLoaded=Date.now(); store.set("naga.layouts",userLayouts); scheduleSync(); }
   if(keepEditing&&userLayouts[keepEditing]) await enterLayoutMode(keepEditing); else renderAll();
-  if(!r.cancelled) toast(!r.total?`The mouse already matches “${label}”.`:r.failed?`“${label}” only partly loaded.`:`“${label}” is on the mouse ✓`,!!r.total&&!keepEditing);
+  if(!r.cancelled) toast(!r.total?`The mouse already matches “${label}”.`:r.failed?`“${label}” only partly loaded.`:`Loaded “${label}” onto the mouse`,!!r.total&&!keepEditing);
   return r;
 }
 function renderEditSel(){
@@ -1658,13 +1754,13 @@ function renderEditSel(){
 }
 $("editSel").onchange=safe(async()=>{ const v=$("editSel").value;
   if(v==="__mouse__"){ await enterMouseMode(); renderEditSel(); return; }
-  if(v==="__new__"){ renderEditSel(); const n=await ask({title:"New layout",text:canEdit()?"It starts as a copy of what you're editing now.":"It starts from the Work layout.",input:"",ok:"Create"}); if(!n) return;
+  if(v==="__new__"){ renderEditSel(); const n=await ask({title:"New layout",text:canEdit()?"Starts as a copy of what you're editing.":"Starts from the Work layout.",input:"",ok:"Create"}); if(!n) return;
     if(all()[n]) return toast("That name is taken.");
     userLayouts[n]=canEdit()?{note:"",...dataOf(snapshotNow())}:{...clone(BUILTIN["Work – reading"]),builtin:undefined}; delete userLayouts[n].builtin; userLayouts[n].versions=[]; touch(n); saveLayouts();
     await enterLayoutMode(n); toast(`Editing “${n}”`); return; }
   await enterLayoutMode(v); });
 $("btnVersion").onclick=safe(async()=>{ const L=userLayouts[editName]; if(!L) return;
-  const n=await ask({title:"Save a version",text:`A named copy of “${editName}” as it is now. You can go back to it from Layouts.`,input:new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"})+" version",ok:"Save version"}); if(!n) return;
+  const n=await ask({title:"Save a version",text:`Saves “${editName}” as it is now. You can restore it from Layouts.`,input:new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"})+" version",ok:"Save version"}); if(!n) return;
   addVersion(L,n,true); touch(editName); saveLayouts(); renderLayouts(); toast(`Saved version “${n}”`); });
 async function pickStartTarget(){
   const last=store.get("naga.lastEdit",null);
@@ -1699,7 +1795,7 @@ function applyMerged(m){
   userLayouts=m.layouts; tomb=m.deleted; store.set("naga.layouts",userLayouts); store.set("naga.deleted",tomb);
   if(inLayout()){
     if(!userLayouts[editName]){ pickStartTarget(); return; }
-    if(JSON.stringify(dataOf(userLayouts[editName]))!==before){ setEditorFrom(layoutState(userLayouts[editName])); renderAll(); toast(`“${editName}” was updated from another device`); return; }
+    if(JSON.stringify(dataOf(userLayouts[editName]))!==before){ setEditorFrom(layoutState(userLayouts[editName])); renderAll(); toast(`“${editName}” was updated on another device`); return; }
   }
   renderLayouts(); renderEditSel();
 }
@@ -1727,21 +1823,21 @@ function renderSyncBox(){
   const box=$("syncBox"); if(!box) return; box.innerHTML="";
   const mk=(t,fn,cls)=>{ const b=document.createElement("button"); b.textContent=t; if(cls) b.className=cls; b.onclick=safe(fn); return b; };
   if(!syncKey){
-    box.innerHTML=`<h3>Use these layouts on your other devices</h3><p class="dim small" style="margin:0">Edit on your iPhone, then load onto the mouse from a computer. Layouts and their versions are kept in your private online store, which only opens with a key that stays on your devices.</p><div class="row"></div>`;
-    box.querySelector(".row").append(mk("Turn on sync",async()=>{ syncKey=newKey(); store.set("naga.syncKey",syncKey); await syncNow(); renderSyncBox(); toast("Sync is on. Open the device link on your other devices."); },"primary"),
-      mk("I already turned it on elsewhere",async()=>{ const k=await ask({title:"Connect to your layouts",text:"Open the device link from your other device here, or paste it below.",input:"",ok:"Connect"}); if(!k) return;
+    box.innerHTML=`<h3>Sync</h3><p class="dim small" style="margin:0">Keep layouts and versions the same on all your devices. They're stored privately and can only be opened with your device link.</p><div class="row"></div>`;
+    box.querySelector(".row").append(mk("Turn on sync",async()=>{ syncKey=newKey(); store.set("naga.syncKey",syncKey); await syncNow(); renderSyncBox(); toast("Sync is on"); },"primary"),
+      mk("Use a device link",async()=>{ const k=await ask({title:"Use a device link",text:"Paste the device link from your other device.",input:"",ok:"Connect"}); if(!k) return;
         const m=k.match(/sync=([A-Za-z0-9_-]{32,})/)||k.match(/^([A-Za-z0-9_-]{32,})$/); if(!m) return toast("That isn't a device link.");
         syncKey=m[1]; store.set("naga.syncKey",syncKey); await syncNow(); renderAll(); },"link"));
     return; }
   const at=store.get("naga.syncAt",0);
-  box.innerHTML=`<h3>Sync is on</h3><p class="dim small" style="margin:0">Last synced ${rel(at)}. To add a device, open the device link on it once (iPhone: AirDrop or Messages it to yourself, open it in Safari, then Share → Add to Home Screen).</p><div class="row"></div>`;
+  box.innerHTML=`<h3>Sync is on</h3><p class="dim small" style="margin:0">Last synced ${rel(at)}. To add a device, open the device link on it. On iPhone, open it in Safari, then choose Share › Add to Home Screen.</p><div class="row"></div>`;
   const row=box.querySelector(".row");
   row.append(mk("Sync now",()=>syncNow()));
   if(navigator.share) row.append(mk("Share device link",async()=>{ try{ await navigator.share({title:"Naga Control",url:syncLink()}); }catch(e){} }));
-  row.append(mk("Copy device link",async()=>{ await copyText(syncLink()); toast("Device link copied. Treat it like a password."); },navigator.share?"link":""));
-  row.append(mk("Stop syncing on this device",async()=>{ if(!(await ask({title:"Stop syncing on this device?",text:"Layouts already here stay here. Other devices keep syncing.",ok:"Stop"}))) return; syncKey=null; try{ localStorage.removeItem("naga.syncKey"); }catch(e){} setSync(""); renderSyncBox(); },"link"));
+  row.append(mk("Copy device link",async()=>{ await copyText(syncLink()); toast("Device link copied. Keep it private."); },navigator.share?"link":""));
+  row.append(mk("Stop syncing on this device",async()=>{ if(!(await ask({title:"Stop syncing on this device?",text:"Layouts on this device are kept. Other devices keep syncing.",ok:"Stop"}))) return; syncKey=null; try{ localStorage.removeItem("naga.syncKey"); }catch(e){} setSync(""); renderSyncBox(); },"link"));
 }
-(()=>{ const m=location.hash.match(/sync=([A-Za-z0-9_-]{32,})/); if(m){ syncKey=m[1]; store.set("naga.syncKey",syncKey); history.replaceState(null,"",location.pathname+location.search); setTimeout(()=>toast("This device now syncs your layouts"),800); } })();
+(()=>{ const m=location.hash.match(/sync=([A-Za-z0-9_-]{32,})/); if(m){ syncKey=m[1]; store.set("naga.syncKey",syncKey); history.replaceState(null,"",location.pathname+location.search); setTimeout(()=>toast("Sync is on for this device"),800); } })();
 window.addEventListener("online",()=>syncNow());
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") syncNow(); });
 
@@ -1764,13 +1860,13 @@ window.addEventListener("focus",safe(async()=>{
     const before=snapshotNow();
     const slotChanged=await readSlots(); await readEverything(); await readBattery(); renderBattery();
     if(slotChanged||!snapEqual(before,snapshotNow())){ dpiEdit=clone(dpiMouse); led=clone(ledMouse); draft=null; renderAll(); }
-    if(slotChanged) alertBox("slot","warn","The mouse switched on-board slot",`It's now on slot ${activeSlot}. The page now shows and edits that slot.`);
+    if(slotChanged) alertBox("slot","warn","On-board profile changed",`The mouse is now on profile ${activeSlot}. Edits now go to that profile.`);
     checkAgainstLastSeen("focus"); } finally { checking=false; }
 }));
-try{ const bc=new BroadcastChannel("naga-control"); const twoTabs=()=>alertBox("tabs","warn","This page is open in another tab","Use one tab at a time so they don't overwrite each other's changes.");
+try{ const bc=new BroadcastChannel("naga-control"); const twoTabs=()=>alertBox("tabs","warn","Open in another tab","Close the other tab to avoid conflicting changes.");
   bc.onmessage=e=>{ if(e.data==="hello"){ bc.postMessage("here"); twoTabs(); } if(e.data==="here") twoTabs(); }; bc.postMessage("hello"); }catch(e){}
 window.addEventListener("beforeunload",e=>{ if(busy||ledTimer||dpiTimer){ e.preventDefault(); e.returnValue=""; } });
-setTimeout(()=>{ const lb=store.get("naga.lastBackup",0); if(Object.keys(userLayouts).length&&Date.now()-lb>14*864e5) alertBox("backup","warn","No recent backup file","Your layouts live only in this browser. Download a full backup so clearing browser data can't lose them.",[["Download now",async()=>{ $("backupAll").click(); },true]]); },1500);
+setTimeout(()=>{ const lb=store.get("naga.lastBackup",0); if(Object.keys(userLayouts).length&&Date.now()-lb>14*864e5) alertBox("backup","warn","No recent backup",syncKey?"Your layouts are synced, but a backup file is a good extra copy.":"Your layouts are only stored in this browser. Download a backup to keep a copy.",[["Download backup",async()=>{ $("backupAll").click(); },true]]); },1500);
 
 // ---------- raw ----------
 $("rawSend").onclick=safe(async()=>{ const c=parseInt($("rawClass").value,16), m=parseInt($("rawCmd").value,16), z=parseInt($("rawSize").value,16);
@@ -1794,9 +1890,9 @@ $("btnConnect").onclick=connect;
 (async()=>{
   if(syncKey){ setSync("Syncing…"); await syncNow(); }
   if(!HAS_HID){
-    $("btnConnect").hidden=true; setConn("Editing layouts on this device","");
+    $("btnConnect").hidden=true; setConn("No mouse access on this device","");
     if(!store.get("naga.noHidNoted",false)){ store.set("naga.noHidNoted",true);
-      alertBox("nohid","good","This device edits layouts; a computer loads them onto the mouse",`Safari on iPhone and iPad can't reach a USB mouse. Changes save to your layout${syncKey?" and sync":""}. To put them on the mouse, open this page on a computer with Chrome or Edge, plug in the mouse and press Load onto mouse.${syncKey?"":" Turn on sync in Layouts so your computer sees these edits."}`); }
+      alertBox("nohid","good","This device can't connect to the mouse",`Changes are saved to your layout${syncKey?" and synced":""}. To apply them, open this page on a computer with Chrome or Edge and choose Load onto mouse.${syncKey?"":" Turn on sync in Layouts so the computer gets these changes."}`); }
   }
   await pickStartTarget(); renderAll();
   if(!HAS_HID) return;
