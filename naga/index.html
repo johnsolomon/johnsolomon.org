@@ -418,19 +418,14 @@ dialog ul{max-height:50vh;overflow:auto}
       <dt>DPI</dt><dd>Sensitivity: how far the pointer moves per inch of mouse movement.</dd>
       <dt>Chroma</dt><dd>Razer's name for the lights: scroll wheel, logo and side plate.</dd>
       <dt>Turbo</dt><dd>Holding the button repeats its action, up to 20 times a second.</dd>
-      <dt>Macros</dt><dd>Typing text with one button. Not possible here yet.</dd>
+      <dt>Macros</dt><dd>Not available yet. Help → Advanced → Read macros saved by Synapse helps add them.</dd>
     </dl>
     <p class="dim small" style="margin-top:14px"><span id="slotInfo"></span> <span id="fwInfo"></span></p></div>
     <div class="group"><h3>Advanced</h3>
-      <details><summary>Record what Synapse Web sends, to add macros later</summary>
-        <ol class="steps">
-          <li>Download a full backup first (History).</li>
-          <li>Open Synapse Web in Chrome, open the console (Mac: Cmd+Option+J, Windows: Ctrl+Shift+J), paste the recorder and press Enter.</li>
-          <li>Make a macro that types <b>ab</b> then Enter, and assign it to Side 2.</li>
-          <li>Type <code>copy(nagaCapture())</code> in the console and paste the result to Claude.</li>
-        </ol>
-        <div class="row"><button id="copyRecorder">Copy recorder</button><span class="dim small" id="recNote"></span></div>
-        <pre id="recorderCode" style="margin-top:8px"></pre>
+      <details><summary>Read macros saved by Synapse</summary>
+        <p class="dim small">Reads the mouse's memory and changes nothing. Takes about a minute. Copy the result to Claude.</p>
+        <div class="row"><button id="macroRead">Read</button><button id="macroCopy" hidden>Copy result</button><span class="dim small" id="macroNote"></span></div>
+        <pre id="macroOut" style="margin-top:8px;max-height:240px;overflow:auto" hidden></pre>
       </details>
       <details style="margin-top:10px"><summary>Send a raw command</summary>
         <p class="dim small">For testing only. A history copy is saved first.</p>
@@ -1895,15 +1890,52 @@ $("rawSend").onclick=safe(async()=>{ const c=parseInt($("rawClass").value,16), m
   if(!(m&0x80)) pushHistory("Before a raw command",snapshotNow());
   await rawCmd(c,m,z,parseHex($("rawArgs").value)); });
 
-// ---------- Synapse Web recorder ----------
-const RECORDER=`(()=>{const L=[];window.nagaCapture=()=>JSON.stringify(L);const h=d=>{const u=d instanceof ArrayBuffer?new Uint8Array(d):new Uint8Array(d.buffer,d.byteOffset,d.byteLength);return Array.from(u,b=>b.toString(16).padStart(2,"0")).join(" ")};
-const P=HIDDevice.prototype,sf=P.sendFeatureReport,rf=P.receiveFeatureReport,sr=P.sendReport;
-P.sendFeatureReport=function(id,d){L.push({t:Date.now(),dir:"featOut",id,pid:this.productId,data:h(d)});return sf.call(this,id,d)};
-P.receiveFeatureReport=async function(id){const r=await rf.call(this,id);L.push({t:Date.now(),dir:"featIn",id,pid:this.productId,data:h(r)});return r};
-P.sendReport=function(id,d){L.push({t:Date.now(),dir:"out",id,pid:this.productId,data:h(d)});return sr.call(this,id,d)};
-console.log("Naga recorder on. When done: copy(nagaCapture())")})();`;
-$("recorderCode").textContent=RECORDER;
-$("copyRecorder").onclick=()=>copyText(RECORDER,"recNote");
+// ---------- macro reader (read-only) ----------
+// Every command here is a read (command byte 0x80 or higher). Nothing is written to the mouse.
+async function macroReport(note){
+  const out=[], H=a=>Array.from(a,b=>b.toString(16).padStart(2,"0")).join(" ");
+  let misses=0;
+  const read=async(c,m,z,a=[])=>{
+    if(!(m&0x80)) throw new Error("not a read");
+    try{ const r=await rawCmd(c,m,z,a,true); misses=0; return r; }
+    catch(e){ if(++misses>=5) throw new Error("The mouse stopped answering. Move it to wake it and try again."); return null; } };
+  const line=(label,r,n=16)=>{ if(!r) return out.push(`${label}: no answer`); const last=Math.max(n,r.args.reduce((k,b,i)=>b?i+1:k,0)); out.push(`${label}: ${STATUS[r.status]||r.status}${r.status===2?" | "+H(r.args.slice(0,Math.min(80,last))):""}`); };
+  out.push(`Naga Control macro read, ${new Date().toISOString()}, PID ${dev.productId.toString(16)}`);
+  for(const [c,m,z] of [[0,0x81,2],[5,0x80,1],[5,0x81,2],[5,0x84,1]]) line(`${c.toString(16).padStart(2,"0")}:${m.toString(16)}`,await read(c,m,z),4);
+  // Buttons on every on-board profile, both layers. Blocks are what each button is set to.
+  const seen=new Map(); let n=0;
+  for(let prof=0;prof<=5;prof++){
+    const r0=await read(2,0x8C,0x0A,[prof,SLOTS[0].slot,0]);
+    if(!r0||r0.status!==2){ line(`profile ${prof}`,r0,4); continue; }
+    for(const hs of [0,1]) for(const sl of SLOTS){
+      const r=await read(2,0x8C,0x0A,[prof,sl.slot,hs]); n++; if(note&&n%20===0) note(`Buttons ${n}…`);
+      if(!r||r.status!==2) continue;
+      const blk=Array.from(r.args.slice(2,10)); out.push(`p${prof} ${hs?"HS":"N "} ${sl.slot.toString(16).padStart(2,"0")} ${sl.name}: ${H(blk)}`);
+      if(blk[1]===0x03||blk[0]===0x03) seen.set(H(blk),blk);
+    }
+  }
+  // Macro class: every read command with no arguments.
+  if(note) note("Macro memory…");
+  for(let m=0x80;m<=0xBF;m++) line(`06:${m.toString(16)} size 50`,await read(6,m,0x50),12);
+  // Reads aimed at each macro a button points to (and the first few IDs, in case none is assigned).
+  const ids=new Set([0,1,2,3]);
+  for(const blk of seen.values()) for(let i=1;i<7;i++){ ids.add(blk[i]); ids.add((blk[i]<<8)|blk[i+1]); }
+  out.push(`macro-looking buttons: ${seen.size}, ids tried: ${[...ids].map(x=>x.toString(16)).join(" ")}`);
+  for(const id of ids){ if(id>0xFFFF) continue;
+    // Command changes on every step, so a late reply to the previous read can't be mistaken for this one.
+    for(const args of [[id>>8,id&255],[id>>8,id&255,0,0],[id>>8,id&255,0,0,0,0x40]]){ if(note) note(`Macro ${id.toString(16)}…`);
+      for(let m=0x80;m<=0x8F;m++){
+        const r=await read(6,m,0x50,args);
+        if(r&&r.status===2&&r.args.slice(args.length).some(b=>b)) line(`06:${m.toString(16)} [${H(args)}]`,r,24); } } }
+  return out.join("\n");
+}
+$("macroRead").onclick=safe(async()=>{
+  if(!dev) throw new Error("Connect the mouse first.");
+  const btn=$("macroRead"); btn.disabled=true; $("macroCopy").hidden=true; $("macroNote").textContent="Reading…";
+  try{ const t=await serial(()=>macroReport(x=>$("macroNote").textContent=x)); $("macroOut").textContent=t; $("macroOut").hidden=false; $("macroCopy").hidden=false; $("macroNote").textContent="Done. Nothing was changed."; }
+  catch(e){ $("macroNote").textContent=e.message; throw e; }
+  finally{ btn.disabled=false; } });
+$("macroCopy").onclick=()=>copyText($("macroOut").textContent,"macroNote");
 
 // ---------- start ----------
 ZONES.forEach(z=>led[z.id]=defZone());
