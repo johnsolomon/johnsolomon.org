@@ -418,14 +418,13 @@ dialog ul{max-height:50vh;overflow:auto}
       <dt>DPI</dt><dd>Sensitivity: how far the pointer moves per inch of mouse movement.</dd>
       <dt>Chroma</dt><dd>Razer's name for the lights: scroll wheel, logo and side plate.</dd>
       <dt>Turbo</dt><dd>Holding the button repeats its action, up to 20 times a second.</dd>
-      <dt>Macros</dt><dd>Not available yet. Help → Advanced → Read macros saved by Synapse helps add them.</dd>
+      <dt>Macros</dt><dd>A list of key presses, clicks and pauses that one button plays. Stored on the mouse, so it works on any computer without software.</dd>
     </dl>
     <p class="dim small" style="margin-top:14px"><span id="slotInfo"></span> <span id="fwInfo"></span></p></div>
     <div class="group"><h3>Advanced</h3>
-      <details><summary>Read macros saved by Synapse</summary>
-        <p class="dim small">Reads the mouse's memory and changes nothing. Takes about a minute. Copy the result to Claude.</p>
-        <div class="row"><button id="macroRead">Read</button><button id="macroCopy" hidden>Copy result</button><span class="dim small" id="macroNote"></span></div>
-        <pre id="macroOut" style="margin-top:8px;max-height:240px;overflow:auto" hidden></pre>
+      <details><summary>Macros stored on the mouse</summary>
+        <div class="row" style="margin-top:8px"><button id="macroScan">Check</button><span class="dim small" id="macroNote"></span></div>
+        <div id="macroList" style="margin-top:8px"></div>
       </details>
       <details style="margin-top:10px"><summary>Send a raw command</summary>
         <p class="dim small">For testing only. A history copy is saved first.</p>
@@ -512,7 +511,7 @@ function buildReport(cls,cmd,size,args,txn=TXN){
 // How many leading args identify what a reply is about (storage/profile, then LED or button slot).
 // A reply whose leading args differ belongs to an earlier command and is ignored, so one zone's
 // or button's answer can never be taken for another's.
-const KEYLEN={"0f:82":2,"0f:84":2,"0f:02":2,"0f:04":2,"02:8c":2,"02:0c":2,"04:86":1,"04:06":1};
+const KEYLEN={"0f:82":2,"0f:84":2,"0f:02":2,"0f:04":2,"02:8c":2,"02:0c":2,"04:86":1,"04:06":1,"06:08":2,"06:09":2,"06:0c":2,"06:03":2,"06:88":2,"06:89":2,"06:8c":2,"06:8b":2};
 function rawCmd(cls,cmd,size,args=[],quiet=false,txn=TXN){
   const job=queue.then(async()=>{
     if(!dev) throw new Error("Mouse not connected.");
@@ -575,7 +574,7 @@ const connect=safe(async()=>{
 });
 function setConn(text,cls){ $("stConn").textContent=text; $("statusBox").className="status "+(cls||""); }
 let connecting=false;
-async function readEverything(progress){ await readSlots(); await readAllButtons(progress); await readDpi(); await readLighting(); }
+async function readEverything(progress){ await readSlots(); await readAllButtons(progress); await readMacroLib(); await readDpi(); await readLighting(); }
 async function onConnected(d){
   if(connecting) return; connecting=true;
   try{
@@ -949,8 +948,9 @@ const MODBYNAME={ctrl:1,control:1,shift:2,alt:4,option:4,opt:4,win:8,windows:8,c
 const ppsToRaw=p=>Math.round(1+(20-Math.max(1,Math.min(20,p)))*254/19);
 const rawToPps=r=>Math.round(20-(Math.max(1,Math.min(255,r))-1)*19/254);
 const OFF=[0,0,0,0,0,0,0];
-function describe(b){
+function describe(b,lib){
   if(!b) return "unreadable";
+  if(isMacroBlk(b)) return describeMacro(b,lib);
   const [c,l,a,d,e,f]=b;
   const raw="Raw "+hex(b);
   const mods=m=>MODS.filter(([,v])=>m&v).map(([n])=>n+"+").join("");
@@ -968,11 +968,19 @@ function describe(b){
 const friendly=(b,hs)=>{ const d=describe(b); if(d==="Off") return hs?"Nothing":"Disabled"; if(d==="Nothing") return "Disabled"; if(/^[A-Z0-9]$|^[-=]$/.test(d)) return "Key "+d; return d; };
 const sameMeaning=(a,b)=>same(a,b)||(!!a&&!!b&&describe(a)===describe(b)&&!describe(a).startsWith("Raw"));
 const isHS=b=>!!b&&b[0]===0x0C;
-function parseAction(text,slot,hs){
+function parseAction(text,slot,hs,macroNames){
   let t=String(text).trim(); if(!t) return {error:"empty"};
   let low=t.toLowerCase();
   if(/^raw\b/.test(low)){ const r=parseHex(t.slice(3)); return r.length===7&&r.every(v=>v>=0&&v<=255)?{blk:r}:{error:`"${t}" needs exactly 7 hex bytes`}; }
-  if(/^(type|macro|text)\b/.test(low)) return {error:"typing macros aren't supported yet"};
+  if(/^macro\b/.test(low)){
+    const m=t.match(/^macro\s+"([^"]+)"\s*(?:,\s*(.+))?$/i)||t.match(/^macro\s+“([^”]+)”\s*(?:,\s*(.+))?$/i);
+    if(!m) return {error:`write macros as macro "Name" (optionally , 3 times / , while held / , toggle)`};
+    const id=macroNames?.[m[1].toLowerCase()]; if(id==null) return {error:`no macro named "${m[1]}" in the macros section`};
+    const opt=(m[2]||"").toLowerCase().trim(); let mode="once", times=1, mt;
+    if(!opt||opt==="once") mode="once"; else if((mt=opt.match(/^(\d+)\s*(?:times|x)$/))){ times=+mt[1]; mode=times>1?"times":"once"; if(times>255) return {error:"a macro can repeat at most 255 times"}; }
+    else if(/held|hold/.test(opt)) mode="held"; else if(/toggle|on.?off/.test(opt)) mode="toggle"; else return {error:`unknown macro option "${m[2]}"`};
+    return {blk:macroBlock(id,mode,times)}; }
+  if(/^(type|text)\b/.test(low)) return {error:`to type text, add a macro in the macros section and use macro "Name"`};
   if(/^(factory|default)$/.test(low)) return {blk:hs?OFF.slice():SLOT[slot].def.slice()};
   if(/^(off|disabled|none|—)$/.test(low)) return {blk:OFF.slice()};
   if(/^(nothing|no action)$/.test(low)) return {blk:[0,1,0,0,0,0,0]};
@@ -1012,16 +1020,205 @@ async function writeSlot(slot,hs,block){
   const back=await readSlot(slot,hs); current[hs][slot]=back;
   return sameMeaning(back,block);
 }
-function guardChanges(changes){
+function guardChanges(changes,known=new Set()){
   const after={0:{...current[0]},1:{...current[1]}};
   for(const [slot,hs,blk] of changes) after[hs][slot]=blk;
   const problems=[];
   if(!SLOTS.some(s=>{const b=after[0][s.slot]; return b&&(b[0]===1||b[0]===0x0E)&&b[2]===2;})) problems.push("No button would right-click anymore.");
   const hsUsed=SLOTS.some(s=>{const b=after[1][s.slot]; return b&&!same(b,OFF)&&!same(b,[0,1,0,0,0,0,0]);});
   if(hsUsed&&!SLOTS.some(s=>isHS(after[0][s.slot]))) problems.push("HyperShift actions are set but no button is HyperShift, so they can't be used.");
+  for(const [slot,hs,blk] of changes){ const id=macroIdOf(blk); if(id!=null&&!known.has(id)&&!macroLib[id]&&!(!inLayout()&&macroIdsMouse.includes(id))) problems.push(`${hs?"HyperShift + ":""}${SLOT[slot].name} would point to a macro that isn't saved anywhere, so it would do nothing.`); }
   return problems;
 }
 const hsHolders=()=>SLOTS.filter(s=>isHS(current[0][s.slot]));
+
+// ---------- macros (stored on the mouse) ----------
+// Format taken from Synapse 4's own code for this mouse (product 231). See MACRO_PROTOCOL.md.
+// A macro is a list of steps: {t:"d",k} key down, {t:"u",k} key up, {t:"bd",b}/{t:"bu",b} mouse button 1-5 down/up,
+// {t:"s",v:1|-1} scroll, {t:"w",ms} pause. Keys are USB HID codes; modifiers are 0xE0-0xE7.
+const MODKEY={Ctrl:0xE0,Shift:0xE1,Alt:0xE2,Win:0xE3,"Right Ctrl":0xE4,"Right Shift":0xE5,"Right Alt":0xE6,"Right Win":0xE7};
+const MODKEYNAME=Object.fromEntries(Object.entries(MODKEY).map(([n,v])=>[v,n]));
+const isModKey=k=>k>=0xE0&&k<=0xE7;
+const MBIT={1:1,2:2,3:4,4:8,5:16}, MBNAME={1:"left",2:"right",3:"middle",4:"back",5:"forward"};
+const MBBYNAME={left:1,right:2,middle:3,wheel:3,back:4,forward:5};
+// US layout characters for typed text
+const CHARKEY=(()=>{ const m={};
+  "abcdefghijklmnopqrstuvwxyz".split("").forEach((c,i)=>{ m[c]=[0x04+i,0]; m[c.toUpperCase()]=[0x04+i,1]; });
+  "1234567890".split("").forEach((c,i)=>m[c]=[0x1E+i,0]); "!@#$%^&*()".split("").forEach((c,i)=>m[c]=[0x1E+i,1]);
+  Object.assign(m,{" ":[0x2C,0],"-":[0x2D,0],"_":[0x2D,1],"=":[0x2E,0],"+":[0x2E,1],"[":[0x2F,0],"{":[0x2F,1],"]":[0x30,0],"}":[0x30,1],"\\":[0x31,0],"|":[0x31,1],
+    ";":[0x33,0],":":[0x33,1],"'":[0x34,0],'"':[0x34,1],"`":[0x35,0],"~":[0x35,1],",":[0x36,0],"<":[0x36,1],".":[0x37,0],">":[0x37,1],"/":[0x38,0],"?":[0x38,1],"\t":[0x2B,0]});
+  return m; })();
+const KEYCHAR={}; Object.entries(CHARKEY).forEach(([c,[k,s]])=>{ KEYCHAR[k+":"+s]=c; });
+const MACRO_MAX_STEPS=2000;
+function encodeSteps(steps){
+  const out=[]; let st=0;
+  for(const s of steps){
+    if(s.t==="d") out.push(1,s.k); else if(s.t==="u") out.push(2,s.k);
+    else if(s.t==="bd"){ st|=MBIT[s.b]; out.push(8,st); } else if(s.t==="bu"){ st&=~MBIT[s.b]; out.push(8,st); }
+    else if(s.t==="s") out.push(10,s.v>0?1:255);
+    else if(s.t==="w"){ const ms=Math.max(1,Math.min(0xFFFFFFFF,Math.round(s.ms)));
+      if(ms<256) out.push(17,ms); else if(ms<65536) out.push(18,ms>>8,ms&255);
+      else if(ms<16777216) out.push(19,(ms>>16)&255,(ms>>8)&255,ms&255); else out.push(20,(ms>>>24)&255,(ms>>16)&255,(ms>>8)&255,ms&255); }
+  }
+  return out;
+}
+function decodeSteps(b){
+  const steps=[]; let st=0, i=0;
+  while(i<b.length){
+    const c=b[i];
+    if(c===1||c===2){ if(i+1>=b.length) return null; steps.push({t:c===1?"d":"u",k:b[i+1]}); i+=2; }
+    else if(c===8){ if(i+1>=b.length) return null; const n=b[i+1]; for(const [btn,bit] of Object.entries(MBIT)){ if((n&bit)&&!(st&bit)) steps.push({t:"bd",b:+btn}); if(!(n&bit)&&(st&bit)) steps.push({t:"bu",b:+btn}); } st=n; i+=2; }
+    else if(c===10){ if(i+1>=b.length) return null; steps.push({t:"s",v:b[i+1]===1?1:-1}); i+=2; }
+    else if(c===17){ steps.push({t:"w",ms:b[i+1]}); i+=2; }
+    else if(c===18){ steps.push({t:"w",ms:(b[i+1]<<8)|b[i+2]}); i+=3; }
+    else if(c===19){ steps.push({t:"w",ms:(b[i+1]<<16)|(b[i+2]<<8)|b[i+3]}); i+=4; }
+    else if(c===20){ steps.push({t:"w",ms:((b[i+1]<<24)>>>0)+((b[i+2]<<16)|(b[i+3]<<8)|b[i+4])}); i+=5; }
+    else return null; // a step type this app doesn't know: leave the macro alone
+    if(steps.length&&steps[steps.length-1].ms!==undefined&&isNaN(steps[steps.length-1].ms)) return null;
+  }
+  return steps;
+}
+const keyLabel=k=>MODKEYNAME[k]||KEYNAME[k]||("key 0x"+k.toString(16));
+const fmtMs=ms=>ms>=1000&&ms%100===0?`${+(ms/1000).toFixed(1)}s`:`${ms}ms`;
+// Steps → short text, e.g.  type "Hello", wait 500ms, Ctrl+C, left click
+function stepsToText(steps){
+  const out=[]; let typed="", held=[]; // held: [{k,used}]
+  const flushType=()=>{ if(typed){ out.push(JSON.stringify(typed)); typed=""; } };
+  const flushHeld=()=>{ held.forEach(h=>{ if(!h.shown&&!h.used){ flushType(); out.push(`hold ${keyLabel(h.k)}`); h.shown=true; } }); };
+  for(let i=0;i<steps.length;i++){
+    const s=steps[i], n=steps[i+1];
+    if(s.t==="d"&&isModKey(s.k)){ held.push({k:s.k}); continue; }
+    if(s.t==="u"&&isModKey(s.k)){ const j=held.findIndex(h=>h.k===s.k);
+      if(j>=0){ const h=held[j]; held.splice(j,1); if(h.shown) { flushType(); out.push(`release ${keyLabel(s.k)}`); } else if(!h.used){ flushType(); out.push(keyLabel(s.k)); } }
+      else { flushType(); out.push(`release ${keyLabel(s.k)}`); }
+      continue; }
+    if(s.t==="d"&&n&&n.t==="u"&&n.k===s.k){
+      const mods=held.map(h=>h.k), shiftOnly=mods.every(k=>k===0xE1||k===0xE5), shift=mods.length>0;
+      const ch=shiftOnly?KEYCHAR[s.k+":"+(shift?1:0)]:null;
+      if(ch!=null&&held.every(h=>!h.shown)){ typed+=ch; held.forEach(h=>h.used=true); }
+      else { flushType(); out.push([...held.filter(h=>!h.shown).map(h=>{ h.used=true; return keyLabel(h.k); }),keyLabel(s.k)].join("+")); }
+      i++; continue; }
+    flushHeld(); flushType();
+    if(s.t==="d") out.push(`hold ${keyLabel(s.k)}`);
+    else if(s.t==="u") out.push(`release ${keyLabel(s.k)}`);
+    else if(s.t==="bd"&&n&&n.t==="bu"&&n.b===s.b){ out.push(`${MBNAME[s.b]} click`); i++; }
+    else if(s.t==="bd") out.push(`hold ${MBNAME[s.b]}`);
+    else if(s.t==="bu") out.push(`release ${MBNAME[s.b]}`);
+    else if(s.t==="s") out.push(s.v>0?"scroll up":"scroll down");
+    else if(s.t==="w") out.push(`wait ${fmtMs(s.ms)}`);
+  }
+  flushHeld(); flushType();
+  return out.join(", ");
+}
+// Text → steps. Returns {steps} or {error}.
+function textToSteps(text){
+  const toks=[]; let cur="", q=false, src=String(text).replace(/[“”]/g,'"');
+  for(let i=0;i<src.length;i++){ const c=src[i];
+    if(q){ if(c==="\\"&&i+1<src.length){ cur+=c+src[++i]; continue; } cur+=c; if(c==='"') q=false; continue; }
+    if(c==='"'){ q=true; cur+=c; continue; }
+    if(c===","||c==="\n"){ if(cur.trim()) toks.push(cur.trim()); cur=""; continue; }
+    cur+=c; }
+  if(q) return {error:"a quote isn't closed"};
+  if(cur.trim()) toks.push(cur.trim());
+  const steps=[], keyOf=n=>{ const t=norm(n); const mod={ctrl:0xE0,control:0xE0,shift:0xE1,alt:0xE2,option:0xE2,opt:0xE2,win:0xE3,windows:0xE3,cmd:0xE3,command:0xE3,meta:0xE3}[t]; return mod??KEYBYNAME[t]; };
+  for(const raw of toks){
+    let t=raw, m;
+    if((m=t.match(/^(?:type\s+)?"((?:[^"\\]|\\.)*)"$/i))){ let s; try{ s=JSON.parse('"'+m[1]+'"'); }catch(e){ return {error:`can't read ${raw}`}; }
+      for(const ch of s){ const ck=CHARKEY[ch]; if(!ck) return {error:`can't type "${ch}" (only US keyboard characters)`};
+        if(ck[1]) steps.push({t:"d",k:0xE1}); steps.push({t:"d",k:ck[0]},{t:"u",k:ck[0]}); if(ck[1]) steps.push({t:"u",k:0xE1}); } continue; }
+    if((m=t.match(/^(?:wait|pause|delay)\s+([\d.]+)\s*(ms|s|sec|seconds?|milliseconds?)?$/i))){ const v=parseFloat(m[1]), ms=Math.round(/^s/i.test(m[2]||"")?v*1000:v); if(!(ms>=1&&ms<=3600000)) return {error:`"${raw}": pause must be 1 ms to 1 hour`}; steps.push({t:"w",ms}); continue; }
+    if((m=t.match(/^scroll\s+(up|down)$/i))){ steps.push({t:"s",v:/up/i.test(m[1])?1:-1}); continue; }
+    if((m=t.match(/^(left|right|middle|wheel|back|forward)\s+click$/i))){ const b=MBBYNAME[m[1].toLowerCase()]; steps.push({t:"bd",b},{t:"bu",b}); continue; }
+    if((m=t.match(/^(hold|press down|down|release|let go|up)\s+(.+)$/i))){ const down=/^(hold|press down|down)$/i.test(m[1]), what=m[2].trim().toLowerCase();
+      if(MBBYNAME[what.replace(/\s*(button|click)$/,"")]){ const b=MBBYNAME[what.replace(/\s*(button|click)$/,"")]; steps.push({t:down?"bd":"bu",b}); continue; }
+      const k=keyOf(m[2]); if(k==null) return {error:`unknown key "${m[2]}"`}; steps.push({t:down?"d":"u",k}); continue; }
+    const parts=t.replace(/^press\s+/i,"").split(/\s*\+\s*/).filter(Boolean); if(!parts.length) return {error:`can't read "${raw}"`};
+    const ks=parts.map(keyOf); const bad=ks.findIndex(k=>k==null); if(bad>=0) return {error:`unknown key "${parts[bad]}"`};
+    const main=ks[ks.length-1], mods=ks.slice(0,-1);
+    mods.forEach(k=>steps.push({t:"d",k})); steps.push({t:"d",k:main},{t:"u",k:main}); mods.slice().reverse().forEach(k=>steps.push({t:"u",k}));
+  }
+  if(!steps.length) return {error:"no steps"};
+  if(steps.length>MACRO_MAX_STEPS) return {error:`too long (${steps.length} steps, max ${MACRO_MAX_STEPS})`};
+  return {steps};
+}
+const macroKey=m=>m?JSON.stringify([m.name,encodeSteps(m.steps)]):"";
+const sameMacro=(a,b)=>!!a&&!!b&&macroKey(a)===macroKey(b);
+const newGuid=()=>"10000000-1000-4000-8000-100000000000".replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
+function guidToBytes(g){ const h=g.replace(/-/g,""); const b=[]; for(let i=0;i<16;i++) b.push(parseInt(h.substr(i*2,2),16)||0);
+  return [b[3],b[2],b[1],b[0],b[5],b[4],b[7],b[6],...b.slice(8)]; }
+function bytesToGuid(b){ const o=[b[3],b[2],b[1],b[0],b[5],b[4],b[7],b[6],...b.slice(8,16)].map(x=>x.toString(16).padStart(2,"0")).join("");
+  return `${o.slice(0,8)}-${o.slice(8,12)}-${o.slice(12,16)}-${o.slice(16,20)}-${o.slice(20)}`; }
+function nameStruct(m){ // 250 bytes, same layout Synapse writes
+  const s=new Uint8Array(250); s.set(guidToBytes(m.guid),0);
+  const n=m.steps.length>>>0; s[16]=n&255; s[17]=(n>>8)&255; s[18]=(n>>16)&255; s[19]=(n>>>24)&255;
+  const nm=new TextEncoder().encode(m.name); let len=0, cut=Math.min(nm.length,99); s.set(nm.slice(0,cut),20); len=cut;
+  return s; }
+function parseNameStruct(a){ if(!a||a.length<120) return null; const nb=a.slice(20,120); const z=nb.indexOf(0);
+  let name; try{ name=new TextDecoder("utf-8",{fatal:false}).decode(new Uint8Array(z<0?nb:nb.slice(0,z))); }catch(e){ name=""; }
+  return {guid:bytesToGuid(a.slice(0,16)),name,items:a[16]|(a[17]<<8)|(a[18]<<16)|(a[19]<<24)}; }
+// Device side. Every function here runs inside the command queue via rawCmd.
+const be16=v=>[(v>>8)&255,v&255], be32=v=>[(v>>>24)&255,(v>>16)&255,(v>>8)&255,v&255];
+async function macroStorage(){ const r=await rawCmd(6,0x8E,0x0E,[],true); if(!ok(r)) return null; const a=r.args;
+  return {maxId:(a[0]<<8)|a[1],max:((a[2]<<24)>>>0)+((a[3]<<16)|(a[4]<<8)|a[5]),free:((a[6]<<24)>>>0)+((a[7]<<16)|(a[8]<<8)|a[9]),recyclable:((a[10]<<24)>>>0)+((a[11]<<16)|(a[12]<<8)|a[13])}; }
+async function macroIdsOnMouse(){
+  const c=await rawCmd(6,0x80,0x02,[],true); if(!ok(c)) return null; const total=(c.args[0]<<8)|c.args[1]; const ids=[];
+  for(let off=0;off<total;){ const n=Math.min(32,total-off); const r=await rawCmd(6,0x8B,2*n+4,be16(off),true); if(!ok(r)) return null;
+    for(let i=0;i<n;i++) ids.push((r.args[4+2*i]<<8)|r.args[5+2*i]); off+=n; }
+  return ids; }
+async function readMacroFromMouse(id){
+  const name=[]; for(let off=0;off<250;){ const n=Math.min(64,250-off); const r=await rawCmd(6,0x8C,n+6,[...be16(id),...be16(off)],true); if(!ok(r)) return null; name.push(...r.args.slice(6,6+n)); off+=n; }
+  const z=await rawCmd(6,0x88,0x06,be16(id),true); if(!ok(z)) return null; const size=((z.args[2]<<24)>>>0)+((z.args[3]<<16)|(z.args[4]<<8)|z.args[5]);
+  if(size>200000) return null;
+  const data=[]; for(let off=0;off<size;){ const n=Math.min(72,size-off); const r=await rawCmd(6,0x89,n+7,[...be16(id),...be32(off),n],true); if(!ok(r)) return null; data.push(...r.args.slice(7,7+n)); off+=n; }
+  const meta=parseNameStruct(name), steps=decodeSteps(data);
+  return {guid:meta?.guid||"",name:meta?.name||"",steps,bytes:data}; }
+// Write a macro under a given id and read every byte back. On any mismatch the half-written macro is removed.
+async function writeMacroToMouse(id,m){
+  const data=encodeSteps(m.steps); if(!data.length) throw new Error("The macro has no steps.");
+  const need=Math.ceil((data.length+256)/256)*256, st=await macroStorage();
+  if(!st) throw new Error("The mouse didn't report its macro memory.");
+  if(need>st.free) throw new Error(`Not enough macro memory on the mouse (${need} bytes needed, ${st.free} free).`);
+  const fail=async msg=>{ try{ await rawCmd(6,0x03,0x02,be16(id),true); }catch(e){} throw new Error(msg); };
+  let r=await rawCmd(6,0x08,0x06,[...be16(id),...be32(data.length)]); if(!ok(r)) return fail("The mouse refused to reserve space for the macro.");
+  const ns=nameStruct(m);
+  for(let off=0;off<250;){ const n=Math.min(64,250-off); r=await rawCmd(6,0x0C,n+6,[...be16(id),...be16(off),0,250,...ns.slice(off,off+n)],true); if(!ok(r)) return fail("Writing the macro name failed."); off+=n; }
+  for(let off=0;off<data.length;){ const n=Math.min(72,data.length-off); r=await rawCmd(6,0x09,n+7,[...be16(id),...be32(off),n,...data.slice(off,off+n)],true); if(!ok(r)) return fail("Writing the macro steps failed."); off+=n; }
+  const back=await readMacroFromMouse(id);
+  if(!back||!same(back.bytes,data)||back.guid!==m.guid) return fail("The macro didn't read back correctly, so it was removed.");
+  log(`Macro “${m.name}” saved as #${id} (${data.length} bytes)`);
+  return true; }
+async function deleteMacroOnMouse(id){ const r=await rawCmd(6,0x03,0x02,be16(id)); return ok(r); }
+// Macros known for what's being edited: id → {guid,name,steps}. For the mouse it's read from the mouse; for a layout it's the layout's own copy.
+let macroLib={}, macroIdsMouse=[];
+const MACRO_MODES=[["once","Play once"],["times","Play several times"],["held","Repeat while held"],["toggle","Press to start, press to stop"]];
+const isMacroBlk=b=>!!b&&(b[0]===3||b[0]===4||b[0]===5||b[0]===15);
+const macroIdOf=b=>isMacroBlk(b)?(b[2]<<8)|b[3]:null;
+function macroBlock(id,mode,times){ const [h,l]=be16(id);
+  if(mode==="held") return [4,2,h,l,0,0,0]; if(mode==="toggle") return [5,2,h,l,0,0,0];
+  return [3,3,h,l,mode==="times"?Math.max(2,Math.min(255,times|0)):1,0,0]; }
+function macroModeOf(b){ if(b[0]===4) return {mode:"held"}; if(b[0]===5) return {mode:"toggle"}; if(b[0]===15) return {mode:"sequence"}; return b[4]>1?{mode:"times",times:b[4]}:{mode:"once",times:2}; }
+function describeMacro(b,lib){ const id=macroIdOf(b), m=(lib||macroLib)[id], mm=macroModeOf(b);
+  const nm=m?`Macro “${m.name||"untitled"}”`:`Macro #${id}`;
+  return nm+(mm.mode==="times"?`, ${mm.times} times`:mm.mode==="held"?", while held":mm.mode==="toggle"?", toggle":mm.mode==="sequence"?", step by step":""); }
+const referencedMacros=buttons=>{ const ids=new Set(); for(const hs of [0,1]) Object.values(buttons?.[hs]||{}).forEach(b=>{ const id=macroIdOf(b); if(id!=null) ids.add(id); }); return ids; };
+function freeMacroId(taken){ const t=new Set(taken); for(let i=0;i<200;i++){ const v=new Uint16Array(1); crypto.getRandomValues(v); const id=v[0]&0x7FFF; if(id&&!t.has(id)) return id; } throw new Error("No free macro number."); }
+// Read the macros the mouse's buttons point to (names and steps), so they can be shown and edited.
+async function readMacroLib(){
+  macroLib={}; macroIdsMouse=[];
+  try{ macroIdsMouse=(await macroIdsOnMouse())||[]; }catch(e){ return; }
+  for(const id of referencedMacros(current)){ if(!macroIdsMouse.includes(id)) continue;
+    try{ const m=await readMacroFromMouse(id); if(m&&m.steps) macroLib[id]={guid:m.guid,name:m.name,steps:m.steps}; else if(m) macroLib[id]={guid:m.guid,name:m.name,steps:null}; }catch(e){} }
+}
+// Put a macro on the mouse under id, or under a new id if that one holds something else. Returns the id used.
+async function ensureMacroOnMouse(id,m){
+  if(!macroIdsMouse.length){ try{ macroIdsMouse=(await macroIdsOnMouse())||[]; }catch(e){} }
+  if(macroIdsMouse.includes(id)){
+    const have=macroLib[id]||await readMacroFromMouse(id);
+    if(have&&have.steps&&sameMacro(have,m)&&have.guid===m.guid){ macroLib[id]=clone(m); return id; }
+    id=freeMacroId([...macroIdsMouse,...Object.keys(macroLib).map(Number)]);
+  }
+  await writeMacroToMouse(id,m); macroIdsMouse.push(id); macroLib[id]=clone(m); return id;
+}
 
 // ---------- buttons: the mouse drawing ----------
 const DEFS=`<defs>
@@ -1199,8 +1396,10 @@ $("layerSeg").onclick=e=>{ const l=e.target.dataset.l; if(l===undefined) return;
 let draft=null;
 const QUICK=["Enter","Tab","Shift+Tab","Esc","Delete","Ctrl+C","Ctrl+V","Ctrl+Z","Ctrl+N","Win+2","Alt+C","Alt+L","Num +","Num −"];
 function draftFromBlock(b){
-  const d={type:"key",mods:0,key:KEYS.A,btn:1,dpi:6,turbo:false,pps:20,hex:b?hex(b):""};
+  const d={type:"key",mods:0,key:KEYS.A,btn:1,dpi:6,turbo:false,pps:20,hex:b?hex(b):"",macroId:null,mode:"once",times:2,mName:"",mText:""};
   if(!b) return d; const [c,l,a,k,e,f]=b;
+  if(isMacroBlk(b)){ const id=macroIdOf(b), m=macroLib[id], mm=macroModeOf(b);
+    return Object.assign(d,{type:"macro",macroId:m?id:null,mode:mm.mode==="sequence"?"once":mm.mode,times:mm.times||2,mName:m?.name||"",mText:m?.steps?stepsToText(m.steps):"",unreadable:!!m&&!m.steps}); }
   if(c===2){ d.type="key"; d.mods=a; d.key=k; }
   else if(c===0x0D){ d.type="key"; d.mods=a; d.key=k; d.turbo=true; d.pps=rawToPps((e<<8)|f); }
   else if(c===1){ d.type="mouse"; d.btn=a; }
@@ -1223,13 +1422,15 @@ function blockFromDraft(d){
     case "profile": return [7,1,4,0,0,0,0];
     case "wheelmode": return [0x12,1,1,0,0,0,0];
     case "raw": { const r=parseHex(d.hex); return r.length===7?r:null; }
+    case "macro": { const r=textToSteps(d.mText||""); if(r.error) return null; return macroBlock(d.macroId??0,d.mode||"once",d.times); }
   }
   return null;
 }
-const ACTIONS=[["key","Keyboard key"],["mouse","Mouse button"],["dpi","Sensitivity"],["hypershift","HyperShift"],["profile","Switch on-board profile"],["wheelmode","Scroll wheel mode"],["nothing","Disabled"],["default","Factory default"],["raw","Raw value (advanced)"]];
+const ACTIONS=[["key","Keyboard key"],["mouse","Mouse button"],["macro","Macro"],["dpi","Sensitivity"],["hypershift","HyperShift"],["profile","Switch on-board profile"],["wheelmode","Scroll wheel mode"],["nothing","Disabled"],["default","Factory default"],["raw","Raw value (advanced)"]];
 const ACTION_NOTE={hypershift:"While held, every other button switches to its HyperShift action.",profile:"Steps through the mouse's on-board profiles. Only useful if Synapse created more than one.",wheelmode:"Switches the scroll wheel between notched, free-spin and smart mode.",nothing:"",raw:"Seven bytes in hex. For testing protocol values."};
 const keycaps=(mods,key)=>[...MODS.filter(([,v])=>mods&v).map(([n])=>n),KEYNAME[key]||"?"].map(k=>`<kbd>${esc(k)}</kbd>`).join('<span class="plus">+</span>');
 function renderInspector(){
+  if(recStop) recStop();
   const box=$("insp"), foot=$("inspFoot"); box.innerHTML=""; foot.innerHTML=""; foot.hidden=true;
   const s=SLOT[selSlot], cur=current[layer][selSlot], holders=hsHolders(), isHolder=holders.some(h=>h.slot===selSlot);
   const curText=!canEdit()&&!cur?"Unknown":layer===1&&isHolder?"Hold for HyperShift":friendly(cur,layer===1);
@@ -1259,6 +1460,8 @@ function renderInspector(){
     pnl.append(chips(Object.entries(MOUSE).map(([v,n])=>[+v,n]),()=>draft.btn,v=>draft.btn=v)); pnl.append(repeatUI());
   } else if(draft.type==="dpi"){
     pnl.append(chips([[1,"Next stage"],[2,"Previous stage"],[6,"Cycle stages"]],()=>draft.dpi,v=>draft.dpi=v));
+  } else if(draft.type==="macro"){
+    macroPanel(pnl,update);
   } else if(draft.type==="raw"){
     const i=document.createElement("input"); i.value=draft.hex; i.placeholder="02 02 00 04 00 00 00"; i.style.fontFamily="ui-monospace,Menlo,monospace"; i.style.width="100%"; i.oninput=()=>{ draft.hex=i.value; update(); }; pnl.append(i);
     pnl.insertAdjacentHTML("beforeend",`<div class="dim small">${ACTION_NOTE.raw}</div>`);
@@ -1266,19 +1469,89 @@ function renderInspector(){
     pnl.innerHTML=`<div class="dim small">${layer?"Removes this button's HyperShift action.":`Factory action: ${esc(friendly(s.def,false))}.`}</div>`;
   } else pnl.innerHTML=`<div class="dim small">${esc(ACTION_NOTE[draft.type]||"")}</div>`;
   function update(){
-    const blk=blockFromDraft(draft); const changed=!!blk&&!(cur&&(sameMeaning(blk,cur)||friendly(blk,layer===1)===friendly(cur,layer===1)));
-    foot.hidden=!changed&&!(draft.type==="raw"&&!blk); foot.innerHTML="";
+    const blk=blockFromDraft(draft);
+    let changed=!!blk&&!(cur&&(sameMeaning(blk,cur)||friendly(blk,layer===1)===friendly(cur,layer===1)));
+    let newMacro=null;
+    if(draft.type==="macro"&&blk){ const old=draft.macroId!=null?macroLib[draft.macroId]:null, steps=textToSteps(draft.mText).steps, name=(draft.mName||"").trim()||"Macro";
+      if(!old||!old.steps||!sameMacro(old,{name,steps})) newMacro={guid:old?.guid||newGuid(),name,steps};
+      changed=!!newMacro||!cur||!same(blk,cur); }
+    foot.hidden=!changed&&!((draft.type==="raw"||draft.type==="macro")&&!blk); foot.innerHTML="";
     if(foot.hidden) return;
-    if(!blk){ foot.innerHTML='<div class="preview badc">Enter exactly 7 bytes.</div>'; return; }
-    foot.innerHTML=`<div class="preview"><span class="from">${esc(curText)}</span><span class="arrow">→</span><b>${esc(friendly(blk,layer===1))}</b></div><div class="row"><button class="grow" id="inspRevert">Cancel</button><button class="primary grow" id="inspSave">Save</button></div>`;
+    if(!blk){ foot.innerHTML=draft.type==="macro"?(draft.mText.trim()?"":'<div class="preview dim">Record or type the steps.</div>'):'<div class="preview badc">Enter exactly 7 bytes.</div>'; foot.hidden=!foot.innerHTML; return; }
+    const toText=newMacro?describeMacro(blk,{[draft.macroId??0]:newMacro}):friendly(blk,layer===1);
+    foot.innerHTML=`<div class="preview"><span class="from">${esc(curText)}</span><span class="arrow">→</span><b>${esc(toText)}</b></div><div class="row"><button class="grow" id="inspRevert">Cancel</button><button class="primary grow" id="inspSave">Save</button></div>`;
     $("inspRevert").onclick=()=>{ draft=null; renderInspector(); };
     $("inspSave").onclick=safe(async()=>{ $("inspSave").disabled=true; $("inspSave").textContent="Saving…";
-      await applyAll({buttons:{[layer]:{[selSlot]:blk}}},`Before changing ${s.name}${layer?" (HyperShift)":""}`,{toast:s.name});
-      draft=null; renderStage(); renderInspector(); });
+      const target={buttons:{[layer]:{[selSlot]:blk}}};
+      if(newMacro){ // a changed macro gets a new number; every button using the old one moves with it
+        const taken=[...Object.keys(macroLib).map(Number),...macroIdsMouse], id=freeMacroId(taken), oldId=draft.macroId;
+        target.macros={[id]:newMacro};
+        const nb=blk.slice(); [nb[2],nb[3]]=be16(id); target.buttons[layer][selSlot]=nb;
+        if(oldId!=null) for(const hs of [0,1]) for(const sl of SLOTS){ const b=current[hs][sl.slot]; if(macroIdOf(b)===oldId&&!(hs===layer&&sl.slot===selSlot)){ const c=b.slice(); [c[2],c[3]]=be16(id); (target.buttons[hs]=target.buttons[hs]||{})[sl.slot]=c; } } }
+      const r=await applyAll(target,`Before changing ${s.name}${layer?" (HyperShift)":""}`,{toast:s.name});
+      if(!r.cancelled) draft=null; renderStage(); renderInspector(); });
   }
   update();
 }
 
+
+// ---------- buttons: macro editor ----------
+const CODE2HID=c=>({ControlLeft:0xE0,ShiftLeft:0xE1,AltLeft:0xE2,MetaLeft:0xE3,ControlRight:0xE4,ShiftRight:0xE5,AltRight:0xE6,MetaRight:0xE7,OSLeft:0xE3,OSRight:0xE7})[c]??KEYS[CODE2NAME(c)];
+let recStop=null;
+function macroPanel(pnl,update){
+  const d=draft;
+  const known=Object.entries(macroLib).filter(([,m])=>m&&m.steps);
+  if(known.length){ const lab=document.createElement("label"); lab.className="field"; lab.innerHTML="<span>Macro</span>";
+    const sel=document.createElement("select"); sel.add(new Option("New macro","")); known.forEach(([id,m])=>sel.add(new Option(m.name||"untitled",id)));
+    sel.value=d.macroId!=null&&macroLib[d.macroId]?String(d.macroId):"";
+    sel.onchange=()=>{ const id=sel.value?+sel.value:null; d.macroId=id; const m=id!=null?macroLib[id]:null; d.mName=m?.name||""; d.mText=m?.steps?stepsToText(m.steps):""; renderInspector(); };
+    lab.append(sel); pnl.append(lab); }
+  const nm=document.createElement("label"); nm.className="field"; nm.innerHTML="<span>Name</span>";
+  const ni=document.createElement("input"); ni.value=d.mName||""; ni.maxLength=60; ni.placeholder="e.g. Sign note";
+  const fit=()=>{ ni.style.width=Math.max(12,Math.min(40,(ni.value||ni.placeholder).length+2))+"ch"; }; fit();
+  ni.oninput=()=>{ d.mName=ni.value; fit(); update(); }; nm.append(ni); pnl.append(nm);
+  if(d.unreadable) pnl.insertAdjacentHTML("beforeend",'<p class="dim small">This macro has steps this page can\'t show. Saving replaces them.</p>');
+  const ta=document.createElement("textarea"); ta.className="msteps"; ta.value=d.mText||""; ta.spellcheck=false;
+  ta.placeholder='"Hello", Enter, wait 500ms, Ctrl+V, left click';
+  const msg=document.createElement("div"); msg.className="small";
+  const grow=()=>{ ta.style.height="auto"; ta.style.height=Math.min(220,Math.max(60,ta.scrollHeight+2))+"px"; };
+  const check=()=>{ const r=textToSteps(ta.value); if(!ta.value.trim()){ msg.textContent=""; msg.className="small"; }
+    else if(r.error){ msg.textContent=r.error.charAt(0).toUpperCase()+r.error.slice(1)+"."; msg.className="small badc"; }
+    else { const ms=r.steps.reduce((t,x)=>t+(x.t==="w"?x.ms:0),0); msg.textContent=`${r.steps.length} steps${ms?`, ${fmtMs(ms)} of pauses`:""}`; msg.className="small dim"; } };
+  ta.oninput=()=>{ d.mText=ta.value; grow(); check(); update(); };
+  const tools=document.createElement("div"); tools.className="row"; tools.style.cssText="gap:6px;flex-wrap:wrap;margin-top:8px";
+  const recB=document.createElement("button"); recB.textContent="Record";
+  const keep=document.createElement("label"); keep.className="row small"; keep.style.cssText="gap:6px;margin-left:4px"; keep.innerHTML=`<input type="checkbox" ${d.keepPauses?"checked":""}> Keep pauses`;
+  keep.querySelector("input").onchange=e=>{ d.keepPauses=e.target.checked; };
+  const addKey=document.createElement("button"); addKey.textContent="Add key";
+  const addWait=document.createElement("button"); addWait.textContent="Add pause";
+  const append=t=>{ ta.value=(ta.value.trim()?ta.value.trim().replace(/,\s*$/,"")+", ":"")+t; ta.oninput(); };
+  addKey.onclick=()=>openKeyboard(0,KEYS.Enter,(m,k)=>append([...MODS.filter(([,v])=>m&v).map(([n])=>n),KEYNAME[k]].join("+")));
+  addWait.onclick=()=>append("wait 100ms");
+  recB.onclick=()=>{ if(recStop){ recStop(); return; } startRecording(); };
+  function startRecording(){
+    const steps=[]; let last=0; const down=new Set();
+    recB.textContent="Stop"; recB.classList.add("primary"); msg.textContent="Recording. Press keys on the keyboard."; msg.className="small";
+    const t0=ta.value.trim();
+    const show=()=>{ const txt=stepsToText(steps); ta.value=(t0?t0.replace(/,\s*$/,"")+(txt?", ":""):"")+txt; grow(); };
+    const onDown=e=>{ e.preventDefault(); e.stopPropagation(); if(e.repeat) return; const k=CODE2HID(e.code); if(k==null) return;
+      const now=performance.now(); if(d.keepPauses&&last&&now-last>=10) steps.push({t:"w",ms:Math.min(3600000,Math.round((now-last)/10)*10)});
+      steps.push({t:"d",k}); down.add(k); last=now; show(); };
+    const onUp=e=>{ e.preventDefault(); e.stopPropagation(); const k=CODE2HID(e.code); if(k==null||!down.has(k)) return; down.delete(k); steps.push({t:"u",k}); last=performance.now(); show(); };
+    document.addEventListener("keydown",onDown,true); document.addEventListener("keyup",onUp,true);
+    recStop=()=>{ document.removeEventListener("keydown",onDown,true); document.removeEventListener("keyup",onUp,true); recStop=null;
+      down.forEach(k=>steps.push({t:"u",k})); show(); recB.textContent="Record"; recB.classList.remove("primary"); ta.oninput(); };
+  }
+  tools.append(recB,addKey,addWait,keep);
+  const lab=document.createElement("div"); lab.className="label"; lab.textContent="Steps";
+  pnl.append(lab,ta,msg,tools);
+  const modeL=document.createElement("label"); modeL.className="field"; modeL.style.marginTop="10px"; modeL.innerHTML="<span>When pressed</span>";
+  const ms=document.createElement("select"); MACRO_MODES.forEach(([v,t])=>ms.add(new Option(t,v))); ms.value=d.mode||"once";
+  const times=document.createElement("input"); times.type="number"; times.min=2; times.max=255; times.value=d.times||2; times.style.width="7ch"; times.hidden=ms.value!=="times";
+  ms.onchange=()=>{ d.mode=ms.value; times.hidden=d.mode!=="times"; update(); }; times.oninput=()=>{ d.times=Math.max(2,Math.min(255,+times.value||2)); update(); };
+  const mrow=document.createElement("div"); mrow.className="row"; mrow.style.gap="8px"; mrow.append(ms,times); modeL.append(mrow); pnl.append(modeL);
+  requestAnimationFrame(grow); check();
+}
 // ---------- on-screen keyboard ----------
 const KB_MAIN=[
   [["Esc",1],[null,1],["F1",1],["F2",1],["F3",1],["F4",1],[null,.5],["F5",1],["F6",1],["F7",1],["F8",1],[null,.5],["F9",1],["F10",1],["F11",1],["F12",1]],
@@ -1326,18 +1599,24 @@ function renderTest(){
 
 // ---------- one path for every change: plan, back up, write, verify, roll back if needed ----------
 function planChanges(t){
-  const plan={items:[],dpi:null,zones:[],device:[]};
+  const plan={items:[],dpi:null,zones:[],device:[],macros:[]};
+  // Macros the target's buttons use that aren't on the target yet (or differ there) must be written first.
+  for(const id of referencedMacros(t.buttons)){ const m=t.macros?.[id]; if(m&&m.steps&&!(macroLib[id]&&sameMacro(macroLib[id],m)&&macroLib[id].guid===m.guid)) plan.macros.push([id,clone(m)]); }
   for(const hs of [0,1]) for(const [slot,blk] of Object.entries(t.buttons?.[hs]||{})){ if(+slot===1||!SLOT[+slot]) continue; if(!sameMeaning(current[hs][+slot],blk)) plan.items.push([+slot,hs,blk]); }
   const d=normDpi(t.dpi); if(d&&dpiText(d)!==dpiText(dpiMouse)) plan.dpi=d;
   for(const z of ZONES){ const tz=t.lighting?.[z.id]; if(!tz||!tz.effect) continue; const full=fillZone(tz,ledMouse[z.id]); if(!ledSame(full,ledMouse[z.id])) plan.zones.push([z.id,full]); }
   for(const [k,v] of Object.entries(t.device||{})) if(v!=null&&devMouse[k]!==v) plan.device.push([k,v]);
+  // A button whose macro is rewritten counts as changed even if it already points at that macro number.
+  const mids=new Set(plan.macros.map(([id])=>id));
+  for(const hs of [0,1]) for(const [slot,blk] of Object.entries(t.buttons?.[hs]||{})){ const id=macroIdOf(blk); if(id!=null&&mids.has(id)&&!plan.items.some(([s,h])=>s===+slot&&h===hs)&&SLOT[+slot]&&+slot!==1) plan.items.push([+slot,hs,blk]); }
   plan.total=plan.items.length+(plan.dpi?1:0)+plan.zones.length+plan.device.length;
   return plan;
 }
 const DEVLABEL={poll:["Polling rate"," Hz"],sleep:["Sleep after"," s"],lowbat:["Low-battery warning","%"]};
 function planLines(plan){
   const L=[];
-  for(const [slot,hs,blk] of plan.items) L.push(`${hs?"HyperShift + ":""}${SLOT[slot].name}: ${friendly(current[hs][slot],hs)} → ${friendly(blk,hs)}`);
+  const tlib={...macroLib}; plan.macros.forEach(([id,m])=>tlib[id]=m);
+  for(const [slot,hs,blk] of plan.items) L.push(`${hs?"HyperShift + ":""}${SLOT[slot].name}: ${friendly(current[hs][slot],hs)} → ${isMacroBlk(blk)?describe(blk,tlib):friendly(blk,hs)}`);
   if(plan.dpi) L.push(`DPI stages: ${dpiText(dpiMouse)} → ${dpiText(plan.dpi)}`);
   const zl=s=>zoneLabel(s)+(s&&NEEDS[s.effect]?` ${s.c1}${s.effect==="breath2"?" / "+s.c2:""}`:"");
   for(const [id,s] of plan.zones) L.push(`${ZONES.find(z=>z.id===id).key} light: ${zl(ledMouse[id])} → ${zl(s)}`);
@@ -1360,12 +1639,18 @@ async function applyAllNow(target,reason,opts={}){
   const plan=planChanges(target);
   if(!plan.total){ if(opts.toast) saveNote(""); return {total:0,failed:0}; }
   if(opts.confirm&&!(await ask({title:opts.confirm,text:inLayout()?`Changes to “${editName}”. The current version stays in its history.`:"Changes to the mouse. Its current setup is saved to History first.",lines:planLines(plan),ok:opts.okLabel||(inLayout()?"Apply":"Load onto mouse")}))) return {total:0,failed:0,cancelled:true};
-  if(plan.items.length){ const p=guardChanges(plan.items); if(p.length&&!(await ask({title:"Are you sure?",lines:p,ok:"Save anyway"}))) return {total:0,failed:0,cancelled:true}; }
+  if(plan.items.length){ const p=guardChanges(plan.items,new Set(plan.macros.map(([id])=>id))); if(p.length&&!(await ask({title:"Are you sure?",lines:p,ok:"Save anyway"}))) return {total:0,failed:0,cancelled:true}; }
   const before=snapshotNow(); if(!inLayout()&&!opts.noHistory) pushHistory(reason,before);
   busy=true; saveNote("Saving…");
   let done=0,failed=0,stop=false;
   const step=async fn=>{ if(stop){ failed++; return; } try{ (await fn())?done++:failed++; }catch(e){ failed++; stop=true; log(e.message,"bad"); } if(plan.total>3) saveNote(`Saving ${done+failed} of ${plan.total}…`); };
   try{
+    // Macros first, then the buttons that point to them. If a macro had to move to a new number, its buttons follow.
+    const remap={};
+    for(const [id,m] of plan.macros){ if(stop) break;
+      try{ const nid=inLayout()?(macroLib[id]=clone(m),id):await ensureMacroOnMouse(id,m); if(nid!==id) remap[id]=nid; }
+      catch(e){ log(e.message,"bad"); toast(e.message); stop=true; } }
+    for(const it of plan.items){ const id=macroIdOf(it[2]); if(id!=null&&remap[id]!=null){ it[2]=it[2].slice(); [it[2][2],it[2][3]]=be16(remap[id]); } }
     for(const [slot,hs,blk] of plan.items) await step(()=>writeSlot(slot,hs,blk));
     if(plan.dpi) await step(async()=>{ const g=await writeDpi(plan.dpi); await readDpi(); return g&&(inLayout()||dpiText(dpiMouse)===dpiText(plan.dpi)); });
     if(plan.zones.length){
@@ -1391,7 +1676,8 @@ function snapshotNow(){
   const buttons={0:{},1:{}};
   for(const hs of [0,1]) for(const s of SLOTS) if(current[hs][s.slot]&&!s.locked) buttons[hs][s.slot]=current[hs][s.slot].slice();
   const lighting={}; ZONES.forEach(z=>{ if(ledMouse[z.id]?.effect) lighting[z.id]=clone(ledMouse[z.id]); });
-  return {buttons,dpi:clone(dpiMouse),lighting,device:clone(devMouse),slot:activeSlot};
+  const macros={}; for(const id of referencedMacros(buttons)) if(macroLib[id]?.steps) macros[id]=clone(macroLib[id]);
+  return {buttons,dpi:clone(dpiMouse),lighting,device:clone(devMouse),slot:activeSlot,macros};
 }
 const histKey=()=>"naga.history."+mouseId, seenKey=()=>"naga.lastSeen."+mouseId;
 const getHistory=()=>store.get(histKey(),[]);
@@ -1482,11 +1768,12 @@ const GUIDE=`Naga Control layout text (Razer Naga V3 Pro). JSON. Only what is li
   "naga-control": 2,
   "name": "Work – reading",
   "note": "optional description",
-  "buttons": { "Side 1": "Win+L", "Side 8": "Ctrl+N", "Pinky": "HyperShift", "everything else": "factory" },
+  "buttons": { "Side 1": "Win+L", "Side 2": "macro \\"Sign note\\"", "Side 8": "Ctrl+N", "Pinky": "HyperShift", "everything else": "factory" },
   "hypershift": { "Scroll up": "Num +", "Side 3": "Ctrl+V", "everything else": "off" },
   "dpi": { "stages": [800, 1600, "3200x2400"], "start at stage": 2 },
   "lighting": { "Logo": "off", "Side plate": "static #ff0000, brightness 60%", "Scroll wheel": "breathing #00ff00 #0000ff" },
-  "device": { "polling Hz": 1000, "sleep after seconds": 300, "low battery warning %": 10 }
+  "device": { "polling Hz": 1000, "sleep after seconds": 300, "low battery warning %": 10 },
+  "macros": { "Sign note": "\\"Reviewed and agree.\\", Enter, wait 300ms, Ctrl+S" }
 }
 
 Button names: Side 1 … Side 12, Pinky, Right click, Wheel click, Scroll up, Scroll down, Tilt left, Tilt right,
@@ -1503,7 +1790,12 @@ Actions:
   repeat while held: add ", repeat 20/s" (1–20), e.g. "Left click, repeat 20/s", "Enter, repeat 5/s"
   other: DPI up, DPI down, DPI cycle, HyperShift, Switch profile, Scroll wheel mode, Nothing, Off, Factory
   exact bytes: Raw 02 02 01 11 00 00 00
-  Not possible yet: typing text / macros.
+  macro: macro "Name" — optionally , 3 times | , while held | , toggle. The name must be in "macros".
+
+Macros (stored on the mouse, work on any computer): "Name": "steps, comma separated". Steps:
+  "text to type" (US keyboard characters) | a key or shortcut (Enter, Ctrl+C) | wait 200ms / wait 2s |
+  hold Shift / release Shift | left click, right click, middle click, back click, forward click |
+  hold left / release left | scroll up, scroll down
 
 Lighting zones: Scroll wheel, Logo, Side plate, or "all". Each zone, one of:
   off | static <color> | breathing <color> | breathing <color> <color> | breathing random |
@@ -1516,15 +1808,19 @@ $("guideText").textContent=GUIDE;
 function layoutToText(L,name){
   const o={"naga-control":2,name}; if(L.note) o.note=L.note;
   const editable=SLOTS.filter(s=>!s.locked);
+  // Macro names must be unique in the text, since buttons refer to them by name.
+  const lib={}, used=new Set(); for(const id of referencedMacros(L.buttons)){ const m=L.macros?.[id]; if(!m||!m.steps) continue; let n=(m.name||"Macro").trim()||"Macro", k=2; while(used.has(n.toLowerCase())) n=`${m.name} ${k++}`; used.add(n.toLowerCase()); lib[id]={...m,name:n}; }
+  const dsc=b=>isMacroBlk(b)?describeMacro(b,lib).replace(/^Macro “(.*)”/,(x,n)=>`macro "${n}"`):describe(b,lib);
   for(const [hs,key] of [[0,"buttons"],[1,"hypershift"]]){
     const b=L.buttons?.[hs]; if(!b||!Object.keys(b).length) continue;
     const full=editable.every(s=>b[s.slot]); const out={};
-    if(hs===1&&full){ editable.forEach(s=>{ if(!same(b[s.slot],OFF)) out[s.key]=describe(b[s.slot]); }); out["everything else"]="off"; }
-    else editable.forEach(s=>{ if(b[s.slot]) out[s.key]=describe(b[s.slot]); });
+    if(hs===1&&full){ editable.forEach(s=>{ if(!same(b[s.slot],OFF)) out[s.key]=dsc(b[s.slot]); }); out["everything else"]="off"; }
+    else editable.forEach(s=>{ if(b[s.slot]) out[s.key]=dsc(b[s.slot]); });
     o[key]=out;
   }
   const d=normDpi(L.dpi); if(d) o.dpi={stages:d.stages.map(s=>s.x===s.y?s.x:`${s.x}x${s.y}`),"start at stage":d.start+1};
   if(L.lighting&&Object.keys(L.lighting).length){ o.lighting={}; ZONES.forEach(z=>{ const s=L.lighting[z.id]; if(s&&s.effect) o.lighting[z.key]=zoneText(s); }); }
+  if(Object.keys(lib).length){ o.macros={}; Object.values(lib).forEach(m=>o.macros[m.name]=stepsToText(m.steps)); }
   if(L.device&&Object.keys(L.device).length){ o.device={}; if(L.device.poll) o.device["polling Hz"]=L.device.poll; if(L.device.sleep) o.device["sleep after seconds"]=L.device.sleep; if(L.device.lowbat) o.device["low battery warning %"]=L.device.lowbat; }
   return JSON.stringify(o,null,2);
 }
@@ -1541,8 +1837,18 @@ function parseLayoutText(text){
     return {layout:L,name:j.name,errors};
   }
   const L={buttons:{0:{},1:{}}}; if(j.note) L.note=String(j.note);
-  const known=new Set(["naga-control","name","note","buttons","hypershift","dpi","lighting","device"]);
+  const known=new Set(["naga-control","name","note","buttons","hypershift","dpi","lighting","device","macros"]);
   Object.keys(j).forEach(k=>{ if(!known.has(k)) errors.push(`Unknown section "${k}".`); });
+  const macroNames={};
+  if(j.macros!=null){
+    if(typeof j.macros!=="object"||Array.isArray(j.macros)) errors.push(`"macros" should be a list of "Name": "steps".`);
+    else { L.macros={}; const taken=[...Object.keys(macroLib).map(Number),...macroIdsMouse];
+      for(const [nm,txt] of Object.entries(j.macros)){ const name=String(nm).trim().slice(0,60); if(!name){ errors.push("macros › a macro needs a name."); continue; }
+        const r=textToSteps(Array.isArray(txt)?txt.join(", "):txt); if(r.error){ errors.push(`macros › ${name}: ${r.error}.`); continue; }
+        // Reuse the existing macro if it's identical, so loading the same text twice doesn't store it twice.
+        const hit=Object.entries(macroLib).find(([,m])=>m.steps&&sameMacro(m,{name,steps:r.steps}));
+        const id=hit?+hit[0]:freeMacroId([...taken,...Object.keys(L.macros).map(Number)]);
+        L.macros[id]=hit?clone(hit[1]):{guid:newGuid(),name,steps:r.steps}; macroNames[name.toLowerCase()]=id; } } }
   for(const [hs,key] of [[0,"buttons"],[1,"hypershift"]]){
     const sec=j[key]; if(sec==null) continue;
     if(typeof sec!=="object"||Array.isArray(sec)){ errors.push(`"${key}" should be a list of "Button": "action".`); continue; }
@@ -1552,9 +1858,9 @@ function parseLayoutText(text){
       const s=SLOTBYNAME[norm(bn)];
       if(!s){ errors.push(`${key} › "${bn}": unknown button.`); continue; }
       if(s.locked){ errors.push(`${key} › Left click is locked so it can't be lost.`); continue; }
-      const r=parseAction(act,s.slot,hs); if(r.error) errors.push(`${key} › ${s.key}: ${r.error}.`); else L.buttons[hs][s.slot]=r.blk;
+      const r=parseAction(act,s.slot,hs,macroNames); if(r.error) errors.push(`${key} › ${s.key}: ${r.error}.`); else L.buttons[hs][s.slot]=r.blk;
     }
-    if(rest!=null) SLOTS.forEach(s=>{ if(s.locked||L.buttons[hs][s.slot]) return; const r=parseAction(rest,s.slot,hs); if(r.error) errors.push(`${key} › everything else: ${r.error}.`); else L.buttons[hs][s.slot]=r.blk; });
+    if(rest!=null) SLOTS.forEach(s=>{ if(s.locked||L.buttons[hs][s.slot]) return; const r=parseAction(rest,s.slot,hs,macroNames); if(r.error) errors.push(`${key} › everything else: ${r.error}.`); else L.buttons[hs][s.slot]=r.blk; });
   }
   if(j.dpi!=null){
     const st=Array.isArray(j.dpi)?j.dpi:j.dpi.stages;
@@ -1697,14 +2003,14 @@ $("profImport").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""
 
 // ---------- editing a layout without the mouse ----------
 const DEFAULT_DPI={start:1,stages:[{x:800,y:800},{x:1600,y:1600},{x:3200,y:3200}]};
-const dataOf=L=>({buttons:clone(L.buttons||{0:{},1:{}}),dpi:clone(L.dpi||null),lighting:clone(L.lighting||{}),device:clone(L.device||{})});
+const dataOf=L=>({buttons:clone(L.buttons||{0:{},1:{}}),dpi:clone(L.dpi||null),lighting:clone(L.lighting||{}),device:clone(L.device||{}),macros:clone(L.macros||{})});
 function layoutState(L){
   const b={0:{},1:{}};
   SLOTS.forEach(s=>{ b[0][s.slot]=(L.buttons?.[0]?.[s.slot]||s.def).slice(); b[1][s.slot]=(s.locked?OFF:(L.buttons?.[1]?.[s.slot]||OFF)).slice(); });
   const lighting={}; ZONES.forEach(z=>{ const t=L.lighting?.[z.id]; lighting[z.id]=t&&t.effect?fillZone(t,defZone()):defZone(); });
-  return {buttons:b,dpi:normDpi(L.dpi)||clone(DEFAULT_DPI),lighting,device:{poll:1000,sleep:300,lowbat:10,...(L.device||{})}};
+  return {buttons:b,dpi:normDpi(L.dpi)||clone(DEFAULT_DPI),lighting,device:{poll:1000,sleep:300,lowbat:10,...(L.device||{})},macros:clone(L.macros||{})};
 }
-function setEditorFrom(st){ current[0]=clone(st.buttons[0]); current[1]=clone(st.buttons[1]); dpiMouse=normDpi(st.dpi); ledMouse=clone(st.lighting); devMouse=clone(st.device); dpiEdit=clone(dpiMouse); led=clone(ledMouse); }
+function setEditorFrom(st){ current[0]=clone(st.buttons[0]); current[1]=clone(st.buttons[1]); macroLib=clone(st.macros||{}); dpiMouse=normDpi(st.dpi); ledMouse=clone(st.lighting); devMouse=clone(st.device); dpiEdit=clone(dpiMouse); led=clone(ledMouse); }
 function addVersion(L,note,named){ L.versions=L.versions||[]; const v0=L.versions[0], now=Date.now(), data=dataOf(L);
   if(!named&&v0&&v0.auto&&v0.note===note&&now-v0.t<120000){ v0.t=now; v0.data=data; }
   else L.versions.unshift({t:now,note,data,...(named?{named:true}:{auto:true})});
@@ -1718,6 +2024,7 @@ function commitLayoutVersion(reason,plan){
     for(const [id] of plan.zones) (L.lighting=L.lighting||{})[id]=clone(ledMouse[id]);
     for(const [k,v] of plan.device) (L.device=L.device||{})[k]=v;
   } else Object.assign(L,dataOf(snapshotNow()));
+  const keep={}; for(const id of referencedMacros(L.buttons)){ const m=macroLib[id]||L.macros?.[id]; if(m) keep[id]=clone(m); } L.macros=keep;
   let note=String(reason).replace(/^Before changing /,"Changed ").replace(/^Before saving /,"Saved ").replace(/^Before loading /,"Loaded ").replace(/^Before /,"");
   addVersion(L,note.charAt(0).toUpperCase()+note.slice(1)); touch(editName); saveLayouts(); updateUndo();
 }
@@ -1890,52 +2197,43 @@ $("rawSend").onclick=safe(async()=>{ const c=parseInt($("rawClass").value,16), m
   if(!(m&0x80)) pushHistory("Before a raw command",snapshotNow());
   await rawCmd(c,m,z,parseHex($("rawArgs").value)); });
 
-// ---------- macro reader (read-only) ----------
-// Every command here is a read (command byte 0x80 or higher). Nothing is written to the mouse.
-async function macroReport(note){
-  const out=[], H=a=>Array.from(a,b=>b.toString(16).padStart(2,"0")).join(" ");
-  let misses=0;
-  const read=async(c,m,z,a=[])=>{
-    if(!(m&0x80)) throw new Error("not a read");
-    try{ const r=await rawCmd(c,m,z,a,true); misses=0; return r; }
-    catch(e){ if(++misses>=5) throw new Error("The mouse stopped answering. Move it to wake it and try again."); return null; } };
-  const line=(label,r,n=16)=>{ if(!r) return out.push(`${label}: no answer`); const last=Math.max(n,r.args.reduce((k,b,i)=>b?i+1:k,0)); out.push(`${label}: ${STATUS[r.status]||r.status}${r.status===2?" | "+H(r.args.slice(0,Math.min(80,last))):""}`); };
-  out.push(`Naga Control macro read, ${new Date().toISOString()}, PID ${dev.productId.toString(16)}`);
-  for(const [c,m,z] of [[0,0x81,2],[5,0x80,1],[5,0x81,2],[5,0x84,1]]) line(`${c.toString(16).padStart(2,"0")}:${m.toString(16)}`,await read(c,m,z),4);
-  // Buttons on every on-board profile, both layers. Blocks are what each button is set to.
-  const seen=new Map(); let n=0;
-  for(let prof=0;prof<=5;prof++){
-    const r0=await read(2,0x8C,0x0A,[prof,SLOTS[0].slot,0]);
-    if(!r0||r0.status!==2){ line(`profile ${prof}`,r0,4); continue; }
-    for(const hs of [0,1]) for(const sl of SLOTS){
-      const r=await read(2,0x8C,0x0A,[prof,sl.slot,hs]); n++; if(note&&n%20===0) note(`Buttons ${n}…`);
-      if(!r||r.status!==2) continue;
-      const blk=Array.from(r.args.slice(2,10)); out.push(`p${prof} ${hs?"HS":"N "} ${sl.slot.toString(16).padStart(2,"0")} ${sl.name}: ${H(blk)}`);
-      if(blk[1]===0x03||blk[0]===0x03) seen.set(H(blk),blk);
-    }
-  }
-  // Macro class: every read command with no arguments.
-  if(note) note("Macro memory…");
-  for(let m=0x80;m<=0xBF;m++) line(`06:${m.toString(16)} size 50`,await read(6,m,0x50),12);
-  // Reads aimed at each macro a button points to (and the first few IDs, in case none is assigned).
-  const ids=new Set([0,1,2,3]);
-  for(const blk of seen.values()) for(let i=1;i<7;i++){ ids.add(blk[i]); ids.add((blk[i]<<8)|blk[i+1]); }
-  out.push(`macro-looking buttons: ${seen.size}, ids tried: ${[...ids].map(x=>x.toString(16)).join(" ")}`);
-  for(const id of ids){ if(id>0xFFFF) continue;
-    // Command changes on every step, so a late reply to the previous read can't be mistaken for this one.
-    for(const args of [[id>>8,id&255],[id>>8,id&255,0,0],[id>>8,id&255,0,0,0,0x40]]){ if(note) note(`Macro ${id.toString(16)}…`);
-      for(let m=0x80;m<=0x8F;m++){
-        const r=await read(6,m,0x50,args);
-        if(r&&r.status===2&&r.args.slice(args.length).some(b=>b)) line(`06:${m.toString(16)} [${H(args)}]`,r,24); } } }
-  return out.join("\n");
+// ---------- macros stored on the mouse ----------
+// Lists every macro, which buttons on which on-board profile use it, and lets unused ones be deleted.
+async function scanMacros(note){
+  const st=await macroStorage(), ids=(await macroIdsOnMouse())||[]; const list=[];
+  for(const id of ids){ let name="", size=0;
+    try{ const nb=[]; for(let off=0;off<120;){ const n=Math.min(64,120-off); const r=await rawCmd(6,0x8C,n+6,[...be16(id),...be16(off)],true); if(!ok(r)) break; nb.push(...r.args.slice(6,6+n)); off+=n; } name=parseNameStruct(nb.concat(new Array(250-nb.length).fill(0)))?.name||"";
+      const z=await rawCmd(6,0x88,0x06,be16(id),true); if(ok(z)) size=((z.args[2]<<24)>>>0)+((z.args[3]<<16)|(z.args[4]<<8)|z.args[5]); }catch(e){}
+    list.push({id,name,size,used:[]}); }
+  // Which buttons point at each macro, on every on-board profile.
+  // On-board profiles that exist (Synapse: 05:80 count, 05:81 [count, ids…]). If the answers disagree, only check the active one.
+  let profs=[P()];
+  try{ const c=await rawCmd(5,0x80,0x01,[],true), l=await rawCmd(5,0x81,0x50,[],true);
+    if(ok(c)&&ok(l)&&l.args[0]===c.args[0]&&c.args[0]>=1&&c.args[0]<=5){ const ids=Array.from(l.args.slice(1,1+c.args[0])).filter(x=>x>=1&&x<=5); if(ids.length) profs=ids; } }catch(e){}
+  let n=0;
+  for(const prof of profs){
+    for(const hs of [0,1]) for(const sl of SLOTS){ const r=await rawCmd(2,0x8C,0x0A,[prof,sl.slot,hs],true); if(note&&++n%20===0) note(`Checking buttons… ${n}`);
+      if(!ok(r)) continue; const id=macroIdOf(Array.from(r.args.slice(3,10))); const m=list.find(x=>x.id===id); if(m) m.used.push(`${prof!==P()?`profile ${prof}: `:""}${hs?"HyperShift + ":""}${sl.name}`); } }
+  return {st,list};
 }
-$("macroRead").onclick=safe(async()=>{
+function renderMacroList(res){
+  const box=$("macroList"); box.innerHTML="";
+  const {st,list}=res;
+  box.insertAdjacentHTML("beforeend",`<p class="dim small">${list.length} macro${list.length===1?"":"s"}${st?`, ${Math.round(st.free/1024)} KB of ${Math.round(st.max/1024)} KB free`:""}.</p>`);
+  list.forEach(m=>{ const row=document.createElement("div"); row.className="row"; row.style.cssText="gap:8px;padding:6px 0;border-top:1px solid var(--line)";
+    row.innerHTML=`<div class="grow"><b>${esc(m.name||"untitled")}</b><div class="dim small">${m.used.length?esc(m.used.join(", ")):"Not used by any button"}</div></div>`;
+    if(!m.used.length){ const del=document.createElement("button"); del.textContent="Delete"; del.className="link";
+      del.onclick=safe(async()=>{ if(!(await ask({title:`Delete “${m.name||"untitled"}” from the mouse?`,text:"No button uses it. This can't be undone.",ok:"Delete"}))) return;
+        await serial(async()=>{ if(await deleteMacroOnMouse(m.id)){ macroIdsMouse=macroIdsMouse.filter(x=>x!==m.id); delete macroLib[m.id]; } });
+        toast("Macro deleted"); $("macroScan").click(); }); row.append(del); }
+    box.append(row); });
+}
+$("macroScan").onclick=safe(async()=>{
   if(!dev) throw new Error("Connect the mouse first.");
-  const btn=$("macroRead"); btn.disabled=true; $("macroCopy").hidden=true; $("macroNote").textContent="Reading…";
-  try{ const t=await serial(()=>macroReport(x=>$("macroNote").textContent=x)); $("macroOut").textContent=t; $("macroOut").hidden=false; $("macroCopy").hidden=false; $("macroNote").textContent="Done. Nothing was changed."; }
+  const btn=$("macroScan"); btn.disabled=true; $("macroNote").textContent="Reading…";
+  try{ const res=await serial(()=>scanMacros(x=>$("macroNote").textContent=x)); renderMacroList(res); $("macroNote").textContent=""; }
   catch(e){ $("macroNote").textContent=e.message; throw e; }
   finally{ btn.disabled=false; } });
-$("macroCopy").onclick=()=>copyText($("macroOut").textContent,"macroNote");
 
 // ---------- start ----------
 ZONES.forEach(z=>led[z.id]=defZone());
