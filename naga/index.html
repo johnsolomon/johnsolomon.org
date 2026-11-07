@@ -332,7 +332,7 @@ dialog ul{max-height:50vh;overflow:auto}
       <div class="row" style="margin-bottom:16px"><label class="row" style="gap:6px"><input type="checkbox" id="ledLink"> Same on all three</label><span class="grow"></span><button id="ledAllOff">Turn all off</button></div>
       <div id="zoneEditor"></div>
     </div>
-    <div class="inspfoot small dim">The 12 side keys light as one zone.</div></aside>
+    <div class="inspfoot small dim"><div>The 12 side keys light as one zone.</div><label class="row" id="wdlRow" style="gap:6px;margin-top:8px;flex-wrap:nowrap;align-items:flex-start" hidden><input type="checkbox" id="wdlChk"> Let Windows Dynamic Lighting control these lights</label></div></aside>
   </div>
 </section>
 
@@ -349,6 +349,12 @@ dialog ul{max-height:50vh;overflow:auto}
     <div class="group">
       <div class="set"><div><b>Polling rate</b><span>Lower rates save battery.</span></div>
         <div><div class="seg" id="pollSeg"><button data-p="125">125 Hz</button><button data-p="500">500 Hz</button><button data-p="1000">1000 Hz</button></div></div></div>
+      <div class="set" id="liftSet" hidden><div><b>Lift-off distance</b><span>How high you can lift the mouse before it stops tracking.</span></div>
+        <div><div class="seg" id="liftSeg"><button data-v="1">1 mm</button><button data-v="2">2 mm</button><button data-v="3">3 mm</button></div></div></div>
+      <div class="set" id="accelSet" hidden><div><b>Scroll acceleration</b><span>Faster wheel turns scroll further.</span></div>
+        <div><label class="row" style="gap:6px"><input type="checkbox" id="accelChk"> On</label></div></div>
+      <div class="set" id="reelSet" hidden><div><b>Free-spin on a flick</b><span>The wheel unlocks when you flick it hard, and locks again when it slows.</span></div>
+        <div><label class="row" style="gap:6px"><input type="checkbox" id="reelChk"> On</label></div></div>
     </div>
   </div>
 </section>
@@ -361,8 +367,10 @@ dialog ul{max-height:50vh;overflow:auto}
       <div class="row"><div class="meter"><i id="battBar" style="width:0"></i></div><span class="value" id="battBig">—</span></div></div>
     <div class="set"><div><b>Sleep after</b></div>
       <div class="row"><input type="range" id="idle" min="60" max="900" step="30" class="grow"><span class="value" id="idleLbl">—</span></div></div>
-    <div class="set"><div><b>Low-battery warning</b></div>
-      <div class="row"><input type="range" id="lowbat" min="5" max="25" step="1" class="grow"><span class="value" id="lowbatLbl">—</span></div></div>
+    <div class="set"><div><b>Low-power mode at</b><span>Below this battery level the mouse saves power and warns you.</span></div>
+      <div class="row"><input type="range" id="lowbat" min="5" max="30" step="1" class="grow"><span class="value" id="lowbatLbl">—</span></div></div>
+    <div class="set" id="dimSet" hidden><div><b>Dim the lights when idle</b><span>For this profile.</span></div>
+      <div><div class="seg" id="dimSeg"><button data-v="off">Off</button><button data-v="half">To half</button><button data-v="quarter">To a quarter</button></div></div></div>
   </div>
 </section>
 
@@ -374,6 +382,17 @@ dialog ul{max-height:50vh;overflow:auto}
       <div class="row"><button id="profSnap">Save the mouse as a layout</button><label class="btn">Import file<input type="file" id="profImport" accept=".json,.txt" hidden></label></div>
     </header>
     <div class="syncbox" id="syncBox"></div>
+    <div class="group" id="profGroup" style="border-top:0;margin-top:0" hidden>
+      <div class="row" style="justify-content:space-between"><h3 style="margin:0">Profiles on the mouse</h3><button id="profAdd">Add profile</button></div>
+      <p class="dim small">The button under the scroll wheel switches between them. Each has its own buttons, sensitivity and brightness; the lighting effects are shared.</p>
+      <div id="profList"></div>
+    </div>
+    <div class="group" style="border-top:0;margin-top:0">
+      <div class="row" style="justify-content:space-between"><h3 style="margin:0">Setups</h3><div class="row"><button id="setupSnap">Save the mouse as a setup</button><button id="setupNew" class="link">New setup</button></div></div>
+      <p class="dim small">A setup is a set of profiles, each made from one of your layouts, loaded onto the mouse together.</p>
+      <div id="setupList"></div>
+    </div>
+    <h3 style="margin:18px 0 0">Saved layouts</h3>
     <div id="layoutList"></div>
     <div class="group">
       <h3>Work on a layout with Claude</h3>
@@ -549,7 +568,9 @@ function rawCmd(cls,cmd,size,args=[],quiet=false,txn=TXN){
   return job;
 }
 const ok=r=>r&&r.status===2;
-const P=()=>activeSlot;
+// The on-board profile being edited. Defaults to the one the mouse is using.
+let editProf=null;
+const P=()=>editProf??activeSlot;
 // Editing target: the connected mouse, or a saved layout (works with no mouse, e.g. on iPhone).
 let mode="mouse", editName=null;
 const HAS_HID="hid" in navigator;
@@ -574,7 +595,7 @@ const connect=safe(async()=>{
 });
 function setConn(text,cls){ $("stConn").textContent=text; $("statusBox").className="status "+(cls||""); }
 let connecting=false;
-async function readEverything(progress){ await readSlots(); await readAllButtons(progress); await readMacroLib(); await readDpi(); await readLighting(); }
+async function readEverything(progress){ await readSlots(); await readAllButtons(progress); await readMacroLib(); await readDpi(); await readLighting(); await readProfileExtras(); }
 async function onConnected(d){
   if(connecting) return; connecting=true;
   try{
@@ -601,7 +622,8 @@ async function readIdentity(d){
   mouseId="naga:"+(serial||d.productId.toString(16));
 }
 const POLL={1:1000,2:500,8:125}, POLLRAW={1000:1,500:2,125:8};
-const lbToPct=r=>Math.round(5+(r-0x0C)*20/(0x3F-0x0C)), pctToLb=p=>Math.round(0x0C+(p-5)*(0x3F-0x0C)/20);
+// Battery level for low-power mode, the way Synapse converts it: byte = ceil(% × 2.55).
+const lbToPct=r=>Math.floor(r/255*100), pctToLb=p=>Math.ceil(Math.max(1,Math.min(100,p))/100*255);
 let devMouse={}, batt=null;
 async function readInfo(){
   const fw=await rawCmd(0x00,0x81,0x02,[],true); if(ok(fw)) $("fwInfo").textContent=`Firmware ${fw.args[0]}.${fw.args[1]}`;
@@ -609,7 +631,27 @@ async function readInfo(){
   devMouse={};
   const p=await rawCmd(0x00,0x85,0x01,[],true); if(ok(p)&&POLL[p.args[0]]) devMouse.poll=POLL[p.args[0]];
   const i=await rawCmd(0x07,0x83,0x02,[],true); if(ok(i)){ const s=(i.args[0]<<8)|i.args[1]; if(s>=60&&s<=900) devMouse.sleep=s; }
-  const l=await rawCmd(0x07,0x81,0x01,[],true); if(ok(l)&&l.args[0]>=0x0C&&l.args[0]<=0x3F) devMouse.lowbat=lbToPct(l.args[0]);
+  const l=await rawCmd(0x07,0x81,0x01,[],true); if(ok(l)&&l.args[0]>=1&&l.args[0]<=0x80) devMouse.lowbat=lbToPct(l.args[0]);
+  await readGlobalExtras();
+}
+// Settings found in Synapse's code for this mouse. Each one is only shown if the mouse answers the read.
+const DIMMODE={0:"half",1:"quarter",2:"off"}, DIMRAW={half:0,quarter:1};
+async function readGlobalExtras(){
+  // Synapse puts the mouse in software-controlled mode (3) while it runs and back to normal (0) when it closes.
+  // If it was left in software mode, on-board effects don't play. Put it back the same way Synapse does.
+  try{ const m=await rawCmd(0x00,0x84,0x02,[],true); if(ok(m)&&m.args[0]===3){ const r=await rawCmd(0x00,0x04,0x02,[0,0]); if(ok(r)){ log("The mouse was left in Synapse's software-control mode. Set it back to normal so its own lighting and buttons run.","warn"); toast("Mouse set back to its normal mode"); } } }catch(e){}
+  zoneFx={};
+  for(const z of ZONES){ try{ const r=await rawCmd(0x0F,0x81,0x50,[z.id],true);
+    if(ok(r)&&r.args[0]===z.id){ const ids=new Set([0,...Array.from(r.args.slice(1)).filter(x=>x)]); if(ids.has(1)) zoneFx[z.id]=ids; } }catch(e){} }
+  if(Object.keys(zoneFx).length) log("Lighting effects the mouse supports: "+ZONES.map(z=>`${z.key} ${zoneFx[z.id]?[...zoneFx[z.id]].join(","):"?"}`).join("; "));
+  try{ const w=await rawCmd(0x0F,0x90,0x01,[],true); if(ok(w)&&w.args[0]<=1) devMouse.wdl=w.args[0]===0?1:0; }catch(e){}
+  try{ const a=await rawCmd(0x0B,0x8B,0x04,[0,4],true); if(ok(a)&&a.args[1]===4&&a.args[2]===1&&a.args[3]<=2) devMouse.lift=a.args[3]+1; }catch(e){}
+}
+async function readProfileExtras(){
+  for(const k of ["dim","accel","reel"]) delete devMouse[k];
+  try{ const d=await rawCmd(0x07,0x93,0x03,[P()],true); if(ok(d)&&d.args[0]===P()) devMouse.dim=d.args[1]?(DIMMODE[d.args[2]]||"off"):"off"; }catch(e){}
+  try{ const a=await rawCmd(0x02,0x96,0x02,[P()],true); if(ok(a)&&a.args[0]===P()&&a.args[1]<=1) devMouse.accel=a.args[1]; }catch(e){}
+  try{ const r=await rawCmd(0x02,0x97,0x02,[P()],true); if(ok(r)&&r.args[0]===P()&&r.args[1]<=1) devMouse.reel=r.args[1]; }catch(e){}
 }
 async function readBattery(){
   const b=await rawCmd(0x07,0x80,0x02,[],true), c=await rawCmd(0x07,0x84,0x02,[],true);
@@ -626,29 +668,80 @@ function renderDevice(){
   $("idle").disabled=$("lowbat").disabled=!canEdit();
   if(devMouse.sleep){ $("idle").value=devMouse.sleep; $("idleLbl").textContent=fmtSleep(devMouse.sleep); }
   if(devMouse.lowbat){ $("lowbat").value=devMouse.lowbat; $("lowbatLbl").textContent=devMouse.lowbat+"%"; }
+  const show=(id,k)=>{ $(id).hidden=devMouse[k]===undefined; };
+  show("dimSet","dim"); show("liftSet","lift"); show("accelSet","accel"); show("reelSet","reel"); $("wdlRow").hidden=devMouse.wdl===undefined;
+  document.querySelectorAll("#dimSeg button").forEach(b=>{ b.classList.toggle("sel",b.dataset.v===devMouse.dim); b.disabled=!canEdit(); });
+  document.querySelectorAll("#liftSeg button").forEach(b=>{ b.classList.toggle("sel",+b.dataset.v===devMouse.lift); b.disabled=!canEdit(); });
+  $("accelChk").checked=!!devMouse.accel; $("reelChk").checked=!!devMouse.reel; $("wdlChk").checked=!!devMouse.wdl;
+  $("accelChk").disabled=$("reelChk").disabled=$("wdlChk").disabled=!canEdit();
 }
+$("dimSeg").onclick=safe(async e=>{ const v=e.target.dataset.v; if(!v||!canEdit()) return; await applyAll({device:{dim:v}},"Before changing idle dimming",{toast:"Idle dimming"}); });
+$("liftSeg").onclick=safe(async e=>{ const v=+e.target.dataset.v; if(!v||!canEdit()) return; await applyAll({device:{lift:v}},"Before changing lift-off distance",{toast:"Lift-off distance"}); });
+$("accelChk").onchange=safe(async()=>{ await applyAll({device:{accel:$("accelChk").checked?1:0}},"Before changing scroll acceleration",{toast:"Scroll acceleration"}); });
+$("reelChk").onchange=safe(async()=>{ await applyAll({device:{reel:$("reelChk").checked?1:0}},"Before changing free-spin",{toast:"Free-spin on a flick"}); });
+$("wdlChk").onchange=safe(async()=>{ await applyAll({device:{wdl:$("wdlChk").checked?1:0}},"Before changing Windows Dynamic Lighting",{toast:"Windows Dynamic Lighting"}); });
+// ---------- on-board profiles ----------
+// From Synapse's code for this mouse: 05:80 count, 05:81 [count, ids…], 05:8A max, 05:84/04 active,
+// 05:02 create, 05:03 delete, 05:88/08 name (250-byte structure), 05:8C/0C indicator colour.
+let prof={ok:false,max:1,ids:[1],names:{},colors:{}};
+const PROF_DEFCOLOR={1:[255,255,255],2:[255,0,0],3:[0,255,0],4:[0,0,255],5:[0,255,255]};
+const profName=id=>prof.names[id]||store.get(`naga.profName.${mouseId}.${id}`,"")||`Profile ${id}`;
 async function readSlots(){
-  const inv=await rawCmd(0x05,0x81,0x02,[],true), act=await rawCmd(0x05,0x84,0x01,[],true);
-  const colors=["","white","red","green","blue","cyan"];
   const prev=activeSlot;
-  if(ok(act)&&act.args[0]>=1&&act.args[0]<=5) activeSlot=act.args[0]; else activeSlot=1;
-  const used=ok(inv)?inv.args[1]:1, max=ok(inv)?inv.args[0]:5;
-  $("slotInfo").textContent=`Your mouse: ${used} of ${max} on-board slots in use; it's on slot ${activeSlot} (${colors[activeSlot]} light), so changes go there.`;
-  if(prev!==activeSlot) log(`Mouse is using on-board slot ${activeSlot}.`);
+  const act=await rawCmd(0x05,0x84,0x01,[],true);
+  activeSlot=ok(act)&&act.args[0]>=1&&act.args[0]<=5?act.args[0]:1;
+  const p={ok:false,max:1,ids:[activeSlot],names:{},colors:{}};
+  try{
+    const c=await rawCmd(5,0x80,0x01,[],true), l=await rawCmd(5,0x81,0x50,[],true), m=await rawCmd(5,0x8A,0x01,[],true);
+    const n=ok(c)?c.args[0]:0, ids=ok(l)?[...new Set(Array.from(l.args.slice(1,1+l.args[0])))]:[];
+    if(n>=1&&n<=5&&ok(l)&&l.args[0]===n&&ids.length===n&&ids.every(x=>x>=1&&x<=5)&&ids.includes(activeSlot)){
+      p.ok=true; p.ids=ids.sort((a,b)=>a-b); p.max=ok(m)&&m.args[0]>=n&&m.args[0]<=5?m.args[0]:5; }
+    else log(`Couldn't read the on-board profile list (count ${ok(c)?c.args[0]:"?"}, list ${ok(l)?hex(l.args.slice(0,6)):"?"}). Only the active profile is shown.`,"warn");
+    for(const id of p.ids){
+      const col=await rawCmd(5,0x8C,0x04,[id],true); if(ok(col)&&col.args[0]===id) p.colors[id]=Array.from(col.args.slice(1,4));
+      if(id!==1&&p.ok){ const nm=await readProfileName(id); if(nm) p.names[id]=nm; } }
+  }catch(e){ log("Profiles: "+e.message,"warn"); }
+  prof=p;
+  if(editProf!=null&&!prof.ids.includes(editProf)) editProf=null;
+  $("slotInfo").textContent=prof.ok?`On-board profiles: ${prof.ids.length} of ${prof.max}. The mouse is using ${profName(activeSlot)}.`:"";
+  if(prev!==activeSlot) log(`Mouse is using on-board profile ${activeSlot}.`);
   return prev!==activeSlot;
 }
+async function readProfileName(id){
+  const b=[]; for(let off=0;off<116;){ const n=Math.min(64,116-off); const r=await rawCmd(5,0x88,n+5,[id,...be16(off),0,0],true); if(!ok(r)||r.args[0]!==id) return ""; b.push(...r.args.slice(5,5+n)); off+=n; }
+  const nb=b.slice(16,116), z=nb.indexOf(0); try{ return new TextDecoder().decode(new Uint8Array(z<0?nb:nb.slice(0,z))).trim(); }catch(e){ return ""; } }
+async function writeProfileName(id,name){
+  const st=new Uint8Array(250); st.set(guidToBytes(newGuid()),0); st.set(new TextEncoder().encode(name).slice(0,99),16);
+  for(let off=0;off<250;){ const n=Math.min(64,250-off); const r=await rawCmd(5,0x08,n+5,[id,...be16(off),0,250,...st.slice(off,off+n)],true); if(!ok(r)) return false; off+=n; }
+  return (await readProfileName(id))===name.trim(); }
+async function writeProfileColor(id,rgb){ const r=await rawCmd(5,0x0C,0x04,[id,...rgb]); if(!ok(r)) return false; const b=await rawCmd(5,0x8C,0x04,[id],true); return ok(b)&&same(Array.from(b.args.slice(1,4)),rgb); }
+// Switch which profile the page edits (doesn't change what the mouse uses).
+async function editMouseProfile(id,quiet){
+  await settle(); editProf=id===activeSlot?null:id; mode="mouse"; editName=null;
+  setConn("Reading the mouse…",""); await serial(async()=>{ await readAllButtons(); await readMacroLib(); await readDpi(); await readLighting(); await readProfileExtras(); });
+  dpiEdit=clone(dpiMouse); led=clone(ledMouse); draft=null; setConn(PIDS[dev.productId]||dev.productName,"on"); renderAll(); if(!quiet) checkAgainstLastSeen("connect"); else rememberMouse(); }
 async function writeDevice(k,v){
   if(inLayout()){ devMouse[k]=v; return true; }
   let r;
   if(k==="poll") r=await rawCmd(0x00,0x05,0x01,[POLLRAW[v]]);
   if(k==="sleep") r=await rawCmd(0x07,0x03,0x02,[v>>8,v&255]);
   if(k==="lowbat") r=await rawCmd(0x07,0x01,0x01,[pctToLb(v)]);
-  if(!ok(r)) return false;
+  if(k==="dim") r=await rawCmd(0x07,0x13,0x03,v==="off"?[P(),0,2]:[P(),1,DIMRAW[v]]);
+  if(k==="accel") r=await rawCmd(0x02,0x16,0x02,[P(),v?1:0]);
+  if(k==="reel") r=await rawCmd(0x02,0x17,0x02,[P(),v?1:0]);
+  if(k==="wdl") r=await rawCmd(0x0F,0x10,0x01,[v?0:1]);
+  if(k==="lift"){ const on=await rawCmd(0x0B,0x03,0x03,[0,4,1]); if(!ok(on)) return false; r=await rawCmd(0x0B,0x0B,0x04,[0,4,1,Math.max(0,Math.min(2,v-1))]); }
+  if(!r||!ok(r)) return false;
   // Read it back so the page shows what the mouse actually holds.
   let b;
   if(k==="poll"){ b=await rawCmd(0x00,0x85,0x01,[],true); if(ok(b)&&POLL[b.args[0]]) devMouse.poll=POLL[b.args[0]]; }
   if(k==="sleep"){ b=await rawCmd(0x07,0x83,0x02,[],true); if(ok(b)) devMouse.sleep=(b.args[0]<<8)|b.args[1]; }
   if(k==="lowbat"){ b=await rawCmd(0x07,0x81,0x01,[],true); if(ok(b)) devMouse.lowbat=lbToPct(b.args[0]); }
+  if(k==="dim"){ b=await rawCmd(0x07,0x93,0x03,[P()],true); if(ok(b)) devMouse.dim=b.args[1]?(DIMMODE[b.args[2]]||"off"):"off"; }
+  if(k==="accel"){ b=await rawCmd(0x02,0x96,0x02,[P()],true); if(ok(b)) devMouse.accel=b.args[1]; }
+  if(k==="reel"){ b=await rawCmd(0x02,0x97,0x02,[P()],true); if(ok(b)) devMouse.reel=b.args[1]; }
+  if(k==="wdl"){ b=await rawCmd(0x0F,0x90,0x01,[],true); if(ok(b)) devMouse.wdl=b.args[0]===0?1:0; }
+  if(k==="lift"){ b=await rawCmd(0x0B,0x8B,0x04,[0,4],true); if(ok(b)) devMouse.lift=b.args[3]+1; }
   if(!ok(b)){ devMouse[k]=v; return true; }
   if(devMouse[k]!==v){ log(`${DEVLABEL[k][0]}: wrote ${v}, mouse reads ${devMouse[k]}`,"warn"); return false; }
   return true;
@@ -709,8 +802,17 @@ async function writeDpi(d){
 
 // ---------- lighting ----------
 const ZONES=[{id:0x01,key:"Scroll wheel"},{id:0x04,key:"Logo"},{id:0x05,key:"Side plate"}];
-const EFFECTS=[["off","Off"],["static","Solid"],["breath","Breathing"],["spectrum","Rainbow"],["wave","Wave"],["reactive","Light up on click"]];
-const NEEDS={static:1,breath1:1,breath2:2,reactive:1};
+// Effect ids and payloads as Synapse writes them for this mouse (lighting engine, rzDevice25):
+// [profile, region, effect, flags, rate, colorCount, colors…]. Effects live in profile 1 (the stored set);
+// brightness is kept per on-board profile.
+const EFFECTS=[["off","Off",0],["static","Solid",1],["breath","Breathing",2],["spectrum","Rainbow",3],["wave","Wave",4],["reactive","Light up on click",5],["starlight","Starlight",7],["ripple","Ripple",6],["fire","Fire",9],["wheel","Wheel",12]];
+const EFFECT_ID={off:0,static:1,breath1:2,breath2:2,breathR:2,spectrum:3,wave:4,reactive:5,star1:7,star2:7,starR:7,ripple:6,fire:9,wheel:12};
+const NEEDS={static:1,breath1:1,breath2:2,reactive:1,star1:1,star2:2,ripple:1};
+const LSTORE=1;
+let zoneFx={}; // region id → Set of effect ids the mouse says it supports
+// Without the mouse's own list, only offer the effects already proven on this model.
+const fxOk=(id,effect)=>zoneFx[id]?zoneFx[id].has(EFFECT_ID[effect]):EFFECT_ID[effect]<=5;
+const WAVE_RATE={1:75,2:40,3:15};
 const PRESETS=["#44d62c","#00e5ff","#2962ff","#7c4dff","#ff2bd6","#ff1744","#ff6d00","#ffd600","#ffffff"];
 const COLORNAMES={red:"#ff0000",green:"#00ff00",blue:"#0000ff",white:"#ffffff",cyan:"#00ffff",magenta:"#ff00ff",pink:"#ff4fa0",purple:"#8000ff",orange:"#ff8000",yellow:"#ffff00",teal:"#00c0a0",black:"#000000"};
 const rgb=h=>{h=(h||"#000000").replace("#",""); return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16)||0);};
@@ -726,8 +828,14 @@ function effectArgs(st,id,s){
     case "breath2": return [st,id,2,2,0,2,r,g,b,r2,g2,b2];
     case "breathR": return [st,id,2,0,0,0];
     case "spectrum": return [st,id,3,0,0,0];
-    case "wave": return [st,id,4,s.dir===2?2:1,0x28,0];
+    case "wave": return [st,id,4,s.dir===2?2:1,WAVE_RATE[s.speed]||40,0];
     case "reactive": return [st,id,5,0,Math.max(1,Math.min(4,s.speed|0||2)),1,r,g,b];
+    case "star1": return [st,id,7,1,Math.max(1,Math.min(3,s.speed|0||2)),1,r,g,b];
+    case "star2": return [st,id,7,2,Math.max(1,Math.min(3,s.speed|0||2)),2,r,g,b,r2,g2,b2];
+    case "starR": return [st,id,7,3,Math.max(1,Math.min(3,s.speed|0||2)),0];
+    case "ripple": return [st,id,6,0,40,1,r,g,b];
+    case "fire": return [st,id,9,0,90,1,255,0,0];
+    case "wheel": return [st,id,12,s.dir===2?2:1,40,0];
   }
   return null;
 }
@@ -738,8 +846,12 @@ function decodeEffect(a){
     case 1: return {effect:"static",c1};
     case 2: return a[3]===1?{effect:"breath1",c1}:a[3]===2?{effect:"breath2",c1,c2}:{effect:"breathR"};
     case 3: return {effect:"spectrum"};
-    case 4: return {effect:"wave",dir:a[3]===2?2:1};
+    case 4: return {effect:"wave",dir:a[3]===2?2:1,speed:a[4]>=60?1:a[4]&&a[4]<=25?3:2};
     case 5: return {effect:"reactive",c1,speed:a[4]||2};
+    case 6: return {effect:"ripple",c1};
+    case 7: return a[3]===1?{effect:"star1",c1,speed:a[4]||2}:a[3]===2?{effect:"star2",c1,c2,speed:a[4]||2}:{effect:"starR",speed:a[4]||2};
+    case 9: return {effect:"fire"};
+    case 12: return {effect:"wheel",dir:a[3]===2?2:1};
   }
   return {effect:null};
 }
@@ -764,7 +876,7 @@ async function readLighting(){
   if(inLayout()) return;
   for(const z of ZONES){
     const s=Object.assign(defZone(),{effect:null});
-    try{ const e=await rawCmd(0x0F,0x82,0x0C,[P(),z.id,0,0,0,0,0,0,0,0,0,0],true); if(ok(e)) Object.assign(s,decodeEffect(e.args)); }catch(err){}
+    try{ const e=await rawCmd(0x0F,0x82,0x0C,[LSTORE,z.id,0,0,0,0,0,0,0,0,0,0],true); if(ok(e)) Object.assign(s,decodeEffect(e.args)); }catch(err){}
     const b=await rawCmd(0x0F,0x84,0x03,[P(),z.id],true); if(ok(b)) s.bright=b.args[2];
     ledMouse[z.id]=s;
   }
@@ -779,12 +891,18 @@ function zoneText(s){
     case "breath2": return `Breathing ${s.c1} ${s.c2}${pct}`;
     case "breathR": return `Breathing random${pct}`;
     case "spectrum": return `Spectrum${pct}`;
-    case "wave": return `Wave ${s.dir===2?"right":"left"}${pct}`;
+    case "wave": return `Wave ${s.dir===2?"right":"left"}${(s.speed||2)!==2?(s.speed===1?" slow":" fast"):""}${pct}`;
     case "reactive": return `Reactive ${s.c1} speed ${s.speed||2}${pct}`;
+    case "star1": return `Starlight ${s.c1} speed ${s.speed||2}${pct}`;
+    case "star2": return `Starlight ${s.c1} ${s.c2} speed ${s.speed||2}${pct}`;
+    case "starR": return `Starlight random speed ${s.speed||2}${pct}`;
+    case "ripple": return `Ripple ${s.c1}${pct}`;
+    case "fire": return `Fire${pct}`;
+    case "wheel": return `Wheel ${s.dir===2?"counterclockwise":"clockwise"}${pct}`;
   }
   return "unknown";
 }
-const zoneLabel=s=>!s||!s.effect?"Unknown":({off:"Off",static:"Solid",breath1:"Breathing",breath2:"Breathing, two colors",breathR:"Breathing, random",spectrum:"Rainbow",wave:"Wave",reactive:"Light up on click"})[s.effect]+(s.effect==="off"?"":`, ${Math.round(s.bright/2.55)}%`);
+const zoneLabel=s=>!s||!s.effect?"Unknown":({off:"Off",static:"Solid",breath1:"Breathing",breath2:"Breathing, two colors",breathR:"Breathing, random",spectrum:"Rainbow",wave:"Wave",reactive:"Light up on click",star1:"Starlight",star2:"Starlight, two colors",starR:"Starlight, random",ripple:"Ripple",fire:"Fire",wheel:"Wheel"})[s.effect]+(s.effect==="off"?"":`, ${Math.round(s.bright/2.55)}%`);
 function parseZone(t){
   t=String(t).trim(); const low=t.toLowerCase(); const out={};
   const bm=low.match(/bright(?:ness)?\s*(\d{1,3})\s*%?/); if(bm) out.bright=Math.round(Math.min(100,+bm[1])*2.55);
@@ -794,7 +912,11 @@ function parseZone(t){
   else if(/^(static|solid|color|colour)$/.test(first)||(colors.length&&first[0]==="#")||COLORNAMES[first]) out.effect="static";
   else if(/^(breathing|breathe|breath|pulse|pulsing)$/.test(first)) out.effect=/random/.test(low)||!colors.length?"breathR":colors.length>1?"breath2":"breath1";
   else if(/^(spectrum|rainbow|cycle)$/.test(first)) out.effect="spectrum";
-  else if(first==="wave") { out.effect="wave"; out.dir=/right/.test(low)?2:1; }
+  else if(first==="wave") { out.effect="wave"; out.dir=/right/.test(low)?2:1; out.speed=/slow/.test(low)?1:/fast/.test(low)?3:2; }
+  else if(/^(starlight|stars?|twinkle)$/.test(first)) { out.effect=/random/.test(low)||!colors.length?"starR":colors.length>1?"star2":"star1"; const sp=low.match(/speed\s*(\d)/); out.speed=sp?Math.max(1,Math.min(3,+sp[1])):2; }
+  else if(first==="ripple") out.effect="ripple";
+  else if(first==="fire") out.effect="fire";
+  else if(first==="wheel") { out.effect="wheel"; out.dir=/counter|anti/.test(low)?2:1; }
   else if(/^(reactive|react|click)$/.test(first)) { out.effect="reactive"; const sp=low.match(/speed\s*(\d)/); out.speed=sp?Math.max(1,Math.min(4,+sp[1])):2; }
   else return {error:`unknown lighting "${t}"`};
   const need=NEEDS[out.effect]||0;
@@ -809,9 +931,10 @@ const ledSame=(a,b)=>zoneText(a)===zoneText(b);
 async function writeZone(st,id,s,quiet){
   if(!ZONES.some(z=>z.id===id)) return false;
   if(inLayout()){ ledMouse[id]=clone(s); return true; }
-  const a=effectArgs(st,id,s); if(!a) return false;
+  if(!fxOk(id,s.effect)){ log(`${ZONES.find(z=>z.id===id).key} doesn't support ${zoneLabel(s)}.`,"warn"); return false; }
+  const a=effectArgs(LSTORE,id,s); if(!a) return false;
   const r=await rawCmd(0x0F,0x02,a.length,a,quiet);
-  const b=await rawCmd(0x0F,0x04,0x03,[st,id,Math.max(0,Math.min(255,s.bright|0))],quiet);
+  const b=await rawCmd(0x0F,0x04,0x03,[P(),id,Math.max(0,Math.min(255,s.bright|0))],quiet);
   return ok(r)&&ok(b);
 }
 // Only the zones edited since the last save are sent. Each save is checked against the mouse afterwards.
@@ -834,8 +957,12 @@ function zoneVisual(s){
     case "breath1": return {fill:s.c1,cls:"fx-breath",glow:true,op};
     case "breath2": return {fill:s.c2,cls:"",alt:s.c1,glow:true,op};
     case "breathR": return {fill:"#ff2050",cls:"fx-hue",alt:null,breath:true,glow:true,op};
-    case "spectrum": case "wave": return {fill:"#ff2050",cls:"fx-hue",glow:true,op};
-    case "reactive": return {fill:s.c1,cls:"fx-react",glow:true,op};
+    case "spectrum": case "wave": case "wheel": return {fill:"#ff2050",cls:"fx-hue",glow:true,op};
+    case "reactive": case "ripple": return {fill:s.c1,cls:"fx-react",glow:true,op};
+    case "star1": return {fill:s.c1,cls:"fx-breath",glow:true,op};
+    case "star2": return {fill:s.c2,cls:"",alt:s.c1,glow:true,op};
+    case "starR": return {fill:"#ff2050",cls:"fx-hue",breath:true,glow:true,op};
+    case "fire": return {fill:"#ff5a00",cls:"fx-breath",glow:true,op};
   }
   return {fill:"#2a2f37",cls:"",glow:false,op:1};
 }
@@ -860,17 +987,19 @@ function renderLightStage(){
 function renderZoneCards(){
   $("zoneCards").innerHTML="";
   ZONES.forEach(z=>{ const s=led[z.id]; const b=document.createElement("button"); b.className="zcard"+(z.id===selZone?" sel":"");
-    const v=zoneVisual(s); const bg=!s||s.effect==="off"||!s.effect?"var(--field)":/spectrum|wave|breathR/.test(s.effect)?"linear-gradient(90deg,#f33,#fd0,#3f6,#0cf,#66f,#f3c)":s.effect==="breath2"?`linear-gradient(90deg,${s.c1},${s.c2})`:v.fill;
+    const v=zoneVisual(s); const bg=!s||s.effect==="off"||!s.effect?"var(--field)":/spectrum|wave|wheel|breathR|starR/.test(s.effect)?"linear-gradient(90deg,#f33,#fd0,#3f6,#0cf,#66f,#f3c)":s.effect==="fire"?"linear-gradient(90deg,#f20,#f90,#fd0)":/breath2|star2/.test(s.effect)?`linear-gradient(90deg,${s.c1},${s.c2})`:v.fill;
     b.innerHTML=`<b>${z.key}</b><span class="sw" style="background:${bg}"></span><small>${esc(zoneLabel(s))}</small>`;
     b.onclick=()=>{ selZone=z.id; renderLighting(); }; $("zoneCards").append(b); });
 }
 function renderZoneEditor(){
   const box=$("zoneEditor"); box.innerHTML=""; const s=led[selZone]; if(!s) return;
-  const eff=s.effect&&s.effect.startsWith("breath")?"breath":s.effect;
+  const eff=s.effect&&s.effect.startsWith("breath")?"breath":s.effect&&s.effect.startsWith("star")?"starlight":s.effect;
+  const ids=$("ledLink").checked?ZONES.map(z=>z.id):[selZone];
   const head=document.createElement("h2"); head.textContent=$("ledLink").checked?"All zones":ZONES.find(z=>z.id===selZone).key; box.append(head);
   const grid=document.createElement("div"); grid.className="fxgrid";
-  EFFECTS.forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if(v===eff) b.className="sel";
-    b.onclick=()=>{ s.effect=v==="breath"?"breath1":v; renderZoneEditor(); ledChanged([selZone]); }; grid.append(b); });
+  EFFECTS.forEach(([v,t])=>{ const e=v==="breath"?"breath1":v==="starlight"?"star1":v; if(!ids.every(id=>fxOk(id,e))) return;
+    const b=document.createElement("button"); b.textContent=t; if(v===eff) b.className="sel";
+    b.onclick=()=>{ s.effect=e; if(e==="wave"||e==="star1") s.speed=s.speed&&s.speed<=3?s.speed:2; renderZoneEditor(); ledChanged([selZone]); }; grid.append(b); });
   box.append(grid);
   const opts=document.createElement("div"); opts.className="stack"; opts.style.marginTop="14px";
   const colorRow=(label,key)=>{ const row=document.createElement("div"); row.innerHTML=`<div class="dim" style="font-size:12px;margin-bottom:4px">${label}</div>`;
@@ -881,9 +1010,16 @@ function renderZoneEditor(){
   if(eff==="breath"){ const seg=document.createElement("div"); seg.className="seg";
     [["breath1","One color"],["breath2","Two colors"],["breathR","Random colors"]].forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if(s.effect===v) b.className="sel"; b.onclick=()=>{ s.effect=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); });
     opts.append(seg); }
-  if(NEEDS[s.effect]>=1) opts.append(colorRow(s.effect==="breath2"?"First color":"Color","c1"));
-  if(s.effect==="breath2") opts.append(colorRow("Second color","c2"));
-  if(s.effect==="wave"){ const seg=document.createElement("div"); seg.className="seg"; [[1,"Leftward"],[2,"Rightward"]].forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if((s.dir||1)===v) b.className="sel"; b.onclick=()=>{ s.dir=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); }); opts.append(seg); }
+  if(eff==="starlight"){ const seg=document.createElement("div"); seg.className="seg";
+    [["star1","One color"],["star2","Two colors"],["starR","Random colors"]].forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if(s.effect===v) b.className="sel"; b.onclick=()=>{ s.effect=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); });
+    opts.append(seg); }
+  if(NEEDS[s.effect]>=1) opts.append(colorRow(NEEDS[s.effect]===2?"First color":"Color","c1"));
+  if(NEEDS[s.effect]===2) opts.append(colorRow("Second color","c2"));
+  const choice=(label,items,key)=>{ const row=document.createElement("div"); if(label) row.innerHTML=`<div class="dim" style="font-size:12px;margin-bottom:4px">${label}</div>`; const seg=document.createElement("div"); seg.className="seg";
+    items.forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if((s[key]||items[key==="speed"?1:0][0])===v) b.className="sel"; b.onclick=()=>{ s[key]=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); }); row.append(seg); opts.append(row); };
+  if(s.effect==="wave"){ choice("",[[1,"Leftward"],[2,"Rightward"]],"dir"); choice("Speed",[[1,"Slow"],[2,"Medium"],[3,"Fast"]],"speed"); }
+  if(s.effect==="wheel") choice("",[[1,"Clockwise"],[2,"Counterclockwise"]],"dir");
+  if(eff==="starlight") choice("How long each star lasts",[[1,"Short"],[2,"Medium"],[3,"Long"]],"speed");
   if(s.effect==="reactive"){ const row=document.createElement("div"); row.innerHTML='<div class="dim" style="font-size:12px;margin-bottom:4px">How long the light stays after a click</div>'; const seg=document.createElement("div"); seg.className="seg";
     [[1,"Short"],[2,"Medium"],[3,"Long"],[4,"Longest"]].forEach(([v,t])=>{ const b=document.createElement("button"); b.textContent=t; if((s.speed||2)===v) b.className="sel"; b.onclick=()=>{ s.speed=v; renderZoneEditor(); ledChanged([selZone]); }; seg.append(b); }); row.append(seg); opts.append(row); }
   if(s.effect&&s.effect!=="off"){ const row=document.createElement("div"); row.innerHTML=`<div class="row" style="justify-content:space-between"><span class="dim" style="font-size:12px">Brightness</span><b>${Math.round(s.bright/2.55)}%</b></div>`;
@@ -959,8 +1095,9 @@ function describe(b,lib){
   if(c===0x0E){ if(!MOUSE[a]) return raw; if(l===3) return `${MOUSE[a]}, repeat ${rawToPps((d<<8)|e)}/s`; if(l===1&&(a===0x68||a===0x69)) return MOUSE[a]; return raw; }
   if(c===2){ if(a&0xF0||!KEYNAME[d]) return raw; return mods(a)+KEYNAME[d]; }
   if(c===0x0D){ if(a&0xF0||!KEYNAME[d]) return raw; return `${mods(a)}${KEYNAME[d]}, repeat ${rawToPps((e<<8)|f)}/s`; }
-  if(c===6) return ({1:"DPI up",2:"DPI down",6:"DPI cycle"})[a]||raw;
-  if(c===7&&a===4) return "Switch profile";
+  if(c===6){ if(a===5&&l===5) return `Precision ${(d<<8)|e} DPI (hold)`; return ({1:"DPI up",2:"DPI down",6:"DPI cycle",7:"DPI cycle back"})[a]||raw; }
+  if(c===7){ if(a===3&&l===2&&d>=1&&d<=5) return `Profile ${d}`; return ({1:"Next profile",2:"Previous profile",4:"Switch profile"})[a]||raw; }
+  if(c===10&&l===2){ const u=(a<<8)|d; return MEDIANAME[u]||raw; }
   if(c===0x0C) return "HyperShift";
   if(c===0x12&&a===1) return "Scroll wheel mode";
   return raw;
@@ -968,6 +1105,10 @@ function describe(b,lib){
 const friendly=(b,hs)=>{ const d=describe(b); if(d==="Off") return hs?"Nothing":"Disabled"; if(d==="Nothing") return "Disabled"; if(/^[A-Z0-9]$|^[-=]$/.test(d)) return "Key "+d; return d; };
 const sameMeaning=(a,b)=>same(a,b)||(!!a&&!!b&&describe(a)===describe(b)&&!describe(a).startsWith("Raw"));
 const isHS=b=>!!b&&b[0]===0x0C;
+// Media keys use consumer-control codes (from Synapse's table for this mouse).
+const MEDIA=[["Play/Pause",205],["Next track",181],["Previous track",182],["Stop",183],["Volume up",233],["Volume down",234],["Mute",226]];
+const MEDIANAME=Object.fromEntries(MEDIA.map(([n,u])=>[u,n])), MEDIABYNAME=Object.fromEntries(MEDIA.map(([n,u])=>[norm(n),u]));
+Object.assign(MEDIABYNAME,{play:205,pause:205,playpause:205,next:181,nexttrack:181,previous:182,prev:182,previoustrack:182,prevtrack:182,stop:183,volumeup:233,volumedown:234,mute:226});
 function parseAction(text,slot,hs,macroNames){
   let t=String(text).trim(); if(!t) return {error:"empty"};
   let low=t.toLowerCase();
@@ -988,6 +1129,11 @@ function parseAction(text,slot,hs,macroNames){
   if(rm){ pps=Math.max(1,Math.min(20,+(rm[1]||20))); t=t.slice(0,rm.index).trim(); low=t.toLowerCase(); }
   t=t.replace(/\s*\(hold\)$/i,""); low=t.toLowerCase();
   const n=norm(t);
+  if(MEDIABYNAME[n]!=null&&!/^key\s/i.test(t)){ const u=MEDIABYNAME[n]; return {blk:[10,2,u>>8,u&255,0,0,0]}; }
+  { const pm=low.match(/^(?:precision|dpi clutch|sniper|clutch)(?:\s+(\d+))?(?:\s*dpi)?(?:\s*\(hold\))?$/); if(pm){ const v=Math.max(100,Math.min(50000,Math.round((+(pm[1]||400))/50)*50)); return {blk:[6,5,5,v>>8,v&255,v>>8,v&255]}; } }
+  if(/^dpi(cycleback|cycledown|cyclebackwards)$/.test(n)) return {blk:[6,1,7,0,0,0,0]};
+  if(/^nextprofile$/.test(n)) return {blk:[7,1,1,0,0,0,0]}; if(/^(previousprofile|prevprofile)$/.test(n)) return {blk:[7,1,2,0,0,0,0]};
+  { const pf=low.match(/^profile\s*([1-5])$/); if(pf) return {blk:[7,2,3,+pf[1],0,0,0]}; }
   if(/^dpi(up|\+)$/.test(n)) return {blk:[6,1,1,0,0,0,0]}; if(/^dpi(down|−|-)$/.test(n)) return {blk:[6,1,2,0,0,0,0]}; if(/^dpi(cycle|next)?$/.test(n)) return {blk:[6,1,6,0,0,0,0]};
   if(/^hyper ?shift/.test(low)) return {blk:[0x0C,0x01,0x39,0,0,0,0]};
   if(/^(switch ?profile|profile( switch| cycle)?|next profile)$/.test(low)) return {blk:[7,1,4,0,0,0,0]};
@@ -1016,7 +1162,8 @@ async function readAllButtons(progress){
 async function writeSlot(slot,hs,block){
   if(slot===1||!block||block.length!==7) return false;
   if(inLayout()){ current[hs][slot]=block.slice(); return true; }
-  for(const prof of [P(),0x00]){ const r=await rawCmd(0x02,0x0C,0x0A,[prof,slot,hs,...block]); if(!ok(r)) return false; }
+  // The live copy (0) only follows the profile the mouse is using; editing another profile must not touch it.
+  for(const pr of P()===activeSlot?[P(),0x00]:[P()]){ const r=await rawCmd(0x02,0x0C,0x0A,[pr,slot,hs,...block]); if(!ok(r)) return false; }
   const back=await readSlot(slot,hs); current[hs][slot]=back;
   return sameMeaning(back,block);
 }
@@ -1404,8 +1551,9 @@ function draftFromBlock(b){
   else if(c===0x0D){ d.type="key"; d.mods=a; d.key=k; d.turbo=true; d.pps=rawToPps((e<<8)|f); }
   else if(c===1){ d.type="mouse"; d.btn=a; }
   else if(c===0x0E){ d.type="mouse"; d.btn=a; if(l===3){ d.turbo=true; d.pps=rawToPps((k<<8)|e); } }
-  else if(c===6){ d.type="dpi"; d.dpi=a; }
-  else if(c===0x0C) d.type="hypershift"; else if(c===7) d.type="profile"; else if(c===0x12) d.type="wheelmode";
+  else if(c===6){ d.type="dpi"; d.dpi=a; if(a===5) d.clutch=(k<<8)|e; }
+  else if(c===10){ d.type="media"; d.media=(a<<8)|k; }
+  else if(c===0x0C) d.type="hypershift"; else if(c===7){ d.type="profile"; d.prof=a===3?10+k:a; } else if(c===0x12) d.type="wheelmode";
   else if(c===0) d.type="nothing";
   if(describe(b).startsWith("Raw")) d.type="raw";
   return d;
@@ -1417,17 +1565,18 @@ function blockFromDraft(d){
     case "default": return layer===0?SLOT[selSlot].def.slice():OFF.slice();
     case "mouse": return turbo?[0x0E,0x03,d.btn,0,turbo,0,0]:(d.btn===0x68||d.btn===0x69)?[0x0E,1,d.btn,0,0x14,0,0]:[1,1,d.btn,0,0,0,0];
     case "key": return turbo?[0x0D,0x04,d.mods,d.key,0,turbo,0]:[2,2,d.mods,d.key,0,0,0];
-    case "dpi": return [6,1,d.dpi,0,0,0,0];
+    case "dpi": { if(d.dpi===5){ const v=Math.max(100,Math.min(50000,Math.round((d.clutch||400)/50)*50)); return [6,5,5,v>>8,v&255,v>>8,v&255]; } return [6,1,d.dpi,0,0,0,0]; }
+    case "media": return [10,2,(d.media||205)>>8,(d.media||205)&255,0,0,0];
     case "hypershift": return [0x0C,0x01,0x39,0,0,0,0];
-    case "profile": return [7,1,4,0,0,0,0];
+    case "profile": { const v=d.prof||4; return v>10?[7,2,3,v-10,0,0,0]:[7,1,v,0,0,0,0]; }
     case "wheelmode": return [0x12,1,1,0,0,0,0];
     case "raw": { const r=parseHex(d.hex); return r.length===7?r:null; }
     case "macro": { const r=textToSteps(d.mText||""); if(r.error) return null; return macroBlock(d.macroId??0,d.mode||"once",d.times); }
   }
   return null;
 }
-const ACTIONS=[["key","Keyboard key"],["mouse","Mouse button"],["macro","Macro"],["dpi","Sensitivity"],["hypershift","HyperShift"],["profile","Switch on-board profile"],["wheelmode","Scroll wheel mode"],["nothing","Disabled"],["default","Factory default"],["raw","Raw value (advanced)"]];
-const ACTION_NOTE={hypershift:"While held, every other button switches to its HyperShift action.",profile:"Steps through the mouse's on-board profiles. Only useful if Synapse created more than one.",wheelmode:"Switches the scroll wheel between notched, free-spin and smart mode.",nothing:"",raw:"Seven bytes in hex. For testing protocol values."};
+const ACTIONS=[["key","Keyboard key"],["mouse","Mouse button"],["macro","Macro"],["media","Media key"],["dpi","Sensitivity"],["hypershift","HyperShift"],["profile","On-board profile"],["wheelmode","Scroll wheel mode"],["nothing","Disabled"],["default","Factory default"],["raw","Raw value (advanced)"]];
+const ACTION_NOTE={hypershift:"While held, every other button switches to its HyperShift action.",profile:"",wheelmode:"Switches the scroll wheel between notched, free-spin and smart mode.",nothing:"",raw:"Seven bytes in hex. For testing protocol values."};
 const keycaps=(mods,key)=>[...MODS.filter(([,v])=>mods&v).map(([n])=>n),KEYNAME[key]||"?"].map(k=>`<kbd>${esc(k)}</kbd>`).join('<span class="plus">+</span>');
 function renderInspector(){
   if(recStop) recStop();
@@ -1459,7 +1608,15 @@ function renderInspector(){
   } else if(draft.type==="mouse"){
     pnl.append(chips(Object.entries(MOUSE).map(([v,n])=>[+v,n]),()=>draft.btn,v=>draft.btn=v)); pnl.append(repeatUI());
   } else if(draft.type==="dpi"){
-    pnl.append(chips([[1,"Next stage"],[2,"Previous stage"],[6,"Cycle stages"]],()=>draft.dpi,v=>draft.dpi=v));
+    pnl.append(chips([[1,"Next stage"],[2,"Previous stage"],[6,"Cycle stages"],[7,"Cycle backwards"],[5,"Precision while held"]],()=>draft.dpi,v=>draft.dpi=v));
+    if(draft.dpi===5){ const row=document.createElement("div"); row.className="row"; row.style.gap="8px"; row.innerHTML='<span class="dim small">While held, use</span>';
+      const n=document.createElement("input"); n.type="number"; n.min=100; n.max=50000; n.step=50; n.value=draft.clutch||400; n.style.width="9ch"; n.oninput=()=>{ draft.clutch=+n.value||400; update(); };
+      row.append(n," DPI"); pnl.append(row); }
+  } else if(draft.type==="media"){
+    pnl.append(chips(MEDIA.map(([n,u])=>[u,n]),()=>draft.media||205,v=>draft.media=v));
+  } else if(draft.type==="profile"){
+    const items=[[1,"Next"],[2,"Previous"],[4,"Cycle"]]; if(prof.ok) prof.ids.forEach(id=>items.push([10+id,profName(id)]));
+    pnl.append(chips(items,()=>draft.prof||4,v=>draft.prof=v));
   } else if(draft.type==="macro"){
     macroPanel(pnl,update);
   } else if(draft.type==="raw"){
@@ -1605,14 +1762,15 @@ function planChanges(t){
   for(const hs of [0,1]) for(const [slot,blk] of Object.entries(t.buttons?.[hs]||{})){ if(+slot===1||!SLOT[+slot]) continue; if(!sameMeaning(current[hs][+slot],blk)) plan.items.push([+slot,hs,blk]); }
   const d=normDpi(t.dpi); if(d&&dpiText(d)!==dpiText(dpiMouse)) plan.dpi=d;
   for(const z of ZONES){ const tz=t.lighting?.[z.id]; if(!tz||!tz.effect) continue; const full=fillZone(tz,ledMouse[z.id]); if(!ledSame(full,ledMouse[z.id])) plan.zones.push([z.id,full]); }
-  for(const [k,v] of Object.entries(t.device||{})) if(v!=null&&devMouse[k]!==v) plan.device.push([k,v]);
+  for(const [k,v] of Object.entries(t.device||{})) if(v!=null&&DEVLABEL[k]&&devMouse[k]!==v&&(inLayout()||devMouse[k]!==undefined||["poll","sleep","lowbat"].includes(k))) plan.device.push([k,v]);
   // A button whose macro is rewritten counts as changed even if it already points at that macro number.
   const mids=new Set(plan.macros.map(([id])=>id));
   for(const hs of [0,1]) for(const [slot,blk] of Object.entries(t.buttons?.[hs]||{})){ const id=macroIdOf(blk); if(id!=null&&mids.has(id)&&!plan.items.some(([s,h])=>s===+slot&&h===hs)&&SLOT[+slot]&&+slot!==1) plan.items.push([+slot,hs,blk]); }
   plan.total=plan.items.length+(plan.dpi?1:0)+plan.zones.length+plan.device.length;
   return plan;
 }
-const DEVLABEL={poll:["Polling rate"," Hz"],sleep:["Sleep after"," s"],lowbat:["Low-battery warning","%"]};
+const DEVLABEL={poll:["Polling rate"," Hz"],sleep:["Sleep after"," s"],lowbat:["Low-power mode at","%"],dim:["Dim when idle",""],accel:["Scroll acceleration",""],reel:["Free-spin on a flick",""],wdl:["Windows Dynamic Lighting",""],lift:["Lift-off distance"," mm"]};
+const devValText=(k,v)=>v==null?"?":k==="dim"?({off:"off",half:"to half",quarter:"to a quarter"})[v]||v:k==="accel"||k==="reel"?(v?"on":"off"):k==="wdl"?(v?"allowed":"ignored"):v+DEVLABEL[k][1];
 function planLines(plan){
   const L=[];
   const tlib={...macroLib}; plan.macros.forEach(([id,m])=>tlib[id]=m);
@@ -1620,7 +1778,7 @@ function planLines(plan){
   if(plan.dpi) L.push(`DPI stages: ${dpiText(dpiMouse)} → ${dpiText(plan.dpi)}`);
   const zl=s=>zoneLabel(s)+(s&&NEEDS[s.effect]?` ${s.c1}${s.effect==="breath2"?" / "+s.c2:""}`:"");
   for(const [id,s] of plan.zones) L.push(`${ZONES.find(z=>z.id===id).key} light: ${zl(ledMouse[id])} → ${zl(s)}`);
-  for(const [k,v] of plan.device) L.push(`${DEVLABEL[k][0]}: ${devMouse[k]??"?"}${DEVLABEL[k][1]} → ${v}${DEVLABEL[k][1]}`);
+  for(const [k,v] of plan.device) L.push(`${DEVLABEL[k][0]}: ${devValText(k,devMouse[k])} → ${devValText(k,v)}`);
   return L;
 }
 let busy=false;
@@ -1635,6 +1793,8 @@ async function settle(){
   await work;
 }
 async function applyAllNow(target,reason,opts={}){
+  if(!inLayout()&&dev&&target.slot&&target.slot!==P()&&prof.ids.includes(target.slot)){
+    editProf=target.slot===activeSlot?null:target.slot; await readAllButtons(); await readMacroLib(); await readDpi(); await readLighting(); await readProfileExtras(); }
   if(!canEdit()){ saveNote("Not saved: mouse disconnected","badc"); return {total:0,failed:0}; }
   const plan=planChanges(target);
   if(!plan.total){ if(opts.toast) saveNote(""); return {total:0,failed:0}; }
@@ -1679,7 +1839,7 @@ function snapshotNow(){
   const macros={}; for(const id of referencedMacros(buttons)) if(macroLib[id]?.steps) macros[id]=clone(macroLib[id]);
   return {buttons,dpi:clone(dpiMouse),lighting,device:clone(devMouse),slot:activeSlot,macros};
 }
-const histKey=()=>"naga.history."+mouseId, seenKey=()=>"naga.lastSeen."+mouseId;
+const histKey=()=>"naga.history."+mouseId, seenKey=()=>"naga.lastSeen."+mouseId+(P()!==1?"."+P():"");
 const getHistory=()=>store.get(histKey(),[]);
 function pushHistory(reason,snap){
   const h=getHistory();
@@ -1745,7 +1905,7 @@ function renderHistory(){
       userLayouts[n]={note:"From history: "+e.reason+", "+new Date(e.t).toLocaleString(),...clone(e.snap)}; touch(n); saveLayouts(); renderLayouts(); toast(`Saved as “${n}”`); });
     tr.lastElementChild.append(s," ",b); tb.append(tr); });
 }
-$("backupAll").onclick=()=>{ const data={format:"naga-control-backup/1",created:new Date().toISOString(),layouts:userLayouts,history:{},lastSeen:{}};
+$("backupAll").onclick=()=>{ const data={format:"naga-control-backup/1",created:new Date().toISOString(),layouts:userLayouts,setups:userSetups,history:{},lastSeen:{}};
   try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
     if(k.startsWith("naga.history.")) data.history[k.slice(13)]=JSON.parse(localStorage.getItem(k));
     if(k.startsWith("naga.lastSeen.")) data.lastSeen[k.slice(14)]=JSON.parse(localStorage.getItem(k)); } }catch(e){}
@@ -1757,10 +1917,149 @@ $("backupLoad").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""
   try{ const j=JSON.parse(await f.text()); if(j.format!=="naga-control-backup/1") throw new Error("That isn't a Naga Control backup file.");
     let added=0;
     for(const n of Object.keys(j.layouts||{})){ let name=n; if(BUILTIN[name]) name+=" (backup)"; if(userLayouts[name]&&JSON.stringify(userLayouts[name])!==JSON.stringify(j.layouts[n])) name+=" (from backup)"; userLayouts[name]=j.layouts[n]; added++; }
+    for(const n of Object.keys(j.setups||{})){ let name=n; if(userSetups[name]&&JSON.stringify(userSetups[name])!==JSON.stringify(j.setups[n])) name+=" (from backup)"; userSetups[name]=j.setups[n]; } saveSetups();
     for(const [id,h] of Object.entries(j.history||{})){ const k="naga.history."+id, mine=store.get(k,[]); const merged=[...mine,...h].sort((a,b)=>b.t-a.t).filter((e,i,a)=>i===0||e.t!==a[i-1].t).slice(0,60); store.set(k,merged); }
     saveLayouts(); renderLayouts(); renderHistory(); $("backupNote").textContent=`Restored ${added} layout(s) and history. Nothing on the mouse was changed.`; }catch(err){ log("Backup restore failed: "+err.message,"bad"); ask({title:"Backup restore failed",text:err.message}); } };
 function download(name,text){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type:"application/json"})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); }
 
+
+// ---------- profiles on the mouse (management) ----------
+function renderProfiles(){
+  const g=$("profGroup"); g.hidden=!(dev&&prof.ok&&!inLayout()); if(g.hidden) return;
+  const box=$("profList"); box.innerHTML=""; $("profAdd").disabled=prof.ids.length>=prof.max;
+  const toHexC=c=>c?toHex(...c):"#ffffff";
+  prof.ids.forEach(id=>{ const row=document.createElement("div"); row.className="lrow";
+    const col=prof.colors[id]||PROF_DEFCOLOR[id];
+    row.innerHTML=`<div class="row" style="gap:10px"><input type="color" value="${toHexC(col)}" title="Light colour shown when switching to this profile" style="width:34px;height:26px;padding:2px"><div><b>${esc(profName(id))}</b>${id===activeSlot?'<span class="tag">in use</span>':""}${id===P()?'<span class="tag plain">editing</span>':""}</div></div><div class="row"></div>`;
+    const acts=row.lastElementChild;
+    const mk=(t,fn,cls)=>{ const b=document.createElement("button"); b.textContent=t; if(cls) b.className=cls; b.onclick=safe(fn); acts.append(b); return b; };
+    row.querySelector("input").onchange=safe(async e=>{ const c=rgb(e.target.value); const okc=await serial(()=>writeProfileColor(id,c)); if(okc){ prof.colors[id]=c; toast("Colour saved"); } else toast("The colour didn't save"); renderProfiles(); });
+    if(id!==P()) mk("Edit",async()=>{ await editMouseProfile(id); showTab("buttons"); });
+    if(id!==activeSlot) mk("Use now",async()=>{ await settle(); const r=await serial(()=>rawCmd(5,0x04,0x01,[id])); if(!ok(r)) return toast("The mouse didn't switch");
+      await serial(readSlots); renderAll(); toast(`Using ${profName(id)}`); });
+    mk("Rename",async()=>{ const n=await ask({title:"Rename profile",input:profName(id),ok:"Save"}); if(!n) return; const nm=n.trim().slice(0,40);
+      store.set(`naga.profName.${mouseId}.${id}`,nm);
+      if(id!==1){ const okn=await serial(()=>writeProfileName(id,nm)); if(!okn) toast("Saved here, but the mouse didn't store the name"); prof.names[id]=nm; }
+      renderAll(); },"link");
+    if(id!==1&&prof.ids.length>1) mk("Delete",async()=>deleteProfile(id),"link");
+    box.append(row); });
+}
+async function deleteProfile(id){
+  if(!(await ask({title:`Delete ${profName(id)} from the mouse?`,text:"Its buttons and settings are saved to History first.",ok:"Delete"}))) return;
+  await settle();
+  const keep=P(); editProf=id===activeSlot?null:id;
+  await serial(async()=>{ await readAllButtons(); await readMacroLib(); await readDpi(); await readLighting(); await readProfileExtras();
+    pushHistory(`Before deleting ${profName(id)}`,snapshotNow());
+    if(id===activeSlot){ const r=await rawCmd(5,0x04,0x01,[1]); if(!ok(r)) throw new Error("Couldn't switch the mouse to profile 1 first."); }
+    const r=await rawCmd(5,0x03,0x01,[id]); if(!ok(r)) throw new Error("The mouse didn't delete the profile.");
+    store.set(`naga.profName.${mouseId}.${id}`,"");
+    await readSlots(); });
+  editProf=keep!==id&&prof.ids.includes(keep)&&keep!==activeSlot?keep:null;
+  await editMouseProfile(P()); toast("Profile deleted");
+}
+$("profAdd").onclick=safe(async()=>{
+  const id=[1,2,3,4,5].find(x=>!prof.ids.includes(x)); if(!id||prof.ids.length>=prof.max) return toast("The mouse is full.");
+  const n=await ask({title:"Add a profile",text:`Starts as a copy of ${profName(P())}.`,input:`Profile ${id}`,ok:"Add"}); if(!n) return;
+  await settle(); const copy={...dataOf(snapshotNow())};
+  await serial(async()=>{ const r=await rawCmd(5,0x02,0x01,[id]); if(!ok(r)) throw new Error("The mouse didn't create the profile.");
+    await writeProfileName(id,n.trim().slice(0,40)); await writeProfileColor(id,PROF_DEFCOLOR[id]); await readSlots(); });
+  store.set(`naga.profName.${mouseId}.${id}`,n.trim().slice(0,40));
+  if(!prof.ids.includes(id)) return toast("The mouse didn't list the new profile.");
+  await editMouseProfile(id);
+  const res=await applyAll(copy,`Before setting up ${profName(id)}`,{});
+  toast(res.failed?"Profile added, but some settings didn't copy":`Added ${profName(id)}`); renderAll();
+});
+
+// ---------- setups: sets of profiles ----------
+let userSetups=store.get("naga.setups",{}), setupTomb=store.get("naga.setupsDeleted",{});
+const saveSetups=()=>{ store.set("naga.setups",userSetups); scheduleSync(); };
+function renderSetups(){
+  const box=$("setupList"); box.innerHTML=""; $("setupSnap").disabled=!(dev&&prof.ok);
+  const names=Object.keys(userSetups).sort((a,b)=>(userSetups[b].updated||0)-(userSetups[a].updated||0));
+  if(!names.length){ box.innerHTML='<p class="dim small">None yet.</p>'; return; }
+  names.forEach(name=>{ const S=userSetups[name]; const row=document.createElement("div"); row.className="lrow";
+    const missing=S.profiles.filter(p=>!all()[p.layout]).map(p=>p.layout);
+    row.innerHTML=`<div><b>${esc(name)}</b><small>${S.profiles.map((p,i)=>`${i+1}. ${esc(p.name)} (${esc(p.layout)})`).join(" · ")}${missing.length?`<br><span class="badc">Missing layout: ${esc(missing.join(", "))}</span>`:""}</small></div><div class="row"></div>`;
+    const acts=row.lastElementChild;
+    const mk=(t,fn,cls)=>{ const b=document.createElement("button"); b.textContent=t; if(cls) b.className=cls; b.onclick=safe(fn); acts.append(b); return b; };
+    const ld=mk("Load onto mouse",()=>loadSetup(name),"primary"); ld.disabled=!dev||!!missing.length;
+    mk("Edit",()=>editSetup(name),"link");
+    mk("Delete",async()=>{ if(!(await ask({title:`Delete setup “${name}”?`,text:"Its layouts are kept.",ok:"Delete"}))) return; delete userSetups[name]; setupTomb[name]=Date.now(); store.set("naga.setupsDeleted",setupTomb); saveSetups(); renderSetups(); },"link");
+    box.append(row); });
+}
+function editSetup(name){
+  const S=clone(userSetups[name]||{profiles:[{name:"Profile 1",color:"#ffffff",layout:Object.keys(all())[0]}]});
+  const box=$("setupList"); const ed=document.createElement("div"); ed.className="banner"; ed.style.margin="10px 0";
+  const layouts=Object.keys(all()).sort((a,b)=>a.localeCompare(b));
+  const paint=()=>{ ed.innerHTML=`<b>${name?`Edit “${esc(name)}”`:"New setup"}</b>`;
+    const nm=document.createElement("input"); nm.value=name||""; nm.placeholder="Setup name"; nm.style.cssText="width:24ch;margin:6px 0 10px"; ed.append(nm);
+    S.profiles.forEach((p,i)=>{ const r=document.createElement("div"); r.className="row"; r.style.cssText="gap:8px;margin-bottom:6px;flex-wrap:wrap";
+      r.innerHTML=`<span class="dim small" style="width:2ch">${i+1}</span>`;
+      const c=document.createElement("input"); c.type="color"; c.value=p.color||toHex(...PROF_DEFCOLOR[i+1]); c.style.cssText="width:34px;height:26px;padding:2px"; c.oninput=()=>p.color=c.value;
+      const n=document.createElement("input"); n.value=p.name; n.style.width="16ch"; n.oninput=()=>p.name=n.value;
+      const l=document.createElement("select"); layouts.forEach(x=>l.add(new Option(x,x))); l.value=p.layout; l.onchange=()=>p.layout=l.value;
+      const del=document.createElement("button"); del.className="link"; del.textContent="Remove"; del.disabled=S.profiles.length<2; del.onclick=()=>{ S.profiles.splice(i,1); paint(); };
+      r.append(c,n,l,del); ed.append(r); });
+    const foot=document.createElement("div"); foot.className="row"; foot.style.marginTop="8px";
+    const add=document.createElement("button"); add.textContent="Add profile"; add.disabled=S.profiles.length>=5; add.onclick=()=>{ const k=S.profiles.length+1; S.profiles.push({name:`Profile ${k}`,color:toHex(...PROF_DEFCOLOR[k]),layout:S.profiles[S.profiles.length-1].layout}); paint(); };
+    const cancel=document.createElement("button"); cancel.className="link"; cancel.textContent="Cancel"; cancel.onclick=()=>renderSetups();
+    const save=document.createElement("button"); save.className="primary"; save.textContent="Save setup";
+    save.onclick=()=>{ const n=nm.value.trim(); if(!n) return toast("Give the setup a name."); if(n!==name&&userSetups[n]) return toast("That name is taken.");
+      S.profiles.forEach((p,i)=>{ p.name=(p.name||"").trim().slice(0,40)||`Profile ${i+1}`; });
+      if(name&&n!==name){ delete userSetups[name]; setupTomb[name]=Date.now(); store.set("naga.setupsDeleted",setupTomb); }
+      S.updated=Date.now(); userSetups[n]=S; saveSetups(); renderSetups(); toast(`Saved setup “${n}”`); };
+    foot.append(add,cancel,save); ed.append(foot); };
+  paint(); box.prepend(ed); nm_focus(ed);
+}
+const nm_focus=el=>{ const i=el.querySelector("input:not([type=color])"); if(i) i.focus(); };
+$("setupNew").onclick=()=>editSetup(null);
+// Read every profile on the mouse and keep each as a layout, plus a setup that lists them.
+$("setupSnap").onclick=safe(async()=>{
+  if(!dev||!prof.ok) return;
+  const n=await ask({title:"Save the mouse as a setup",text:"Each profile is saved as a layout too.",input:"Mouse "+new Date().toLocaleDateString(),ok:"Save"}); if(!n) return;
+  if(userSetups[n]&&!(await ask({title:`Replace setup “${n}”?`,ok:"Replace"}))) return;
+  await settle(); const keep=editProf, S={profiles:[],updated:Date.now()};
+  try{
+    for(const id of prof.ids){ setConn(`Reading ${profName(id)}…`,""); editProf=id===activeSlot?null:id;
+      await serial(async()=>{ await readAllButtons(); await readMacroLib(); await readDpi(); await readLighting(); await readProfileExtras(); });
+      let ln=`${n} – ${profName(id)}`, k=2; while(BUILTIN[ln]) ln=`${n} – ${profName(id)} ${k++}`;
+      userLayouts[ln]={note:`Profile ${id} of setup “${n}”, saved ${new Date().toLocaleString()}.`,...dataOf(snapshotNow())}; touch(ln);
+      S.profiles.push({name:profName(id),color:toHex(...(prof.colors[id]||PROF_DEFCOLOR[id])),layout:ln}); }
+  } finally { editProf=keep; await serial(async()=>{ await readAllButtons(); await readMacroLib(); await readDpi(); await readLighting(); await readProfileExtras(); }); setConn(PIDS[dev.productId]||dev.productName,"on"); }
+  saveLayouts(); userSetups[n]=S; saveSetups(); renderAll(); toast(`Saved setup “${n}”`);
+});
+const GLOBAL_DEV=["poll","sleep","lowbat","lift","wdl"];
+async function loadSetup(name){
+  const S=userSetups[name]; if(!S||!dev) return;
+  if(!prof.ok) return toast("The mouse's profile list couldn't be read, so setups can't be loaded.");
+  const want=S.profiles.slice(0,prof.max), ids=want.map((_,i)=>i+1);
+  const extra=prof.ids.filter(id=>!ids.includes(id)), create=ids.filter(id=>!prof.ids.includes(id));
+  const lines=want.map((p,i)=>`${profName(i+1)===p.name?p.name:`${prof.ids.includes(i+1)?profName(i+1)+" → ":""}${p.name}`}: layout “${p.layout}”${create.includes(i+1)?" (new profile)":""}`);
+  extra.forEach(id=>lines.push(`${profName(id)} will be deleted (saved to History first)`));
+  lines.push(`Lighting effects come from “${want[0].layout}”; each profile keeps its own brightness.`);
+  if(!(await ask({title:`Load setup “${name}” onto the mouse?`,lines,ok:"Load onto mouse"}))) return;
+  await settle(); let failed=0;
+  const first=layoutState(all()[want[0].layout]);
+  try{
+    for(const id of create){ const r=await serial(()=>rawCmd(5,0x02,0x01,[id])); if(!ok(r)) throw new Error(`The mouse didn't create profile ${id}.`); }
+    await serial(readSlots);
+    for(let i=0;i<want.length;i++){ const id=i+1, p=want[i];
+      setConn(`Loading ${p.name}…`,""); await editMouseProfile(id,true);
+      const L=clone(all()[p.layout]); const st=layoutState(L);
+      // Effects are shared by all profiles, so every profile gets the first layout's effects with its own brightness.
+      const lighting={}; ZONES.forEach(z=>{ lighting[z.id]={...first.lighting[z.id],bright:st.lighting[z.id].bright}; });
+      const device={...(L.device||{})}; if(i>0) GLOBAL_DEV.forEach(k=>delete device[k]);
+      const r=await applyAll({buttons:L.buttons,dpi:L.dpi,lighting,device,macros:L.macros||{}},`Before loading setup “${name}”`,{});
+      failed+=r.failed||0;
+      store.set(`naga.profName.${mouseId}.${id}`,p.name);
+      await serial(async()=>{ if(id!==1&&!(await writeProfileName(id,p.name))) failed++; if(p.color&&!(await writeProfileColor(id,rgb(p.color)))) failed++; });
+    }
+    for(const id of extra){ editProf=id===activeSlot?null:id; await serial(async()=>{ await readAllButtons(); await readMacroLib(); await readDpi(); await readLighting(); await readProfileExtras(); pushHistory(`Before deleting ${profName(id)}`,snapshotNow());
+      if(id===activeSlot) await rawCmd(5,0x04,0x01,[1]); const r=await rawCmd(5,0x03,0x01,[id]); if(!ok(r)) failed++; }); }
+  } catch(e){ failed++; log(e.message,"bad"); toast(e.message); }
+  finally { await serial(readSlots); editProf=null; await editMouseProfile(activeSlot,true); }
+  toast(failed?`Setup “${name}” only partly loaded`:`Loaded setup “${name}”`);
+}
 // ---------- layout text format (for chats with Claude) ----------
 const GUIDE=`Naga Control layout text (Razer Naga V3 Pro). JSON. Only what is listed gets changed.
 
@@ -1772,7 +2071,7 @@ const GUIDE=`Naga Control layout text (Razer Naga V3 Pro). JSON. Only what is li
   "hypershift": { "Scroll up": "Num +", "Side 3": "Ctrl+V", "everything else": "off" },
   "dpi": { "stages": [800, 1600, "3200x2400"], "start at stage": 2 },
   "lighting": { "Logo": "off", "Side plate": "static #ff0000, brightness 60%", "Scroll wheel": "breathing #00ff00 #0000ff" },
-  "device": { "polling Hz": 1000, "sleep after seconds": 300, "low battery warning %": 10 },
+  "device": { "polling Hz": 1000, "sleep after seconds": 300, "low power mode %": 10, "dim when idle": "half" },
   "macros": { "Sign note": "\\"Reviewed and agree.\\", Enter, wait 300ms, Ctrl+S" }
 }
 
@@ -1788,7 +2087,10 @@ Actions:
   shortcuts: Ctrl+N, Shift+Tab, Alt+C, Win+2, Ctrl+Shift+Esc (Win = Cmd on a Mac)
   mouse: Left click, Right click, Middle click, Back, Forward, Scroll up, Scroll down, Scroll left, Scroll right
   repeat while held: add ", repeat 20/s" (1–20), e.g. "Left click, repeat 20/s", "Enter, repeat 5/s"
-  other: DPI up, DPI down, DPI cycle, HyperShift, Switch profile, Scroll wheel mode, Nothing, Off, Factory
+  media: Play/Pause, Next track, Previous track, Stop, Volume up, Volume down, Mute
+  sensitivity: DPI up, DPI down, DPI cycle, DPI cycle back, Precision 400 DPI (slow while held)
+  profiles: Next profile, Previous profile, Switch profile (cycle), Profile 2
+  other: HyperShift, Scroll wheel mode, Nothing, Off, Factory
   exact bytes: Raw 02 02 01 11 00 00 00
   macro: macro "Name" — optionally , 3 times | , while held | , toggle. The name must be in "macros".
 
@@ -1799,7 +2101,9 @@ Macros (stored on the mouse, work on any computer): "Name": "steps, comma separa
 
 Lighting zones: Scroll wheel, Logo, Side plate, or "all". Each zone, one of:
   off | static <color> | breathing <color> | breathing <color> <color> | breathing random |
-  spectrum | wave left | wave right | reactive <color> speed 1–4 (1 = shortest glow)
+  spectrum | wave left/right [slow|fast] | reactive <color> speed 1–4 (1 = shortest glow) |
+  starlight <color> [<color>] | starlight random, each with optional speed 1–3 | ripple <color> | fire |
+  wheel [counterclockwise]  (starlight, ripple, fire and wheel only where the mouse supports them)
   then optionally ", brightness 0–100%". Colors: #rrggbb or red, green, blue, white, cyan, magenta,
   pink, purple, orange, yellow, teal.
 DPI: 1–5 stages, 100–50000; "800x600" = different horizontal x vertical.
@@ -1821,7 +2125,7 @@ function layoutToText(L,name){
   const d=normDpi(L.dpi); if(d) o.dpi={stages:d.stages.map(s=>s.x===s.y?s.x:`${s.x}x${s.y}`),"start at stage":d.start+1};
   if(L.lighting&&Object.keys(L.lighting).length){ o.lighting={}; ZONES.forEach(z=>{ const s=L.lighting[z.id]; if(s&&s.effect) o.lighting[z.key]=zoneText(s); }); }
   if(Object.keys(lib).length){ o.macros={}; Object.values(lib).forEach(m=>o.macros[m.name]=stepsToText(m.steps)); }
-  if(L.device&&Object.keys(L.device).length){ o.device={}; if(L.device.poll) o.device["polling Hz"]=L.device.poll; if(L.device.sleep) o.device["sleep after seconds"]=L.device.sleep; if(L.device.lowbat) o.device["low battery warning %"]=L.device.lowbat; }
+  if(L.device&&Object.keys(L.device).length){ o.device={}; if(L.device.poll) o.device["polling Hz"]=L.device.poll; if(L.device.sleep) o.device["sleep after seconds"]=L.device.sleep; if(L.device.lowbat) o.device["low power mode %"]=L.device.lowbat; if(L.device.dim) o.device["dim when idle"]=L.device.dim; if(L.device.lift) o.device["lift-off mm"]=L.device.lift; if(L.device.accel!=null) o.device["scroll acceleration"]=L.device.accel?"on":"off"; if(L.device.reel!=null) o.device["free-spin on a flick"]=L.device.reel?"on":"off"; }
   return JSON.stringify(o,null,2);
 }
 function parseLayoutText(text){
@@ -1882,7 +2186,11 @@ function parseLayoutText(text){
     for(const [k,v] of Object.entries(j.device)){ const n=norm(k), num=parseFloat(String(v).replace(/[^\d.]/g,"")), mins=/min/i.test(String(v));
       if(/poll/.test(n)){ if(POLLRAW[num]) L.device.poll=num; else errors.push(`device › polling must be 1000, 500 or 125 Hz.`); }
       else if(/sleep|idle/.test(n)){ const s=Math.round(mins?num*60:num); if(s>=60&&s<=900) L.device.sleep=s; else errors.push(`device › sleep must be 60–900 seconds.`); }
-      else if(/batt/.test(n)){ if(num>=5&&num<=25) L.device.lowbat=Math.round(num); else errors.push(`device › low battery warning must be 5–25%.`); }
+      else if(/batt|lowpower|powersav/.test(n)){ if(num>=5&&num<=30) L.device.lowbat=Math.round(num); else errors.push(`device › low power mode must be 5–30%.`); }
+      else if(/dim/.test(n)){ const t=String(v).toLowerCase(); const d=/quarter|25/.test(t)?"quarter":/half|50/.test(t)?"half":/off|no|false/.test(t)?"off":null; if(d) L.device.dim=d; else errors.push(`device › dim when idle must be off, half or quarter.`); }
+      else if(/lift/.test(n)){ if(num>=1&&num<=3) L.device.lift=Math.round(num); else errors.push(`device › lift-off must be 1, 2 or 3 mm.`); }
+      else if(/accel/.test(n)) L.device.accel=/on|yes|true|1/.test(String(v).toLowerCase())?1:0;
+      else if(/freespin|flick|smartreel/.test(n)) L.device.reel=/on|yes|true|1/.test(String(v).toLowerCase())?1:0;
       else errors.push(`device › "${k}": unknown setting.`); }
   }
   return {layout:L,name:j.name,errors};
@@ -2066,14 +2374,18 @@ async function loadOntoMouse(data,label,layoutName){
 }
 function renderEditSel(){
   const sel=$("editSel"); sel.innerHTML="";
-  if(HAS_HID) sel.add(new Option(dev?"The mouse":"The mouse (not connected)","m:"));
+  if(HAS_HID){
+    if(dev&&prof.ok&&prof.ids.length>1){ const g=document.createElement("optgroup"); g.label="The mouse";
+      prof.ids.forEach(id=>g.append(new Option(`${profName(id)}${id===activeSlot?" (in use)":""}`,"m:"+id))); sel.append(g); }
+    else sel.add(new Option(dev?"The mouse":"The mouse (not connected)","m:")); }
   const names=Object.keys(userLayouts).sort((a,b)=>a.localeCompare(b));
   if(names.length){ const g=document.createElement("optgroup"); g.label="My layouts"; names.forEach(n=>g.append(new Option(n,"l:"+n))); sel.append(g); }
   sel.add(new Option("New layout…","n:"));
-  sel.value=inLayout()?"l:"+editName:"m:";
+  sel.value=inLayout()?"l:"+editName:(dev&&prof.ok&&prof.ids.length>1?"m:"+P():"m:");
 }
 $("editSel").onchange=safe(async()=>{ const v=$("editSel").value;
   if(v==="m:"){ await enterMouseMode(); renderEditSel(); return; }
+  if(/^m:\d$/.test(v)){ const id=+v.slice(2); if(inLayout()){ editProf=id===activeSlot?null:id; await enterMouseMode(); } else await editMouseProfile(id); renderEditSel(); return; }
   if(v==="n:"){ renderEditSel(); const n=await ask({title:"New layout",text:canEdit()?"Starts as a copy of what you're editing.":"Starts from the Work layout.",input:"",ok:"Create"}); if(!n) return;
     if(all()[n]) return toast("That name is taken.");
     userLayouts[n]=canEdit()?{note:"",...dataOf(snapshotNow())}:clone(BUILTIN["Work – reading"]); delete userLayouts[n].builtin; userLayouts[n].versions=[]; touch(n); saveLayouts();
@@ -2101,7 +2413,10 @@ async function rpc(fn,body){ const r=await fetch(`${SUPA}/rest/v1/rpc/${fn}`,{me
   if(!r.ok) throw new Error(`the sync server answered ${r.status}`); return r.json(); }
 function mergeDocs(local,remote){
   const deleted={...(remote.deleted||{})}; for(const [n,t] of Object.entries(local.deleted||{})) deleted[n]=Math.max(t,deleted[n]||0);
-  const out={layouts:{},deleted};
+  const out={layouts:{},deleted,setups:{},setupsDeleted:{...(remote.setupsDeleted||{})}};
+  for(const [n,t] of Object.entries(local.setupsDeleted||{})) out.setupsDeleted[n]=Math.max(t,out.setupsDeleted[n]||0);
+  for(const n of new Set([...Object.keys(local.setups||{}),...Object.keys(remote.setups||{})])){ const a=local.setups?.[n], b=remote.setups?.[n];
+    const pick=clone(!a?b:!b?a:((b.updated||0)>(a.updated||0)?b:a)); if(out.setupsDeleted[n]&&out.setupsDeleted[n]>=(pick.updated||0)) continue; out.setups[n]=pick; }
   const names=new Set([...Object.keys(local.layouts||{}),...Object.keys(remote.layouts||{})]);
   for(const n of names){ const a=local.layouts?.[n], b=remote.layouts?.[n];
     const pick=clone(!a?b:!b?a:((b.updated||0)>(a.updated||0)?b:a));
@@ -2114,6 +2429,7 @@ function mergeDocs(local,remote){
 function applyMerged(m){
   const before=inLayout()?JSON.stringify(dataOf(userLayouts[editName]||{})):null;
   userLayouts=m.layouts; tomb=m.deleted; store.set("naga.layouts",userLayouts); store.set("naga.deleted",tomb);
+  userSetups=m.setups||{}; setupTomb=m.setupsDeleted||{}; store.set("naga.setups",userSetups); store.set("naga.setupsDeleted",setupTomb); renderSetups();
   if(inLayout()){
     if(!userLayouts[editName]){ store.set("naga.lastEdit",null); pickStartTarget(); return; }
     if(JSON.stringify(dataOf(userLayouts[editName]))!==before){ setEditorFrom(layoutState(userLayouts[editName])); renderAll(); toast(`“${editName}” was updated on another device`); return; }
@@ -2129,7 +2445,7 @@ async function syncNow(){
     for(let i=0;i<4;i++){
       const remote=await rpc("naga_pull",{p_key:syncKey});
       if(ledTimer||dpiTimer||busy){ syncAgain=true; setSync("Synced"); return; }
-      const merged=mergeDocs({layouts:userLayouts,deleted:tomb},remote.doc||{});
+      const merged=mergeDocs({layouts:userLayouts,deleted:tomb,setups:userSetups,setupsDeleted:setupTomb},remote.doc||{});
       applyMerged(merged);
       const res=await rpc("naga_push",{p_key:syncKey,p_doc:{format:"naga-sync/1",...merged},p_base:remote.updated_at});
       if(!res.conflict){ store.set("naga.syncAt",Date.now()); setSync("Synced"); return; }
@@ -2167,7 +2483,7 @@ document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==
 function renderAll(o={}){
   draft=null; renderStage(); renderInspector(); renderBattery(); renderDevice();
   if(!o.skipEditors){ renderDpi(); renderLighting(); } else renderZoneCards();
-  updateMatch(); renderLayouts(); renderHistory(); updateUndo();
+  updateMatch(); renderLayouts(); renderProfiles(); renderSetups(); renderHistory(); updateUndo();
   $("txtFromMouse").disabled=$("txtLoad").disabled=!canEdit(); $("rawSend").disabled=!dev||inLayout();
   $("txtFromMouse").textContent=inLayout()?"Copy this layout":"Copy the mouse's setup"; $("txtLoad").textContent=inLayout()?`Apply to “${editName}”`:"Load onto mouse";
   renderEditSel(); renderSyncBox();
@@ -2182,7 +2498,7 @@ window.addEventListener("focus",safe(async()=>{
     const before=snapshotNow();
     const slotChanged=await readSlots(); await readAllButtons(); await readDpi(); await readLighting(); await readBattery();
     if(slotChanged||!snapEqual(before,snapshotNow())){ dpiEdit=clone(dpiMouse); led=clone(ledMouse); draft=null; renderAll(); }
-    if(slotChanged) alertBox("slot","warn","On-board profile changed",`The mouse is now on profile ${activeSlot}. Edits now go to that profile.`);
+    if(slotChanged&&editProf==null) alertBox("slot","warn","On-board profile changed",`The mouse switched to ${profName(activeSlot)}. Edits now go to it.`);
     checkAgainstLastSeen("focus"); }); } finally { checking=false; }
 }));
 try{ const bc=new BroadcastChannel("naga-control"); const twoTabs=()=>alertBox("tabs","warn","Open in another tab","Close the other tab to avoid conflicting changes.");
